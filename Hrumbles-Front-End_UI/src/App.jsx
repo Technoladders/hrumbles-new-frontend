@@ -165,6 +165,10 @@ import MigrationHistoryPage from "@/components/global/MigrationHistoryPage";
 import CallAnalyticsReport from "@/components/sales/activity-report/CallAnalyticsReport.tsx";
 import BatchJobsPage from '@/components/candidates/talent-pool/BatchJobsPage.tsx';
 import UploadProgressFloat from '@/components/candidates/talent-pool/UploadProgressFloat';
+import { InterviewReminderOverlay } from './components/notifications/InterviewReminderOverlay';
+import BulkProgressFloat from '@/components/candidates/talent-pool/BulkProgressFloat';
+import ResumeProcessingPage from '@/pages/talent-pool/ResumeProcessingPage';
+
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -516,6 +520,7 @@ function AppContent() {
               <Route path="/talent-pool" element={<TalentPoolPage />} />
               <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
               <Route path="/talent-pool/batch-jobs" element={<BatchJobsPage />} />
+              <Route path="/talent-pool/resume-processing" element={<ResumeProcessingPage />} />
               <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
               <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
               <Route path="/zive-x" element={<ZiveXSearchPage />} />
@@ -586,6 +591,8 @@ function App() {
     <Router>
       <AppContent />
       <GlobalDialogs />
+      <InterviewReminderOverlay />
+    <BulkProgressFloat />
     </Router>
     <UploadProgressFloat />
     </>

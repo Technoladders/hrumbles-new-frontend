@@ -1,3 +1,10 @@
+// Hrumbles-Front-End_UI\src\components\UserManagement\EmailConfigurationManagement.tsx
+// CHANGES FROM ORIGINAL:
+// 1. Removed the duplicate old "Interview Email Notifications" Card entirely
+// 2. Removed all interview-related state/handlers (no longer needed — InterviewNotificationsConfig is self-contained)
+// 3. Removed INTERVIEW_NOTIFICATION_TYPE from the bulk config load query
+// 4. Kept <InterviewNotificationsConfig /> in place — it handles its own load/save
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +20,9 @@ import { MultiSelect } from '@/components/ui/multi-selector';
 import { fetchEmployees } from '@/api/user';
 import {
   Clock, CalendarDays, CalendarRange, Calendar, Briefcase, RefreshCw,
-  TrendingUp, Sparkles, Video, Bell, UserCheck, Users, BellRing,
+  TrendingUp, Sparkles,
 } from 'lucide-react';
+import { InterviewNotificationsConfig } from '@/components/settings/email/InterviewNotificationsConfig';
 
 interface EmployeeOption {
   value: string;
@@ -38,41 +46,14 @@ interface SalesReportConfig {
   includeAI: boolean;
 }
 
-// ── NEW: Interview notification config ────────────────────────────────────────
-interface InterviewNotificationConfig {
-  isActive: boolean;
-  recipients: string[];           // additional fixed recipients
-  notify_candidate: boolean;      // send to candidate email
-  notify_recruiter: boolean;      // send to interview creator
-  notify_job_owner: boolean;      // send to job owner
-  send_confirmation: boolean;
-  send_reminder: boolean;
-  reminder_before_hours: number;  // 1, 4, 24, 48
-  send_reschedule_alert: boolean;
-  send_cancellation_alert: boolean;
-}
-
 const RECRUITER_REPORT_TYPES = ['daily_recruiter_report', 'weekly_recruiter_report', 'monthly_recruiter_report'];
 const SALES_REPORT_TYPES     = ['daily_sales_report', 'weekly_sales_report', 'monthly_sales_report'];
 
-const LEAVE_REPORT_TYPE           = 'leave_request_notify';
-const STATUS_UPDATE_REPORT_TYPE   = 'status_update';
-const JOB_CREATION_REPORT_TYPE    = 'job_creation_notify';
-const JOB_UPDATE_REPORT_TYPE      = 'job_update_notify';
-const INTERVIEW_NOTIFICATION_TYPE = 'interview_notifications'; // ← NEW
-
-const DEFAULT_INTERVIEW_CONFIG: InterviewNotificationConfig = {
-  isActive: false,
-  recipients: [],
-  notify_candidate: true,
-  notify_recruiter: true,
-  notify_job_owner: true,
-  send_confirmation: true,
-  send_reminder: true,
-  reminder_before_hours: 24,
-  send_reschedule_alert: true,
-  send_cancellation_alert: true,
-};
+const LEAVE_REPORT_TYPE         = 'leave_request_notify';
+const STATUS_UPDATE_REPORT_TYPE = 'status_update';
+const JOB_CREATION_REPORT_TYPE  = 'job_creation_notify';
+const JOB_UPDATE_REPORT_TYPE    = 'job_update_notify';
+// ✅ REMOVED: INTERVIEW_NOTIFICATION_TYPE — handled by InterviewNotificationsConfig component
 
 const EmailConfigurationManagement = () => {
   const { toast } = useToast();
@@ -119,9 +100,8 @@ const EmailConfigurationManagement = () => {
     monthly_sales_report: { isActive: false, recipients: [], sendTime: '19:00', includeAI: true },
   });
 
-  // ── NEW: Interview notifications ──────────────────────────────────────────
-  const [savingInterview, setSavingInterview]         = useState(false);
-  const [interviewConfig, setInterviewConfig]         = useState<InterviewNotificationConfig>(DEFAULT_INTERVIEW_CONFIG);
+  // ✅ REMOVED: all interview state — savingInterview, interviewConfig, DEFAULT_INTERVIEW_CONFIG, etc.
+  // InterviewNotificationsConfig component handles its own state.
 
   // ── Load all configs ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -140,12 +120,14 @@ const EmailConfigurationManagement = () => {
           .select('*')
           .eq('organization_id', organization_id)
           .in('report_type', [
-            LEAVE_REPORT_TYPE, STATUS_UPDATE_REPORT_TYPE,
-            JOB_CREATION_REPORT_TYPE, JOB_UPDATE_REPORT_TYPE,
+            LEAVE_REPORT_TYPE,
+            STATUS_UPDATE_REPORT_TYPE,
+            JOB_CREATION_REPORT_TYPE,
+            JOB_UPDATE_REPORT_TYPE,
             'eod_report',
             ...RECRUITER_REPORT_TYPES,
             ...SALES_REPORT_TYPES,
-            INTERVIEW_NOTIFICATION_TYPE, // ← NEW
+            // ✅ REMOVED: 'interview_notifications' — not loaded here anymore
           ]);
 
         if (error) throw error;
@@ -157,35 +139,25 @@ const EmailConfigurationManagement = () => {
           if (conf.report_type === 'eod_report') {
             setEodRecipients(conf.recipients || []);
           } else if (conf.report_type === LEAVE_REPORT_TYPE) {
-            setLeaveRecipients(conf.recipients || []); setIsLeaveActive(conf.is_active);
+            setLeaveRecipients(conf.recipients || []);
+            setIsLeaveActive(conf.is_active);
           } else if (conf.report_type === STATUS_UPDATE_REPORT_TYPE) {
-            setStatusUpdateRecipients(conf.recipients || []); setIsStatusUpdateActive(conf.is_active);
+            setStatusUpdateRecipients(conf.recipients || []);
+            setIsStatusUpdateActive(conf.is_active);
           } else if (conf.report_type === JOB_CREATION_REPORT_TYPE) {
-            setJobCreationRecipients(conf.recipients || []); setIsJobCreationActive(conf.is_active);
+            setJobCreationRecipients(conf.recipients || []);
+            setIsJobCreationActive(conf.is_active);
           } else if (conf.report_type === JOB_UPDATE_REPORT_TYPE) {
-            setJobUpdateRecipients(conf.recipients || []); setIsJobUpdateActive(conf.is_active);
-          } else if (conf.report_type === INTERVIEW_NOTIFICATION_TYPE) {
-            // ── Load interview notification config ──
-            setInterviewConfig({
-              isActive:               conf.is_active ?? false,
-              recipients:             conf.recipients || [],
-              notify_candidate:       conf.config?.notify_candidate      ?? true,
-              notify_recruiter:       conf.config?.notify_recruiter      ?? true,
-              notify_job_owner:       conf.config?.notify_job_owner      ?? true,
-              send_confirmation:      conf.config?.send_confirmation     ?? true,
-              send_reminder:          conf.config?.send_reminder         ?? true,
-              reminder_before_hours:  conf.config?.reminder_before_hours ?? 24,
-              send_reschedule_alert:  conf.config?.send_reschedule_alert ?? true,
-              send_cancellation_alert: conf.config?.send_cancellation_alert ?? true,
-            });
+            setJobUpdateRecipients(conf.recipients || []);
+            setIsJobUpdateActive(conf.is_active);
           } else if (newRecruiterConfigs[conf.report_type]) {
             newRecruiterConfigs[conf.report_type] = {
-              isActive: conf.is_active,
-              recipients: conf.recipients || [],
-              sendTime: conf.config?.sendTime || '19:00',
-              sendDay: conf.config?.sendDay || 'Friday',
+              isActive:         conf.is_active,
+              recipients:       conf.recipients || [],
+              sendTime:         conf.config?.sendTime || '19:00',
+              sendDay:          conf.config?.sendDay || 'Friday',
               sendToRecruiters: conf.config?.sendToRecruiters || false,
-              includeAI: conf.config?.includeAI || false,
+              includeAI:        conf.config?.includeAI || false,
             };
           } else if (newSalesConfigs[conf.report_type]) {
             newSalesConfigs[conf.report_type] = {
@@ -218,7 +190,10 @@ const EmailConfigurationManagement = () => {
     setSaving(true);
     try {
       const { error } = await supabase.from('hr_email_configurations').upsert({
-        organization_id, report_type: type, recipients, is_active: isActive,
+        organization_id,
+        report_type: type,
+        recipients,
+        is_active: isActive,
         ...(extraConfig ? { config: extraConfig } : {}),
       }, { onConflict: 'organization_id,report_type' });
       if (error) throw error;
@@ -230,44 +205,7 @@ const EmailConfigurationManagement = () => {
     }
   };
 
-  // ── NEW: Save interview notification config ───────────────────────────────
-  const handleSaveInterviewConfig = async () => {
-    if (!organization_id) return;
-    setSavingInterview(true);
-    try {
-      const { notify_candidate, notify_recruiter, notify_job_owner,
-              send_confirmation, send_reminder, reminder_before_hours,
-              send_reschedule_alert, send_cancellation_alert } = interviewConfig;
-
-      const { error } = await supabase.from('hr_email_configurations').upsert({
-        organization_id,
-        report_type: INTERVIEW_NOTIFICATION_TYPE,
-        recipients: interviewConfig.recipients,
-        is_active: interviewConfig.isActive,
-        config: {
-          notify_candidate,
-          notify_recruiter,
-          notify_job_owner,
-          send_confirmation,
-          send_reminder,
-          reminder_before_hours,
-          send_reschedule_alert,
-          send_cancellation_alert,
-        },
-      }, { onConflict: 'organization_id,report_type' });
-
-      if (error) throw error;
-      toast({ title: 'Success', description: 'Interview notification settings saved.' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to save interview notification settings.', variant: 'destructive' });
-    } finally {
-      setSavingInterview(false);
-    }
-  };
-
-  const updateInterviewConfig = (field: keyof InterviewNotificationConfig, value: any) => {
-    setInterviewConfig(prev => ({ ...prev, [field]: value }));
-  };
+  // ✅ REMOVED: handleSaveInterviewConfig, updateInterviewConfig
 
   // ── Recruiter helpers ─────────────────────────────────────────────────────
   const updateRecruiterConfig = (type: string, field: keyof RecruiterReportConfig, value: any) => {
@@ -281,9 +219,16 @@ const EmailConfigurationManagement = () => {
       const updates = Object.keys(recruiterConfigs).map(type => {
         const conf = recruiterConfigs[type];
         return {
-          organization_id, report_type: type, recipients: conf.recipients,
+          organization_id,
+          report_type: type,
+          recipients: conf.recipients,
           is_active: conf.isActive,
-          config: { sendTime: conf.sendTime, sendDay: conf.sendDay, sendToRecruiters: conf.sendToRecruiters, includeAI: conf.includeAI },
+          config: {
+            sendTime:         conf.sendTime,
+            sendDay:          conf.sendDay,
+            sendToRecruiters: conf.sendToRecruiters,
+            includeAI:        conf.includeAI,
+          },
         };
       });
       const { error } = await supabase.from('hr_email_configurations')
@@ -309,9 +254,15 @@ const EmailConfigurationManagement = () => {
       const updates = Object.keys(salesConfigs).map(type => {
         const conf = salesConfigs[type];
         return {
-          organization_id, report_type: type, recipients: conf.recipients,
+          organization_id,
+          report_type: type,
+          recipients: conf.recipients,
           is_active: conf.isActive,
-          config: { sendTime: conf.sendTime, sendDay: conf.sendDay, includeAI: conf.includeAI },
+          config: {
+            sendTime:  conf.sendTime,
+            sendDay:   conf.sendDay,
+            includeAI: conf.includeAI,
+          },
         };
       });
       const { error } = await supabase.from('hr_email_configurations')
@@ -325,7 +276,7 @@ const EmailConfigurationManagement = () => {
     }
   };
 
-  // ── Renderers (unchanged from original) ──────────────────────────────────
+  // ── Renderers ─────────────────────────────────────────────────────────────
   const renderRecruiterConfigTab = (type: string, showDayPicker = false) => {
     const config = recruiterConfigs[type];
     return (
@@ -372,8 +323,12 @@ const EmailConfigurationManagement = () => {
               <Switch id={`recruiter-copy-${type}`} checked={config.sendToRecruiters || false}
                 onCheckedChange={val => updateRecruiterConfig(type, 'sendToRecruiters', val)} />
               <div className="grid gap-1.5 leading-none">
-                <Label htmlFor={`recruiter-copy-${type}`} className="text-sm font-medium">Send individual copies to Recruiters</Label>
-                <p className="text-xs text-muted-foreground">Each recruiter receives a personalised email with only their candidates.</p>
+                <Label htmlFor={`recruiter-copy-${type}`} className="text-sm font-medium">
+                  Send individual copies to Recruiters
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Each recruiter receives a personalised email with only their candidates.
+                </p>
               </div>
             </div>
             <div className="flex items-center space-x-3 border border-purple-100 p-4 rounded-lg bg-gradient-to-r from-purple-50/40 to-pink-50/40">
@@ -446,7 +401,8 @@ const EmailConfigurationManagement = () => {
                   Include AI Insights (GPT-4o)
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Automatically analyse the period's sales data and add highlights, concerns, a recommendation, and a performance rating to the report.
+                  Automatically analyse the period's sales data and add highlights, concerns, a recommendation,
+                  and a performance rating to the report.
                 </p>
               </div>
             </div>
@@ -461,7 +417,7 @@ const EmailConfigurationManagement = () => {
   return (
     <div className="space-y-8 pb-10">
 
-      {/* EOD REPORT */}
+      {/* ── EOD REPORT ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader><CardTitle>End of Day (EOD) Report</CardTitle></CardHeader>
@@ -477,13 +433,15 @@ const EmailConfigurationManagement = () => {
         </Card>
       </div>
 
-      {/* JOB ALERTS */}
+      {/* ── JOB ALERTS ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2"><Briefcase className="w-5 h-5 text-indigo-600"/> Job Creation Alerts</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-indigo-600" /> Job Creation Alerts
+                </CardTitle>
                 <CardDescription>Notify these users when a new Job is posted.</CardDescription>
               </div>
               <Switch checked={isJobCreationActive} onCheckedChange={setIsJobCreationActive} />
@@ -493,7 +451,9 @@ const EmailConfigurationManagement = () => {
             <CardContent className="animate-in fade-in slide-in-from-top-2">
               <MultiSelect options={allEmployees} selected={jobCreationRecipients} onChange={setJobCreationRecipients}
                 placeholder="Select HR/Admin employees..." className="w-full" />
-              <p className="text-xs text-muted-foreground mt-2">Creator auto-receives a copy. Configured users also receive it (with budget details).</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Creator auto-receives a copy. Configured users also receive it (with budget details).
+              </p>
             </CardContent>
           )}
           <CardFooter>
@@ -507,7 +467,9 @@ const EmailConfigurationManagement = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="flex items-center gap-2"><RefreshCw className="w-5 h-5 text-indigo-600"/> Job Update & Assignments</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-indigo-600" /> Job Update &amp; Assignments
+                </CardTitle>
                 <CardDescription>Notify users when a Job is updated or users are assigned.</CardDescription>
               </div>
               <Switch checked={isJobUpdateActive} onCheckedChange={setIsJobUpdateActive} />
@@ -517,7 +479,9 @@ const EmailConfigurationManagement = () => {
             <CardContent className="animate-in fade-in slide-in-from-top-2">
               <MultiSelect options={allEmployees} selected={jobUpdateRecipients} onChange={setJobUpdateRecipients}
                 placeholder="Select HR/Admin employees..." className="w-full" />
-              <p className="text-xs text-muted-foreground mt-2">Assigned Recruiters receive notification <b>without</b> budget details.</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Assigned Recruiters receive notification <b>without</b> budget details.
+              </p>
             </CardContent>
           )}
           <CardFooter>
@@ -528,7 +492,7 @@ const EmailConfigurationManagement = () => {
         </Card>
       </div>
 
-      {/* CANDIDATE STATUS & LEAVE */}
+      {/* ── CANDIDATE STATUS & LEAVE ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -547,7 +511,9 @@ const EmailConfigurationManagement = () => {
             </CardContent>
           )}
           <CardFooter>
-            <Button onClick={() => handleSaveConfig(STATUS_UPDATE_REPORT_TYPE, statusUpdateRecipients, isStatusUpdateActive, setSavingStatusUpdate)} disabled={savingStatusUpdate}>Save</Button>
+            <Button onClick={() => handleSaveConfig(STATUS_UPDATE_REPORT_TYPE, statusUpdateRecipients, isStatusUpdateActive, setSavingStatusUpdate)} disabled={savingStatusUpdate}>
+              Save
+            </Button>
           </CardFooter>
         </Card>
 
@@ -568,168 +534,19 @@ const EmailConfigurationManagement = () => {
             </CardContent>
           )}
           <CardFooter>
-            <Button onClick={() => handleSaveConfig(LEAVE_REPORT_TYPE, leaveRecipients, isLeaveActive, setSavingLeave)} disabled={savingLeave}>Save</Button>
+            <Button onClick={() => handleSaveConfig(LEAVE_REPORT_TYPE, leaveRecipients, isLeaveActive, setSavingLeave)} disabled={savingLeave}>
+              Save
+            </Button>
           </CardFooter>
         </Card>
       </div>
 
-      {/* ── NEW: INTERVIEW EMAIL NOTIFICATIONS ── */}
-      <Card className="border-violet-100 shadow-sm">
-        <CardHeader className="bg-gradient-to-r from-violet-50/60 to-purple-50/60 pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Video className="h-5 w-5 text-violet-600" />
-              <div>
-                <CardTitle className="text-violet-950">Interview Email Notifications</CardTitle>
-                <CardDescription className="mt-0.5">
-                  Automated alerts for interview confirmation, reminders, reschedules, and cancellations.
-                  Works for all organisations dynamically.
-                </CardDescription>
-              </div>
-            </div>
-            <Switch
-              checked={interviewConfig.isActive}
-              onCheckedChange={val => updateInterviewConfig('isActive', val)}
-            />
-          </div>
-        </CardHeader>
+      {/* ── INTERVIEW NOTIFICATIONS ───────────────────────────────────────── */}
+      {/* ✅ Self-contained component — loads & saves its own config, no props needed */}
+      {/* ✅ OLD duplicate card below this was REMOVED */}
+      <InterviewNotificationsConfig />
 
-        {interviewConfig.isActive && (
-          <CardContent className="pt-6 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-
-            {/* ── Who gets notified ── */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Users className="h-4 w-4 text-violet-600" />
-                Who Gets Notified
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[
-                  { key: 'notify_candidate', icon: <UserCheck className="h-4 w-4" />, label: 'Candidate', desc: 'Send to candidate email' },
-                  { key: 'notify_recruiter', icon: <Bell className="h-4 w-4" />, label: 'Recruiter', desc: 'Interview creator' },
-                  { key: 'notify_job_owner', icon: <BellRing className="h-4 w-4" />, label: 'Job Owner', desc: 'Job post creator' },
-                ].map(({ key, icon, label, desc }) => (
-                  <div
-                    key={key}
-                    onClick={() => updateInterviewConfig(key as keyof InterviewNotificationConfig, !interviewConfig[key as keyof InterviewNotificationConfig])}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none ${
-                      interviewConfig[key as keyof InterviewNotificationConfig]
-                        ? 'border-violet-300 bg-violet-50 text-violet-800'
-                        : 'border-gray-200 bg-white text-gray-500'
-                    }`}
-                  >
-                    <div className={`p-1.5 rounded-md ${interviewConfig[key as keyof InterviewNotificationConfig] ? 'bg-violet-100' : 'bg-gray-100'}`}>
-                      {icon}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">{label}</p>
-                      <p className="text-xs opacity-70">{desc}</p>
-                    </div>
-                    <Switch
-                      checked={!!interviewConfig[key as keyof InterviewNotificationConfig]}
-                      onCheckedChange={val => updateInterviewConfig(key as keyof InterviewNotificationConfig, val)}
-                      className="ml-auto"
-                      onClick={e => e.stopPropagation()}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ── Additional fixed recipients ── */}
-            <div>
-              <Label className="text-sm font-semibold text-gray-700 mb-2 block">Additional Recipients (Fixed)</Label>
-              <MultiSelect
-                options={allEmployees}
-                selected={interviewConfig.recipients}
-                onChange={val => updateInterviewConfig('recipients', val)}
-                placeholder="Select additional employees to always receive interview alerts..."
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground mt-1.5">These employees receive all interview notifications in addition to the dynamic recipients above.</p>
-            </div>
-
-            {/* ── Notification types ── */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Bell className="h-4 w-4 text-violet-600" />
-                Notification Types
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { key: 'send_confirmation', label: 'Interview Confirmation', desc: 'Sent immediately when interview is scheduled', icon: '✅' },
-                  { key: 'send_reschedule_alert', label: 'Reschedule Alert', desc: 'Sent when interview is rescheduled', icon: '🔄' },
-                  { key: 'send_cancellation_alert', label: 'Cancellation Alert', desc: 'Sent when interview is cancelled', icon: '❌' },
-                ].map(({ key, label, desc, icon }) => (
-                  <div key={key} className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-slate-50/60">
-                    <div className="flex items-start gap-2">
-                      <span className="text-base mt-0.5">{icon}</span>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{label}</p>
-                        <p className="text-xs text-muted-foreground">{desc}</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={!!interviewConfig[key as keyof InterviewNotificationConfig]}
-                      onCheckedChange={val => updateInterviewConfig(key as keyof InterviewNotificationConfig, val)}
-                    />
-                  </div>
-                ))}
-
-                {/* Reminder — special with hours config */}
-                <div className="flex items-start justify-between gap-3 p-3 border rounded-lg bg-slate-50/60">
-                  <div className="flex items-start gap-2">
-                    <span className="text-base mt-0.5">⏰</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">Interview Reminder</p>
-                      <p className="text-xs text-muted-foreground">Automatic reminder before interview</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={interviewConfig.send_reminder}
-                    onCheckedChange={val => updateInterviewConfig('send_reminder', val)}
-                  />
-                </div>
-              </div>
-
-              {/* Reminder timing */}
-              {interviewConfig.send_reminder && (
-                <div className="mt-3 pl-4 border-l-2 border-violet-100 ml-2">
-                  <Label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Send Reminder Before</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {[1, 4, 24, 48].map(hours => (
-                      <button
-                        key={hours}
-                        onClick={() => updateInterviewConfig('reminder_before_hours', hours)}
-                        className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-all ${
-                          interviewConfig.reminder_before_hours === hours
-                            ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-violet-300'
-                        }`}
-                      >
-                        {hours === 1 ? '1 hour' : hours === 24 ? '24 hours (1 day)' : hours === 48 ? '48 hours (2 days)' : `${hours} hours`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </CardContent>
-        )}
-
-        <CardFooter className="bg-slate-50/50 border-t">
-          <Button
-            onClick={handleSaveInterviewConfig}
-            disabled={savingInterview}
-            className="ml-auto bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white"
-          >
-            {savingInterview ? 'Saving...' : 'Save Interview Notification Settings'}
-          </Button>
-        </CardFooter>
-      </Card>
-
-      {/* SALES AUTOMATION */}
+      {/* ── SALES AUTOMATION ──────────────────────────────────────────────── */}
       <Card className="border-purple-100 shadow-sm">
         <CardHeader className="bg-gradient-to-r from-purple-50/50 to-pink-50/50 pb-4">
           <div className="flex items-center gap-2">
@@ -743,8 +560,8 @@ const EmailConfigurationManagement = () => {
         <CardContent className="pt-6">
           <Tabs defaultValue="daily" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-4">
-              <TabsTrigger value="daily" className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Daily</TabsTrigger>
-              <TabsTrigger value="weekly" className="flex items-center gap-2"><CalendarRange className="h-4 w-4" /> Weekly</TabsTrigger>
+              <TabsTrigger value="daily"   className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Daily</TabsTrigger>
+              <TabsTrigger value="weekly"  className="flex items-center gap-2"><CalendarRange className="h-4 w-4" /> Weekly</TabsTrigger>
               <TabsTrigger value="monthly" className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Monthly</TabsTrigger>
             </TabsList>
             <TabsContent value="daily">
@@ -778,7 +595,7 @@ const EmailConfigurationManagement = () => {
         </CardFooter>
       </Card>
 
-      {/* RECRUITER AUTOMATION */}
+      {/* ── RECRUITER AUTOMATION ──────────────────────────────────────────── */}
       <Card className="border-indigo-100 shadow-sm">
         <CardHeader className="bg-indigo-50/50 pb-4">
           <div className="flex items-center gap-2">
@@ -790,8 +607,8 @@ const EmailConfigurationManagement = () => {
         <CardContent className="pt-6">
           <Tabs defaultValue="daily" className="w-full">
             <TabsList className="grid w-full grid-cols-3 mb-4">
-              <TabsTrigger value="daily" className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Daily</TabsTrigger>
-              <TabsTrigger value="weekly" className="flex items-center gap-2"><CalendarRange className="h-4 w-4" /> Weekly</TabsTrigger>
+              <TabsTrigger value="daily"   className="flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Daily</TabsTrigger>
+              <TabsTrigger value="weekly"  className="flex items-center gap-2"><CalendarRange className="h-4 w-4" /> Weekly</TabsTrigger>
               <TabsTrigger value="monthly" className="flex items-center gap-2"><Calendar className="h-4 w-4" /> Monthly</TabsTrigger>
             </TabsList>
             <TabsContent value="daily">{renderRecruiterConfigTab('daily_recruiter_report')}</TabsContent>

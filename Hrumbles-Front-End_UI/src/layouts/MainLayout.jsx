@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
 import SubscriptionLockModal from "../layouts/SubscriptionLockModal";
+import { useInterviewReminders } from '../hooks/useInterviewReminders';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -365,6 +366,8 @@ const MainLayout = () => {
   const user           = useSelector((s) => s.auth.user);
   const role           = useSelector((s) => s.auth.role);
   const organizationId = useSelector((s) => s.auth.organization_id);
+
+  const { reminders, unreadCount, dismiss, dismissAll } = useInterviewReminders();
 
 
    const [orgLockReason, setOrgLockReason] = useState(null); // null | 'expired' | 'suspended' | 'inactive'
@@ -791,41 +794,79 @@ useEffect(() => {
               icon={
                 <Box position="relative">
                   <FiBell />
-                  {hasTodayInterview && (
-                    <Box
-                      position="absolute" top="-2px" right="-2px"
-                      w="8px" h="8px" bg="red.500" borderRadius="full"
-                      border="1px solid"
-                      borderColor={colorMode === "dark" ? "base.bgdark" : "white"}
-                    />
-                  )}
+{(hasTodayInterview || unreadCount > 0) && (
+  <Box
+    position="absolute" top="-2px" right="-2px"
+    w="8px" h="8px" bg="red.500" borderRadius="full"
+    border="1px solid"
+    borderColor={colorMode === "dark" ? "base.bgdark" : "white"}
+  />
+)}
                 </Box>
               }
               size="lg" aria-label="Notifications" variant="ghost"
               color={colorMode === "dark" ? "white" : "base.greylg"}
             />
-            <MenuList maxW="300px" p={2} zIndex={9999}>
-              {interviews.length > 0 ? (
-                interviews.map((iv, i) => (
-                  <MenuItem key={i} bg="transparent" _hover={{ bg: "gray.100" }} p={2}>
-                    <Box>
-                      <Text fontSize="sm" fontWeight="medium" isTruncated>{iv.name}</Text>
-                      <Text fontSize="xs" color="gray.500">
-                        {fmtDate(iv.interview_date)} at {fmtTime(iv.interview_time)}
-                      </Text>
-                      <Text fontSize="xs" color="gray.600">{iv.interview_location || "N/A"}</Text>
-                      <Text fontSize="xs" color="blue.600">
-                        {iv.interview_type || "N/A"} — {iv.round || "N/A"}
-                      </Text>
-                    </Box>
-                  </MenuItem>
-                ))
-              ) : (
-                <MenuItem bg="transparent" p={2}>
-                  <Text fontSize="sm" color="gray.500">No upcoming interviews.</Text>
-                </MenuItem>
-              )}
-            </MenuList>
+   <MenuList maxW="300px" p={2} zIndex={9999}>
+  {/* Header row */}
+  <Box px={2} pb={1.5} borderBottom="1px solid" borderColor="gray.100" mb={1}>
+    <Flex justify="space-between" align="center">
+      <Text fontSize="11px" fontWeight="700" color="gray.600" textTransform="uppercase" letterSpacing="0.05em">
+        Reminders
+      </Text>
+      {reminders.length > 0 && (
+        <Text
+          fontSize="10px" fontWeight="600" color="purple.500"
+          cursor="pointer" _hover={{ color: "purple.700" }}
+          onClick={dismissAll}
+        >
+          Clear all
+        </Text>
+      )}
+    </Flex>
+  </Box>
+ 
+  {reminders.length > 0 ? (
+    reminders.slice(0, 5).map((r) => (
+      <MenuItem
+        key={r.id}
+        bg="transparent"
+        _hover={{ bg: "purple.50" }}
+        p={2}
+        borderRadius="8px"
+        onClick={() => dismiss(r.id)}
+      >
+        <Flex align="flex-start" gap={2} w="100%">
+          <Box w="6px" h="6px" borderRadius="full" bg="purple.500" mt="5px" flexShrink={0} />
+          <Box flex={1} minW={0}>
+            <Text fontSize="12px" fontWeight="600" color="gray.800" noOfLines={1}>
+              {r.title}
+            </Text>
+            <Text fontSize="10px" color="gray.500" noOfLines={1}>
+              {r.body}
+            </Text>
+          </Box>
+        </Flex>
+      </MenuItem>
+    ))
+  ) : interviews.length > 0 ? (
+    // Fallback: show old interview list if no hr_notifications yet
+    interviews.slice(0, 3).map((iv, i) => (
+      <MenuItem key={i} bg="transparent" _hover={{ bg: "gray.100" }} p={2}>
+        <Box>
+          <Text fontSize="sm" fontWeight="medium" isTruncated>{iv.name}</Text>
+          <Text fontSize="xs" color="gray.500">
+            {fmtDate(iv.interview_date)} at {fmtTime(iv.interview_time)}
+          </Text>
+        </Box>
+      </MenuItem>
+    ))
+  ) : (
+    <MenuItem bg="transparent" p={2} isDisabled>
+      <Text fontSize="sm" color="gray.500">No pending reminders.</Text>
+    </MenuItem>
+  )}
+</MenuList>
           </Menu>
 
           {/* ── User menu ───────────────────────────────────────────────── */}

@@ -1635,6 +1635,7 @@ const handleInviteCandidate = (candidate: Candidate) => {
           .from('hr_candidate_interviews')
           .insert({
             candidate_id: currentCandidateId,
+            job_id: jobId, 
             interview_date: interviewDate,
             interview_time: interviewTime,
             location: interviewLocation,

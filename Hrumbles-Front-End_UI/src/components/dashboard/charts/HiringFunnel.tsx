@@ -161,7 +161,7 @@ const HiringFunnel: React.FC<HiringFunnelProps> = ({ stages, isLoading, delay = 
                   <span
                     className="text-[11px] font-bold drop-shadow-sm"
                     style={{
-                      color: widthPct > 25 ? "white" : grad.from,
+                      color: widthPct > 25 ? "white" : "white",
                     }}
                   >
                     {stage.count.toLocaleString()}

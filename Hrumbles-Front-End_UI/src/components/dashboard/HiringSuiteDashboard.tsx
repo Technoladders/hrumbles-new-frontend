@@ -3,11 +3,9 @@ import { useSelector } from "react-redux";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Users,
-  Briefcase,
   Clock,
   CheckCircle2,
   Coins,
-  UserCheck,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -20,24 +18,21 @@ import { CalendarCard } from "@/components/employee/profile/cards/CalendarCard";
 
 // ── New components ──
 import DashboardHeader from "./layout/DashboardHeader";
-import CreditGauge from "./cards/CreditGauge";
 import HiringFunnel from "./charts/HiringFunnel";
-import CreditTrendChart from "./charts/CreditTrendChart";
 import WeeklyActivityChart from "./charts/WeeklyActivityChart";
 import SalesActivityWidget from "./cards/SalesActivityWidget";
 import ContactsPipelineWidget from "./cards/ContactsPipelineWidget";
 import CompaniesPipelineWidget from "./cards/CompaniesPipelineWidget";
 import StageConversionChart from "./charts/StageConversionChart";
+import InterviewWidget from "./cards/InterviewWidget";
 
 // ── Hooks ──
 import { useCreditSummary, useCreditDailyTrend } from "./hooks/useCreditUsage";
 import {
   useFunnelData,
-  useTopRecruiters,
   useTopJobs,
   useWeeklyActivity,
   useHiringMetrics,
-  useGeminiUsage,
   useActiveJobsCount,
   usePipelineCount,
 } from "./hooks/useDashboardStats";
@@ -68,7 +63,6 @@ const HiringSuiteDashboard: React.FC = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("hr_organizations")
-        // Added subscription_features to the selection query
         .select("credit_balance, name, subscription_features")
         .eq("id", organizationId)
         .single();
@@ -78,12 +72,10 @@ const HiringSuiteDashboard: React.FC = () => {
     enabled: !!organizationId,
   });
 
-  // Extract the sales_suite flag from the JSONB feature column
   const isSalesSuiteEnabled = orgData?.subscription_features?.sales_suite === true;
 
   // ── Data hooks ──
   const { data: creditSummary } = useCreditSummary(organizationId, dateRange);
-  const { data: creditTrend, isLoading: trendLoading } = useCreditDailyTrend(organizationId, 7);
   const { data: funnelData, isLoading: funnelLoading } = useFunnelData(organizationId);
   const { data: weeklyActivity, isLoading: activityLoading } = useWeeklyActivity(organizationId);
   const { avgTimeToHire, offerAcceptanceRate } = useHiringMetrics(organizationId);
@@ -92,9 +84,8 @@ const HiringSuiteDashboard: React.FC = () => {
   const { data: topJobs } = useTopJobs(organizationId);
 
   // ── Derived ──
-  const funnelTotal = (funnelData ||[]).reduce((s, f) => s + f.count, 0);
+  const funnelTotal = (funnelData || []).reduce((s, f) => s + f.count, 0);
   const displayPipeline = pipelineCount ?? funnelTotal;
-  const displayActiveJobs = activeJobsCount ?? topJobs?.length ?? 0;
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -117,7 +108,6 @@ const HiringSuiteDashboard: React.FC = () => {
 
         {/* ═══ ROW 0 — HERO CAROUSEL + KPI MINI-CARDS + CALENDAR ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-stretch">
-          {/* LEFT — carousel stacked above 2×2 KPI grid */}
           <div className="lg:col-span-4 flex flex-col gap-3">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -128,7 +118,6 @@ const HiringSuiteDashboard: React.FC = () => {
               <DashboardHeroCarousel organizationId={organizationId} user={user} />
             </motion.div>
 
-            {/* 2×2 KPI mini-cards to fill the void below carousel */}
             <div className="flex-1 grid grid-cols-2 gap-3">
               {[
                 {
@@ -172,7 +161,6 @@ const HiringSuiteDashboard: React.FC = () => {
                   className="bg-white rounded-2xl border border-gray-100 p-3.5 flex flex-col justify-between relative overflow-hidden"
                   style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
                 >
-                  {/* top accent line */}
                   <div
                     className="absolute top-0 left-3 right-3 h-[2px] rounded-full opacity-70"
                     style={{ backgroundColor: kpi.accent }}
@@ -189,10 +177,7 @@ const HiringSuiteDashboard: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span
-                      className="text-xl font-bold leading-none block"
-                      style={{ color: kpi.accent }}
-                    >
+                    <span className="text-xl font-bold leading-none block" style={{ color: kpi.accent }}>
                       {kpi.value}
                     </span>
                     <span className="text-[9px] text-gray-400 mt-0.5 block truncate">{kpi.sub}</span>
@@ -202,7 +187,6 @@ const HiringSuiteDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* RIGHT — Calendar full height */}
           <div className="lg:col-span-8">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -221,43 +205,42 @@ const HiringSuiteDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* ═══ ROW 1 — FUNNEL + CREDIT GAUGE + TREND (all fixed 380px height) ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-start">
-          <div className="lg:col-span-12">
-            <HiringFunnel
-              stages={funnelData ||[]}
-              isLoading={funnelLoading}
-              delay={0.15}
-            />
+        {/* ═══ ROW 1 — HIRING FUNNEL (col-7) + INTERVIEW WIDGET (col-5) — fixed equal height ═══ */}
+        {/*
+          Both cards share a fixed height of 420px so they look visually balanced.
+          HiringFunnel renders its chart inside; InterviewWidget scrolls its tab content.
+          The wrapper uses items-stretch so the inner cards' h-full fills correctly.
+        */}
+        <div
+          className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5"
+          style={{ gridAutoRows: "380px" }}
+        >
+          {/* HiringFunnel — 7 cols, fills the 420px row */}
+          <div className="lg:col-span-7 h-full">
+            <div className="h-full">
+              <HiringFunnel
+                stages={funnelData || []}
+                isLoading={funnelLoading}
+                delay={0.15}
+              />
+            </div>
           </div>
-          {/* <div className="lg:col-span-3">
-            <CreditGauge
-              balance={orgData?.credit_balance || 0}
-              totalConsumed={creditSummary?.total_consumed || 0}
-              enrichmentUsed={creditSummary?.enrichment_used || 0}
-              verificationUsed={creditSummary?.verification_used || 0}
-              byEnrichmentType={creditSummary?.by_enrichment_type}
-              byVerificationType={creditSummary?.by_verification_type}
+
+          {/* InterviewWidget — 5 cols, tabs + scrollable list inside 420px */}
+          <div className="lg:col-span-5 h-full">
+            <InterviewWidget
+              organizationId={organizationId}
+              filterByEmployee={false}
               delay={0.2}
-              isSalesSuiteEnabled={isSalesSuiteEnabled}
             />
           </div>
-          <div className="lg:col-span-4">
-            <CreditTrendChart
-              data={creditTrend ||[]}
-              isLoading={trendLoading}
-              delay={0.25}
-              isSalesSuiteEnabled={isSalesSuiteEnabled}
-            />
-          </div> */}
         </div>
 
-        {/* ═══ ROW 2 — WEEKLY ACTIVITY (+ SALES ACTIVITY Conditionally) ═══ */}
+        {/* ═══ ROW 2 — WEEKLY ACTIVITY + SALES ACTIVITY ═══ */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-stretch">
-          {/* Automatically adjust column span based on Sales Suite availability */}
           <div className={isSalesSuiteEnabled ? "lg:col-span-8" : "lg:col-span-12"}>
             <WeeklyActivityChart
-              data={weeklyActivity ||[]}
+              data={weeklyActivity || []}
               isLoading={activityLoading}
               delay={0.2}
             />
@@ -269,7 +252,7 @@ const HiringSuiteDashboard: React.FC = () => {
           )}
         </div>
 
-        {/* ═══ ROW 3 — CONTACTS PIPELINE + COMPANIES PIPELINE + STAGE CONVERSION (Only if Sales Suite Enabled) ═══ */}
+        {/* ═══ ROW 3 — SALES PIPELINE (only if Sales Suite enabled) ═══ */}
         {isSalesSuiteEnabled && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
             <div className="lg:col-span-4">
@@ -298,7 +281,6 @@ const HiringSuiteDashboard: React.FC = () => {
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
           </div>
 
-          {/* ═══ PRESERVED CHARTS — Full width stacked ═══ */}
           <div className="grid grid-cols-1 gap-4 mb-3">
             <div
               className="bg-white rounded-2xl border border-gray-100 p-4 overflow-hidden"
