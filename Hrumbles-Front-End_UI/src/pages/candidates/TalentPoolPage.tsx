@@ -31,7 +31,7 @@ import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/jo
 import V2WhatsAppFloat             from '@/components/MagicLinkView/candidate-profile-v2/components/V2WhatsAppFloat';
 import BatchJobsPanel              from '@/components/candidates/talent-pool/BatchJobsPanel';
 import AnalyticsTab                from '@/components/candidates/talent-pool/AnalyticsTab';
-import BulkUploadV2Modal from '@/components/candidates/talent-pool/BulkUploadV2Modal';
+
 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -696,7 +696,7 @@ const TableTab: FC<{
   const [filterTitles, setFilterTitles]     = useState<string[]>([]);
   const [filterSkills, setFilterSkills]     = useState<string[]>([]);
   const [filterResume, setFilterResume]     = useState<string>('all');
-  const [bulkOpen, setBulkOpen] = useState(false);
+
 
   useEffect(() => {
     const p = new URLSearchParams();
@@ -823,9 +823,7 @@ const TableTab: FC<{
           <button onClick={() => setAddModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 10, paddingRight: 14, height: 30, borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 700, background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, border: 'none', cursor: 'pointer', boxShadow: `0 2px 8px ${ACCENT}40` }}>
             <UserPlus size={13} />Add Candidate
           </button>
-          <button onClick={() => setBulkOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 10, paddingRight: 14, height: 30, borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 700, background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, border: 'none', cursor: 'pointer', boxShadow: `0 2px 8px ${ACCENT}40` }}>
-            <Upload size={13} />Bulk Upload
-          </button>
+          
           
         </div>
       </div>
@@ -1156,9 +1154,7 @@ const TableTab: FC<{
       {enrichCandidate   && <EnrichDataDialog isOpen onClose={() => setEnrichCandidate(null)} candidate={enrichCandidate} />}
       <WishlistModal isOpen={isWishlistModalOpen} onClose={() => setIsWishlistModalOpen(false)} />
       <JobPickerModal isOpen={showSingleJobPicker} onClose={() => setShowSingleJobPicker(false)} onSelect={j => { setSingleInviteJob(j); setShowSingleJobPicker(false); }} organizationId={organizationId} title="Select job for this invite" />
-<button onClick={() => setBulkOpen(true)}>
-  <UploadCloud size={14} /> Bulk Upload
-</button>
+
       {singleInviteJob && singleInviteCandidate && (
         <InviteCandidateModal isOpen onClose={() => { setSingleInviteCandidate(null); setSingleInviteJob(null); }}
           jobId={singleInviteJob.id} job={singleInviteJob as any}
@@ -1173,7 +1169,7 @@ const TableTab: FC<{
       {floatCandidate?.phone && (
         <V2WhatsAppFloat candidateId={floatCandidate.id} candidateName={floatCandidate.candidate_name || 'Candidate'} candidatePhone={floatCandidate.phone} />
       )}
-      <BulkUploadV2Modal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} />
+      
     </div>
   );
 };

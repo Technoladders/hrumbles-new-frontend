@@ -648,6 +648,18 @@ if (isLoading) {
     </span>
   );
 };
+
+const getVendorCandidateCount = (job: JobData) => {
+  if (!isVendor || !user?.id) {
+    return job.candidate_count?.[0]?.count || 0;
+  }
+
+  return (
+    job.hr_job_candidates?.filter(
+      (candidate: any) => candidate.created_by === user.id
+    ).length || 0
+  );
+};
   
  const renderTable = (jobsToRender: JobData[]) => {
   if (isVendor) return renderVendorTable(jobsToRender);
@@ -1031,9 +1043,9 @@ if (isLoading) {
                 <td className="table-cell font-medium">
                   <div className="flex items-center gap-2">
                     <Users size={14} className="text-gray-400" />
-                    <span className={`${(job.candidate_count?.[0]?.count || 0) === 0 ? "text-red-500" : ""}`}>
-                      {job.candidate_count?.[0]?.count || 0}
-                    </span>
+                   <span className={`${getVendorCandidateCount(job) === 0 ? "text-red-500" : ""}`}>
+  {getVendorCandidateCount(job)}
+</span>
                   </div>
                 </td>
                 <td className="table-cell">
