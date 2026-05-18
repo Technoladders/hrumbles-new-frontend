@@ -57,32 +57,25 @@ export const fetchJobById = async (id: string) => {
 };
 
 export const fetchJobsAssignedToUser = async (userId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('hr_jobs')
-      .select(`
-        *,
-        created_by:hr_employees!hr_jobs_created_by_fkey (first_name, last_name),
-        assigned_to,
-        hr_job_candidates!job_id ( name ),
-        candidate_count:hr_job_candidates!job_id(count)
-      `)
-      .order('created_at', { ascending: false });
+  // This looks for the user ID inside the assigned_to JSONB array
+  const { data, error } = await supabase
+    .from('hr_jobs')
+    .select(`
+      *,
+      hr_job_candidates (*),
+      candidate_count (*),
+      created_by (first_name, last_name)
+    `)
+    .or(
+      // Individual/team assignment: user ID appears in the id string
+      `assigned_to @> '[{"type":"individual","id":"%${userId}%"}]'`,
+      `assigned_to @> '[{"type":"team","id":"%${userId}%"}]'`,
+      // Vendor assignment: exact match on id
+      `assigned_to @> '[{"type":"vendor","id":"${userId}"}]'`
+    );
 
-    if (error) throw error;
-
-    // Client-side filter: assigned_to.type === 'individual' and id matches
-    const filteredData = (data || []).filter((job) => {
-      if (!job.assigned_to || job.assigned_to.type !== 'individual') return false;
-      const assignedIds = job.assigned_to.id?.split(',') || [];
-      return assignedIds.includes(userId);
-    });
-
-    return { data: filteredData };
-  } catch (error) {
-    console.error("Error fetching assigned jobs:", error);
-    throw error;
-  }
+  if (error) throw error;
+  return { data: data || [] };
 };
 
 

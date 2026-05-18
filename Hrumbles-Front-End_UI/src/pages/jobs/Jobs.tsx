@@ -211,6 +211,8 @@ const Jobs = () => {
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   
   const isEmployee = userRole === "employee" && user?.id !== "0fa0aa1b-9cb3-482f-b679-5bd8fa355a6e";
+const isVendor = userRole === "vendor";
+const isRestrictedUser = isEmployee || isVendor
 
   // job Board states
   const [careerjetShareJob, setCareerjetShareJob] = useState<JobData | null>(null);
@@ -272,12 +274,12 @@ useEffect(() => {
     refetch,
   } = useQuery({
     queryKey: ["jobs", user?.id, userRole],
-    queryFn: async () => {
-  
-      const data = isEmployee && user?.id ? await getJobsAssignedToUser(user.id) : await getAllJobs();
-  
-      return data;
-    },
+queryFn: async () => {
+  const data = (isEmployee || isVendor) && user?.id
+    ? await getJobsAssignedToUser(user.id)
+    : await getAllJobs();
+  return data;
+},
     refetchOnWindowFocus: false,
   });
 
@@ -840,7 +842,7 @@ if (isLoading) {
                             <TooltipContent><p>View Job</p></TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        {!isEmployee && (
+                        {!isRestrictedUser && (
                           <>
                             <TooltipProvider>
                               <Tooltip>
@@ -911,7 +913,7 @@ if (isLoading) {
 
 
           {/* demo modal */}
-{!isEmployee && (
+{!isRestrictedUser && (
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger asChild>
@@ -1005,7 +1007,7 @@ if (isLoading) {
           <h1 className="text-3xl font-bold mb-1">Job Dashboard</h1>
           <p className="text-gray-500">Manage and track all job postings</p>
         </div>
-  {!isEmployee && (
+  {!isRestrictedUser && (
           <button
             onClick={() => {
               console.log("%c[DEBUG] Create button clicked", "color: green; font-weight: bold");
@@ -1078,7 +1080,7 @@ if (isLoading) {
 
 <div className="flex flex-wrap items-center justify-start gap-3 md:gap-4 w-full">
   {/* Tabs Section */}
-  {!isEmployee && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
+  {!isRestrictedUser && !ITECH_ORGANIZATION_ID.includes(organization_id) && (
     <div className="flex-shrink-0 order-1">
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner space-x-0.5">
@@ -1126,7 +1128,7 @@ if (isLoading) {
   </div>
 
   {/* Date Range Picker */}
-  {!isEmployee && (
+  {!isRestrictedUser && (
     <div className="flex-shrink-0 order-5 w-full sm:w-auto">
       <EnhancedDateRangeSelector
         value={dateRange}
@@ -1138,7 +1140,7 @@ if (isLoading) {
   )}
 
 {/* Status Filter */}
-{!isEmployee && (
+{!isRestrictedUser && (
   <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
     <Select
       value={selectedStatus}
@@ -1182,7 +1184,7 @@ if (isLoading) {
 )}
 
 {/* Client Filter */}
-{!isEmployee && (
+{!isRestrictedUser && (
   <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

@@ -55,9 +55,10 @@ const ROLE_DISPLAY: Record<string, string> = {
   organization_superadmin: 'Superadmin',
   admin: 'Admin',
   employee: 'Employee',
+  vendor: 'Vendor',
 };
 
-const ALLOWED_ROLES = ['organization_superadmin', 'admin', 'employee'];
+const ALLOWED_ROLES = ['organization_superadmin', 'admin', 'employee', 'vendor'];
 
 // ─── Component ───────────────────────────────────────────────────────────────
 const AddUserModal = ({ isOpen, onClose, onSuccess, prefillData }: AddUserModalProps) => {

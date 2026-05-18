@@ -157,6 +157,8 @@ const AscendionOrgSuperAdminMenu = [
     }
 ];
 
+
+
 // 1. Map permission keys to their respective Suites
 const SUITE_CONFIG = {
   general: { title: "GENERAL SUITE", icon: MdDashboardCustomize },
@@ -346,7 +348,12 @@ export const menuItemsByRole = {
             ...suite,
             items: filterRestrictedItems(suite.items, isPurelyPermanentOrg)
         })).filter(suite => suite.items.length > 0);
-    }
+    },
+
+    vendor: [
+  { icon: MdDashboardCustomize, label: "Dashboard", path: "/dashboard" },
+  { icon: FiBriefcase,           label: "Jobs",      path: "/jobs"      },
+],
 };
 
 export const extraMenuItems = [

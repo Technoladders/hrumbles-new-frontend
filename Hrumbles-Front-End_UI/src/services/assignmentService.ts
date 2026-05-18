@@ -82,25 +82,35 @@ export const fetchTeams = async (organizationId: string) => {
 };
 
 // ─── Fetch vendors ────────────────────────────────────────────────────────────
-export const fetchVendors = async (organizationId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('hr_clients')
-      .select('id, client_name')
-      .eq('organization_id', organizationId)
-      .eq('status', 'active');
+// REPLACE the existing fetchVendors function with this:
 
-    if (error) throw error;
+export async function fetchVendors(organizationId: string) {
+  // Step 1: get the vendor role id
+  const { data: roleData, error: roleError } = await supabase
+    .from("hr_roles")
+    .select("id")
+    .eq("name", "vendor")
+    .single();
 
-    return data.map(vendor => ({
-      value: vendor.id,
-      label: vendor.client_name
-    }));
-  } catch (error) {
-    console.error("Error fetching vendors:", error);
-    throw error;
-  }
-};
+  if (roleError || !roleData) return [];
+
+  // Step 2: fetch employees with vendor role in this org who have login access
+  const { data, error } = await supabase
+    .from("hr_employees")
+    .select("id, first_name, last_name, email")
+    .eq("organization_id", organizationId)
+    .eq("role_id", roleData.id)
+    .eq("status", "active")
+
+
+  if (error) return [];
+
+  return (data || []).map(v => ({
+    value: v.id,
+    label: `${v.first_name} ${v.last_name}`,
+    email: v.email,
+  }));
+}
 
 // ─── Fetch existing job assignments ──────────────────────────────────────────
 export const fetchJobAssignments = async (jobId: string) => {

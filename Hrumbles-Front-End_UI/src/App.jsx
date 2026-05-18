@@ -169,6 +169,8 @@ import { InterviewReminderOverlay } from './components/notifications/InterviewRe
 import BulkProgressFloat from '@/components/candidates/talent-pool/BulkProgressFloat';
 import ResumeProcessingPage from '@/pages/talent-pool/ResumeProcessingPage';
 
+import VendorDashboard from "./pages/VendorDashboard";
+
 
 const FullScreenLoader = () => (
   <div className="fixed inset-0 bg-white flex items-center justify-center z-50">
@@ -191,6 +193,8 @@ function AppContent() {
   const organizationId = useSelector((state) => state.auth.organization_id);
   const firmOrgStatus = useSelector((state) => state.firmOrganization.status);
   const reduxUser = useSelector((state) => state.auth.user);
+    const userRole           = useSelector((s) => s.auth.role);
+  
 
   const [isOrgValidated, setIsOrgValidated] = useState(null);
 
@@ -453,13 +457,15 @@ function AppContent() {
         <Route path="/apply/:inviteToken" element={<CandidateApplicationPage />} />
         <Route path="/consent/:consentId" element={<CandidateConsentPage />} />
 
-        <Route element={<PrivateRoutes allowedRoles={["global_superadmin","organization_superadmin","admin","employee"]} />}>
+        <Route element={<PrivateRoutes allowedRoles={["global_superadmin","organization_superadmin","admin","employee", "vendor"]} />}>
           <Route path="/complete-profile" element={<CompleteYourProfile />} />
           <Route path="employee/:id" element={<EmployeeOnboard />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={
+  userRole === 'vendor' ? <VendorDashboard /> : <Dashboard />
+} />
               <Route path="profile/edit/:id" element={<ProfileEditEmployee />} />
               <Route path="/password" element={<PasswordChange />} />
               <Route path="/organization" element={<GlobalSuperadminDashboard />} />

@@ -155,16 +155,15 @@ const menuConfig = useMemo(() => {
   const source = menuItemsByRole[role];
   if (!source) return [];
 
-  // Use switch for role-specific calls (reuse organizationId/false as placeholders)
   switch (role) {
     case 'organization_superadmin':
       return source(organizationId, organizationDetails, false, userPermissions);
     case 'admin':
-      // Pass organizationId as deptName placeholder, false as isPurelyPermanentOrg
       return source(organizationId, false, userPermissions);
     case 'employee':
-      // Pass organizationId as placeholders for deptName/designationName/userId, false as isPurelyPermanentOrg
       return source(organizationId, organizationId, organizationId, false, userPermissions);
+    case 'vendor':
+      return source; // flat array, no function call needed
     default:
       return [];
   }
