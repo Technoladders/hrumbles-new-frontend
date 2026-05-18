@@ -534,6 +534,7 @@ const AddCandidateDrawer = ({ job, onCandidateAdded, candidate, open, onOpenChan
                 setFullParsedProfile(data);
                 setExtractedResumeText(text);
               }}
+              jobId={job.id}
             />
           </TabsContent>
           

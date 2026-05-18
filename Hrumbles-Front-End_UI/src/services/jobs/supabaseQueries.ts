@@ -57,22 +57,24 @@ export const fetchJobById = async (id: string) => {
 };
 
 export const fetchJobsAssignedToUser = async (userId: string) => {
-  // This looks for the user ID inside the assigned_to JSONB array
+  const { data: jobIds, error: idError } = await supabase
+    .rpc('get_job_ids_for_user', { p_user_id: userId });
+
+  if (idError) throw idError;
+  if (!jobIds || jobIds.length === 0) return { data: [] };
+
+  const ids = (jobIds as { job_id: string }[]).map(r => r.job_id);
+
   const { data, error } = await supabase
     .from('hr_jobs')
     .select(`
       *,
-      hr_job_candidates (*),
-      candidate_count (*),
-      created_by (first_name, last_name)
+      hr_job_candidates!job_id ( name ),
+      candidate_count:hr_job_candidates!job_id ( count ),
+      created_by:hr_employees!hr_jobs_created_by_fkey ( first_name, last_name )
     `)
-    .or(
-      // Individual/team assignment: user ID appears in the id string
-      `assigned_to @> '[{"type":"individual","id":"%${userId}%"}]'`,
-      `assigned_to @> '[{"type":"team","id":"%${userId}%"}]'`,
-      // Vendor assignment: exact match on id
-      `assigned_to @> '[{"type":"vendor","id":"${userId}"}]'`
-    );
+    .in('id', ids)
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
   return { data: data || [] };

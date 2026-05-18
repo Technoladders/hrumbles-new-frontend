@@ -251,7 +251,7 @@ export const mapCandidateToDbData = (candidate: CandidateData): Partial<HrJobCan
 };
 
 
-export const getCandidatesByJobId = async (jobId: string, statusFilter?: string): Promise<any[]> => {
+export const getCandidatesByJobId = async (jobId: string, statusFilter?: string, userRole?: string, userId?: string): Promise<any[]> => {
   try {
     let query = supabase
       .from('hr_job_candidates')
@@ -262,7 +262,11 @@ export const getCandidatesByJobId = async (jobId: string, statusFilter?: string)
   sub_status:job_statuses!hr_job_candidates_sub_status_id_fkey (id,name,type)
       `)
       .eq('job_id', jobId)
-      .order('created_at', { ascending: false });
+      if (userRole === "vendor" && userId) {
+  query = query.eq("created_by", userId);
+}
+
+query = query.order('created_at', { ascending: false });
 
     if (statusFilter) {
       console.log('Applying status filter:', statusFilter);
@@ -793,15 +797,21 @@ export const updateCandidateValidationStatus = async (candidateId: string): Prom
  * Get candidate status counts for a specific job
  * This allows us to get counts for main statuses or sub-statuses
  */
-export const getCandidateStatusCounts = async (jobId: string, countType: 'main' | 'sub' = 'main'): Promise<{name: string, count: number, color: string}[]> => {
+export const getCandidateStatusCounts = async (jobId: string, countType: 'main' | 'sub' = 'main', userRole?: string, userId?: string): Promise<{name: string, count: number, color: string}[]> => {
   try {
-    const { data: candidates, error } = await supabase
-      .from('hr_job_candidates')
-      .select(`
-        main_status:job_statuses!main_status_id(id, name, color),
-        sub_status:job_statuses!sub_status_id(id, name, color)
-      `)
-      .eq('job_id', jobId);
+let query = supabase
+  .from('hr_job_candidates')
+  .select(`
+    main_status:job_statuses!main_status_id(id, name, color),
+    sub_status:job_statuses!sub_status_id(id, name, color)
+  `)
+  .eq('job_id', jobId);
+
+if (userRole === "vendor" && userId) {
+  query = query.eq("created_by", userId);
+}
+
+const { data: candidates, error } = await query;
     
     if (error) throw error;
     

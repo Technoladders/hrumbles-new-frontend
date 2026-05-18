@@ -102,6 +102,7 @@ interface CandidatesListProps {
    rejection_reason?: string; 
     searchTerm?: string;
     activeTab?: string;
+    isVendor?: boolean;
 }
 
 interface HiddenContactCellProps {
@@ -125,6 +126,7 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
     isCareerPage = false,
      searchTerm = "",
      activeTab = "All Candidates",
+     isVendor = false,
   } = props;
   const navigate = useNavigate();
   const user = useSelector((state: any) => state.auth.user);
@@ -908,6 +910,7 @@ const candidates = useMemo(() => {
           interview_time: candidate.interview_time,
           interview_feedback: candidate.interview_feedback,
           joining_date: candidate.joining_date, 
+          created_by: candidate.created_by,
     };
     });
   }, [candidatesData, job, clientData, validatingIds]);
@@ -1471,7 +1474,12 @@ useImperativeHandle(ref, () => ({
   const filteredCandidates = useMemo(() => {
     let filtered = [...candidates];
 
+  // VENDOR: show only candidates they added
+  if (isVendor) {
+    filtered = filtered.filter(c => c.created_by === user?.id || c.createdBy === user?.id);
+  }
 
+  console.log("Candidates before filtering:", candidates);
        if (searchTerm.trim() !== "") {
       const lowercasedSearchTerm = searchTerm.toLowerCase();
       filtered = filtered.filter(c => {
@@ -2620,6 +2628,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                 <TooltipContent><p>View Timeline & Notes</p></TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {!isVendor && (
 <TooltipProvider>
   <Tooltip>
     <TooltipTrigger asChild>
@@ -2679,6 +2688,7 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     </TooltipContent>
   </Tooltip>
 </TooltipProvider>
+            )}
             {/* {candidate.hasValidatedResume && (
               <TooltipProvider>
                 <Tooltip>

@@ -169,61 +169,95 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
     if (isOpen && organizationId) loadData();
   }, [isOpen, organizationId]);
 
-  const loadData = async () => {
-    setDataLoading(true);
-    try {
-      const [employeesData, teamsData, vendorsData] = await Promise.all([
-        fetchEmployees(organizationId),
-        fetchTeams(organizationId),
-        fetchVendors(organizationId),
-      ]);
-      setEmployees(employeesData);
-      setTeams(teamsData);
-      setVendors(vendorsData);
+const loadData = async () => {
+  setDataLoading(true);
+  try {
+    const [employeesData, teamsData, vendorsData] = await Promise.all([
+      fetchEmployees(organizationId),
+      fetchTeams(organizationId),
+      fetchVendors(organizationId),
+    ]);
 
-      if (job?.id) {
-        const assignmentData = await fetchJobAssignments(job.id);
-        const { data: jobRow } = await supabase
-          .from("hr_jobs").select("assigned_to").eq("id", job.id).single();
-        const assignedTo = jobRow?.assigned_to;
+    setEmployees(employeesData);
+    setTeams(teamsData);
+    setVendors(vendorsData);
 
-        if (assignedTo) {
-          if (assignedTo.type === "individual") {
-            setActiveTab("internal");
-            setAssignmentType("individual");
-            setSelectedIndividuals(assignmentData.assignments || []);
-          } else if (assignedTo.type === "team") {
-            setActiveTab("internal");
-            setAssignmentType("team");
-            const storedIds = assignedTo.id?.split(",") ?? [];
-            const directMatch = teamsData.find(t => t.value === assignedTo.id);
-            if (directMatch) {
-              setSelectedTeam(directMatch.value);
-            } else if (storedIds.length > 0) {
-              const { data: memberRows } = await supabase
-                .from("hr_team_members")
-                .select("team_id")
-                .in("employee_id", storedIds)
-                .limit(1);
-              const teamId = memberRows?.[0]?.team_id;
-              if (teamId && teamsData.find(t => t.value === teamId)) setSelectedTeam(teamId);
+    if (job?.id) {
+      const assignmentData = await fetchJobAssignments(job.id);
+
+      const { data: jobRow } = await supabase
+        .from("hr_jobs")
+        .select("assigned_to")
+        .eq("id", job.id)
+        .single();
+
+      const assignedTo = jobRow?.assigned_to;
+
+      // ── Existing assignment pre-fill ─────────────────────────────
+      if (assignedTo) {
+        if (assignedTo.type === "individual") {
+          setActiveTab("internal");
+          setAssignmentType("individual");
+          setSelectedIndividuals(assignmentData.assignments || []);
+
+        } else if (assignedTo.type === "team") {
+          setActiveTab("internal");
+          setAssignmentType("team");
+
+          const storedIds = assignedTo.id?.split(",") ?? [];
+          const directMatch = teamsData.find(t => t.value === assignedTo.id);
+
+          if (directMatch) {
+            setSelectedTeam(directMatch.value);
+          } else if (storedIds.length > 0) {
+            const { data: memberRows } = await supabase
+              .from("hr_team_members")
+              .select("team_id")
+              .in("employee_id", storedIds)
+              .limit(1);
+
+            const teamId = memberRows?.[0]?.team_id;
+
+            if (teamId && teamsData.find(t => t.value === teamId)) {
+              setSelectedTeam(teamId);
             }
-          } else if (assignedTo.type === "vendor") {
-            setActiveTab("external");
-            setSelectedVendor(assignedTo.id || NO_SELECT);
           }
-        }
 
-        if (assignmentData.budget != null) setBudget(assignmentData.budget.toString());
-        if (assignmentData.budgetType)     setBudgetType(assignmentData.budgetType);
+        } else if (assignedTo.type === "vendor") {
+          setActiveTab("external");
+          setSelectedVendor(assignedTo.id || NO_SELECT);
+        }
       }
-    } catch (err) {
-      console.error("Error loading data:", err);
-      toast.error("Failed to load assignment options");
-    } finally {
-      setDataLoading(false);
+
+      // ── Vendor assignment fallback pre-fill (NEW) ───────────────
+      // This handles vendorAssignment object if fetchJobAssignments returns it
+      if (assignmentData.vendorAssignment) {
+        setActiveTab("external");
+        setSelectedVendor(
+          assignmentData.vendorAssignment.vendor_id ||
+          assignmentData.vendorAssignment.id ||
+          NO_SELECT
+        );
+      }
+
+      // ── Budget pre-fill ─────────────────────────────────────────
+      if (assignmentData.budget != null) {
+        setBudget(assignmentData.budget.toString());
+      }
+
+      if (assignmentData.budgetType) {
+        setBudgetType(assignmentData.budgetType);
+      }
     }
-  };
+
+  } catch (err) {
+    console.error("Error loading data:", err);
+    toast.error("Failed to load assignment options");
+
+  } finally {
+    setDataLoading(false);
+  }
+};
 
   // ── Load POCs when job has a client ──────────────────────────────────────
   useEffect(() => {
@@ -433,8 +467,8 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
           const { data: empData } = await supabase.from("hr_employees").select("email").in("id", addedIds);
           recipientEmails = (empData ?? []).map(e => e.email);
         }
-      } else if (type === "vendor" && jobRow?.assigned_to?.id !== id) {
-        const { data: v } = await supabase.from("hr_clients").select("email").eq("id", id).single();
+      }  else if (type === "vendor") {
+  const { data: v } = await supabase.from("hr_employees").select("email").eq("id", id).single();
         if (v?.email) recipientEmails = [v.email];
         newAssigneeNames = [name];
       }

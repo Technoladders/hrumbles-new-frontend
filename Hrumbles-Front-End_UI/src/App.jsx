@@ -167,7 +167,9 @@ import BatchJobsPage from '@/components/candidates/talent-pool/BatchJobsPage.tsx
 import UploadProgressFloat from '@/components/candidates/talent-pool/UploadProgressFloat';
 import { InterviewReminderOverlay } from './components/notifications/InterviewReminderOverlay';
 import BulkProgressFloat from '@/components/candidates/talent-pool/BulkProgressFloat';
+import DraggableUploadFloat    from '@/components/candidates/talent-pool/DraggableUploadFloat';
 import ResumeProcessingPage from '@/pages/talent-pool/ResumeProcessingPage';
+import { UploadFloatProvider } from '@/components/candidates/talent-pool/DraggableUploadFloat';
 
 import VendorDashboard from "./pages/VendorDashboard";
 
@@ -594,13 +596,16 @@ function AppContent() {
 function App() {
   return (
     <>
+     <UploadFloatProvider> 
     <Router>
       <AppContent />
       <GlobalDialogs />
       <InterviewReminderOverlay />
+      <DraggableUploadFloat />
     <BulkProgressFloat />
     </Router>
     <UploadProgressFloat />
+     </UploadFloatProvider> 
     </>
   );
 }

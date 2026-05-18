@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSelector } from "react-redux";
 import { UseFormReturn } from "react-hook-form";
 import { motion } from "framer-motion"; // Import framer-motion
@@ -72,6 +72,7 @@ interface BasicInformationTabProps {
   onParseComplete: (parsedData: any, rawText: string) => void;
   candidate?: Candidate; 
   isEditMode?: boolean;
+  jobId?: string;
 }
 
 const calculateExperienceFromHistory = (workHistory: any[]) => {
@@ -172,7 +173,7 @@ const sanitizeFileName = (fileName: string): string => {
   return `${sanitizedName}.${extension}`;
 };
 
-const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, candidate, isEditMode }: BasicInformationTabProps) => {
+const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, candidate, isEditMode, jobId }: BasicInformationTabProps) => {
   const [isParsing, setIsParsing] = useState(false);
   const [isUploadingOffer, setIsUploadingOffer] = useState(false);
   const [isUploadingJoining, setIsUploadingJoining] = useState(false);
@@ -188,6 +189,52 @@ const BasicInformationTab = ({ form, onSaveAndNext, onCancel, onParseComplete, c
   const[showCustomNoticeInput, setShowCustomNoticeInput] = useState(false);
   const [customNotice, setCustomNotice] = useState("");
   const [isSavingNotice, setIsSavingNotice] = useState(false);
+
+  // Duplicate check state
+const [duplicateState, setDuplicateState] = useState<'idle' | 'checking' | 'duplicate' | 'unique'>('idle');
+const duplicateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+// Watch email field for real-time duplicate detection
+const emailValue = form.watch("email");
+
+useEffect(() => {
+  if (!jobId || !emailValue) {
+    setDuplicateState('idle');
+    return;
+  }
+
+  // Only check if email looks valid
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(emailValue)) {
+    setDuplicateState('idle');
+    return;
+  }
+
+  // Clear previous timer
+  if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current);
+  setDuplicateState('checking');
+
+  duplicateTimerRef.current = setTimeout(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('hr_job_candidates')
+        .select('id, name')
+        .eq('job_id', jobId)
+        .ilike('email', emailValue)
+        .limit(1);
+
+      if (error) throw error;
+      setDuplicateState(data && data.length > 0 ? 'duplicate' : 'unique');
+    } catch {
+      setDuplicateState('idle');
+    }
+  }, 600);
+
+  return () => {
+    if (duplicateTimerRef.current) clearTimeout(duplicateTimerRef.current);
+  };
+}, [emailValue, jobId]);
+  
 
     // 3. Fetch custom notice periods for this organization on mount
   useEffect(() => {
@@ -591,11 +638,30 @@ const getFileNameFromUrl = (url: string) => {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
+                  
+<FormLabel>
+  Email <span className="text-red-500">*</span>
+  {/* Duplicate check indicator */}
+  {duplicateState === 'checking' && (
+    <span className="ml-2 text-xs text-gray-400 font-normal inline-flex items-center gap-1">
+      <Loader2 className="h-3 w-3 animate-spin" />checking...
+    </span>
+  )}
+  {duplicateState === 'duplicate' && (
+    <span className="ml-2 text-xs text-amber-600 font-semibold inline-flex items-center gap-1">
+      ⚠ Already applied to this job
+    </span>
+  )}
+  {duplicateState === 'unique' && (
+    <span className="ml-2 text-xs text-green-600 font-normal inline-flex items-center gap-1">
+      ✓ Not a duplicate
+    </span>
+  )}
+</FormLabel>
                     <FormControl>
                       <motion.div variants={fieldHoverEffect} whileHover="hover" className="relative">
                         <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input placeholder="john.doe@example.com" type="email" {...field} className="pl-10" />
+                        <Input placeholder="john.doe@example.com" type="email" {...field} className={`pl-10 ${duplicateState === 'duplicate' ? 'border-amber-400 focus-visible:ring-amber-400' : ''}`} />
                       </motion.div>
                     </FormControl>
                     <FormMessage />

@@ -635,8 +635,22 @@ if (isLoading) {
         </AvatarGroup>
     );
   };
+
+  const VendorCell = ({ assignedVendor }: { assignedVendor: any }) => {
+  if (!assignedVendor?.name) {
+    return <span className="text-gray-300 text-sm">—</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+      text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+      <Building2 size={11} />
+      {assignedVendor.name}
+    </span>
+  );
+};
   
  const renderTable = (jobsToRender: JobData[]) => {
+  if (isVendor) return renderVendorTable(jobsToRender);
     if (jobsToRender.length === 0) {
       return <div className="text-center p-12 text-gray-500"><p>No jobs found.</p></div>;
     }
@@ -667,6 +681,9 @@ if (isLoading) {
     {!ITECH_ORGANIZATION_ID.includes(organization_id) && 
       <th scope="col" className="table-header-cell text-white">Assigned To</th>
     }
+    {!ITECH_ORGANIZATION_ID.includes(organization_id) &&
+  <th scope="col" className="table-header-cell text-white">Vendor</th> 
+}
     <th scope="col" className="table-header-cell text-center text-white">Actions</th>
   </tr>
 </thead>
@@ -797,7 +814,7 @@ if (isLoading) {
                     </div>
                   </td>
                   <td className="table-cell">
-                    {isEmployee ? (
+                   {isRestrictedUser ? (
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className={getStatusBadgeClass(job.status)}>{job.status === "Active" ? "OPEN" : job.status}</Badge>
                       </div>
@@ -833,6 +850,7 @@ if (isLoading) {
                     </TooltipProvider>
                   </td>
                   {!ITECH_ORGANIZATION_ID.includes(organization_id) && <td className="table-cell"><AssignedToCell assignedTo={job.assigned_to} /></td>}
+                  {!ITECH_ORGANIZATION_ID.includes(organization_id) && <td className="table-cell"><VendorCell assignedVendor={job.assigned_vendor} /></td>}   {/* ← ADD */}
                   <td className="table-cell">
                     <div className="flex justify-center">
                       <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
@@ -971,6 +989,98 @@ if (isLoading) {
       </div>
     );
   };
+
+  const renderVendorTable = (jobsToRender: JobData[]) => {
+  if (jobsToRender.length === 0) {
+    return <div className="text-center p-12 text-gray-500"><p>No jobs found.</p></div>;
+  }
+  return (
+    <div className="bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm animate-scale-in">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gradient-to-r from-purple-600 to-violet-600">
+            <tr>
+              <th scope="col" className="sticky left-0 z-20 bg-gradient-to-r from-purple-600 to-violet-600 table-header-cell text-white">
+                <div className="flex items-center gap-1 text-white">Job Title<ArrowUpDown size={14} /></div>
+              </th>
+              <th scope="col" className="table-header-cell text-white">Created Date</th>
+              <th scope="col" className="table-header-cell text-white">No. of Candidates</th>
+              <th scope="col" className="table-header-cell text-white">Status</th>
+              <th scope="col" className="table-header-cell text-white">Posted By</th>
+              <th scope="col" className="table-header-cell text-center text-white">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {jobsToRender.map((job) => (
+              <tr key={job.id} className="transition-all duration-200 hover:bg-gray-50">
+                <td className="sticky left-0 z-20 bg-white table-cell">
+                  <div className="flex flex-col">
+                    <Link to={`/jobs/${job.id}`} className="font-medium text-black-600 hover:underline">{job.title}</Link>
+                    <span className="text-xs text-gray-500 flex items-center space-x-2 mt-1">
+                      <Badge variant="outline" className="bg-purple-100 text-purple-800">{job.jobId}</Badge>
+                    </span>
+                  </div>
+                </td>
+                <td className="table-cell">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Calendar size={14} className="text-gray-400" />
+                    <span>{moment(job.createdAt).format("DD MMM YYYY")}</span>
+                  </div>
+                  <span className="text-gray-400 text-xs ml-6">({moment(job.createdAt).fromNow()})</span>
+                </td>
+                <td className="table-cell font-medium">
+                  <div className="flex items-center gap-2">
+                    <Users size={14} className="text-gray-400" />
+                    <span className={`${(job.candidate_count?.[0]?.count || 0) === 0 ? "text-red-500" : ""}`}>
+                      {job.candidate_count?.[0]?.count || 0}
+                    </span>
+                  </div>
+                </td>
+                <td className="table-cell">
+                  <Badge variant="outline" className={getStatusBadgeClass(job.status)}>
+                    {job.status === "Active" ? "OPEN" : job.status}
+                  </Badge>
+                </td>
+                <td className="table-cell">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className="h-8 w-8 cursor-pointer">
+                          <AvatarFallback className="bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-semibold">
+                            {job.createdBy?.first_name?.[0]}{job.createdBy?.last_name?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent><p>{job.createdBy?.first_name} {job.createdBy?.last_name}</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </td>
+                <td className="table-cell">
+                  <div className="flex justify-center">
+                    <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link to={`/jobs/${job.id}`}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full text-slate-500 hover:bg-purple-600 hover:text-white transition-colors">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent><p>View Job</p></TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
   
   // --- FIX: Pass the required variables into the function ---
   const renderPagination = (currentStartIndex: number, currentItemsPerPage: number, totalItems: number) => (

@@ -34,6 +34,7 @@ export const transformToJobData = (jobRecord: any): JobData => {
     closedDate: jobRecord.closed_date,
     closedBy: jobRecord.closed_by,
     assigned_to: jobRecord.assigned_to || null, 
+    assigned_vendor: jobRecord.assigned_vendor || null,
     candidate_count: jobRecord.candidate_count,
     hr_budget: jobRecord.budget,
     createdAt: jobRecord.created_at,

@@ -39,6 +39,8 @@ const POLL_MS = 15_000;
 
 const BulkProgressFloat: FC = () => {
   const organizationId = useSelector((s: any) => s.auth.organization_id);
+  const user           = useSelector((s: any) => s.auth.user);
+const userRole       = useSelector((s: any) => s.auth.role);
   const navigate       = useNavigate();
 
   const [stats,      setStats]      = useState<Stats | null>(null);
@@ -47,21 +49,29 @@ const BulkProgressFloat: FC = () => {
   const [loading,    setLoading]    = useState(false);
   const [lastPoll,   setLastPoll]   = useState<Date | null>(null);
 
-  const poll = useCallback(async () => {
-    if (!organizationId) return;
-    setLoading(true);
-    try {
-      const { data } = await supabase.rpc('get_bulk_pipeline_stats', { p_org_id: organizationId });
-      if (data) {
-        setStats(data as Stats);
-        setLastPoll(new Date());
-      }
-    } catch (e) {
-      // Silently fail — widget just shows stale data
-    } finally {
-      setLoading(false);
+const poll = useCallback(async () => {
+  if (!organizationId) return;
+  setLoading(true);
+
+  try {
+    // Admins / superadmins can view org-wide stats
+    const isAdmin = ['admin', 'organization_superadmin', 'global_superadmin'].includes(userRole);
+
+    const { data } = await supabase.rpc('get_bulk_pipeline_stats', {
+      p_org_id: organizationId,
+      p_uploaded_by: isAdmin ? null : (user?.id ?? null),
+    });
+
+    if (data) {
+      setStats(data as Stats);
+      setLastPoll(new Date());
     }
-  }, [organizationId]);
+  } catch (e) {
+    // Silently fail — widget just shows stale data
+  } finally {
+    setLoading(false);
+  }
+}, [organizationId, user?.id, userRole]);
 
   useEffect(() => {
     poll();

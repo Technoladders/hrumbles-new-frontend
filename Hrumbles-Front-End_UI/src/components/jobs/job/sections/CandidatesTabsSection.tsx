@@ -186,6 +186,7 @@ console.log("clientdetails in tab section:", clientdetails);
   const candidatesListRef = useRef<CandidatesListHandle>(null);
     const userRole = useSelector((state: any) => state.auth.role);
     const isEmployee = userRole === 'employee';
+    const isVendor = userRole === 'vendor';
 
     // --- ADDED: State for the Analysis Config Dialog ---
     const [showConfigDialog, setShowConfigDialog] = useState(false);
@@ -403,6 +404,7 @@ return (
 </Select>
 
           {/* 👤 Candidate Filter (ICON) */}
+          {!isVendor && (
 <Select value={candidateFilter} onValueChange={setCandidateFilter}>
   <SelectTrigger
     className="
@@ -438,6 +440,7 @@ return (
     )}
   </SelectContent>
 </Select>
+          )}
 
           {/* 📩 Bulk Actions */}
           {(scoreFilter === 'shortlisted' || scoreFilter === 'not_shortlisted') && (
@@ -483,6 +486,7 @@ return (
           )}
 
           {/* 🚀 Bulk Invite */}
+          {!isVendor && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -499,6 +503,7 @@ return (
             </TooltipTrigger>
             <TooltipContent>Bulk Invite</TooltipContent>
           </Tooltip>
+          )}
 
           {/* ⚡ Batch Validate */}
           <Tooltip>
@@ -519,6 +524,7 @@ return (
           </Tooltip>
 
           {/* ⚙️ Config */}
+          {!isVendor && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -535,6 +541,7 @@ return (
             </TooltipTrigger>
             <TooltipContent>AI Config</TooltipContent>
           </Tooltip>
+          )}
 
           {/* 📊 Export CSV */}
 <Tooltip>
@@ -584,6 +591,7 @@ return (
       <CandidatesList
         ref={candidatesListRef}
         jobId={jobId}
+        isVendor={isVendor}
         jobdescription={jobdescription}
         onAddCandidate={onAddCandidate}
         onRefresh={fetchCandidates}

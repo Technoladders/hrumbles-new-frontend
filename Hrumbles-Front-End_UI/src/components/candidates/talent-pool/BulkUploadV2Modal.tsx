@@ -1,476 +1,251 @@
 // src/components/candidates/talent-pool/BulkUploadV2Modal.tsx
 //
-// Completely new bulk upload — replaces the old session-based approach.
-// Flow:
-//   1. User selects files
-//   2. Browser computes sha256 hashes in parallel (Web Crypto API)
-//   3. Single RPC call checks which hashes already exist in DB
-//   4. User sees summary (new vs duplicate)
-//   5. Upload new files directly to Supabase Storage (no edge function)
-//   6. Insert rows into hr_resume_files
-//   7. Modal closes — worker container handles everything else
+// Modal closes immediately when upload starts.
+// Progress is handed off to DraggableUploadFloat via UploadFloatContext.
 
-import { useState, useRef, useCallback, FC } from 'react';
+import { FC, useState, useRef, useCallback } from 'react';
 import Modal from 'react-modal';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSelector } from 'react-redux';
-import {
-  UploadCloud, X, CheckCircle, AlertCircle,
-  FileText, Loader2, ChevronRight, Zap,
-} from 'lucide-react';
+import { useUploadFloat } from './DraggableUploadFloat';
+import { UploadCloud, X, Zap, CheckCircle, FileText, Loader2, ChevronRight } from 'lucide-react';
 
-const BUCKET        = 'talent-pool-resumes';
-const BULK_PREFIX   = 'bulk';
-const CONCURRENCY   = 6;    // parallel uploads
-const HASH_PARALLEL = 20;   // hashes computed at once
+const BUCKET      = 'talent-pool-resumes';
+const BULK_PREFIX = 'bulk';
+const CONCURRENCY = 6;
+const HASH_BATCH  = 20;
+const ACCENT      = '#6d4aff';
 
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-}
+interface Props { isOpen: boolean; onClose: () => void; }
 
-// ── SHA-256 using Web Crypto API ──────────────────────────────────────────────
 async function sha256(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const hash   = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function sanitize(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+function sanitize(n: string) { return n.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100); }
+function guessMime(n: string) {
+  const e = n.toLowerCase().split('.').pop();
+  return e === 'pdf' ? 'application/pdf'
+    : e === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    : e === 'doc'  ? 'application/msword'
+    : 'application/octet-stream';
 }
 
-// ── Upload state ──────────────────────────────────────────────────────────────
-type Phase = 'idle' | 'hashing' | 'checking' | 'confirming' | 'uploading' | 'done';
-
-interface UploadStats {
-  total:      number;
-  duplicates: number;
-  toUpload:   number;
-  done:       number;
-  failed:     number;
-}
-
-const ACCENT = '#6d4aff';
+type Phase = 'idle' | 'hashing' | 'checking' | 'confirming';
 
 const BulkUploadV2Modal: FC<Props> = ({ isOpen, onClose }) => {
   const user           = useSelector((s: any) => s.auth.user);
   const organizationId = useSelector((s: any) => s.auth.organization_id);
+  const { addJob, updateJob } = useUploadFloat();
 
-  const [phase,        setPhase]       = useState<Phase>('idle');
-  const [stats,        setStats]       = useState<UploadStats>({ total: 0, duplicates: 0, toUpload: 0, done: 0, failed: 0 });
-  const [failedFiles,  setFailedFiles] = useState<string[]>([]);
-  const abortRef                       = useRef(false);
-  const fileInputRef                   = useRef<HTMLInputElement>(null);
+  const [phase,      setPhase]    = useState<Phase>('idle');
+  const [allFiles,   setAllFiles] = useState<File[]>([]);
+  const [allHashes,  setHashes]   = useState<string[]>([]);
+  const [dupCount,   setDup]      = useState(0);
+  const [newCount,   setNew]      = useState(0);
+  const [dragging,   setDragging] = useState(false);
+  const fileInputRef              = useRef<HTMLInputElement>(null);
 
-  // ── Reset ─────────────────────────────────────────────────────────────────
   const reset = () => {
-    setPhase('idle');
-    setStats({ total: 0, duplicates: 0, toUpload: 0, done: 0, failed: 0 });
-    setFailedFiles([]);
-    abortRef.current = false;
+    setPhase('idle'); setAllFiles([]); setHashes([]); setDup(0); setNew(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
-
   const handleClose = () => { reset(); onClose(); };
 
-  // ── Main upload flow ──────────────────────────────────────────────────────
-  const handleFiles = useCallback(async (files: File[]) => {
-    if (!files.length) return;
-    abortRef.current = false;
+  const processFiles = useCallback(async (files: File[]) => {
+    const ok = files.filter(f => /\.(pdf|docx|doc)$/i.test(f.name) ||
+      ['application/pdf',
+       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+       'application/msword'].includes(f.type));
+    if (!ok.length) { toast.error('No valid files — PDF, DOCX or DOC only'); return; }
 
-    const accepted = files.filter(f =>
-      f.type === 'application/pdf' ||
-      f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      f.type === 'application/msword' ||
-      f.name.toLowerCase().endsWith('.pdf') ||
-      f.name.toLowerCase().endsWith('.docx') ||
-      f.name.toLowerCase().endsWith('.doc')
-    );
-
-    if (!accepted.length) {
-      toast.error('No valid files. Accepted: PDF, DOCX, DOC');
-      return;
+    setPhase('hashing'); setAllFiles(ok);
+    const hashes: string[] = new Array(ok.length).fill('');
+    for (let i = 0; i < ok.length; i += HASH_BATCH) {
+      const r = await Promise.all(ok.slice(i, i + HASH_BATCH).map(sha256));
+      r.forEach((h, j) => { hashes[i + j] = h; });
     }
+    setHashes(hashes);
 
-    setPhase('hashing');
-    setStats({ total: accepted.length, duplicates: 0, toUpload: 0, done: 0, failed: 0 });
-
-    // ── 1. Compute hashes in parallel batches ─────────────────────────────
-    const hashes: string[] = new Array(accepted.length).fill('');
-    for (let i = 0; i < accepted.length; i += HASH_PARALLEL) {
-      const batch = accepted.slice(i, i + HASH_PARALLEL);
-      const batchHashes = await Promise.all(batch.map(sha256));
-      batchHashes.forEach((h, j) => { hashes[i + j] = h; });
-    }
-
-    // ── 2. Check which hashes already exist ───────────────────────────────
     setPhase('checking');
-    let existingHashes = new Set<string>();
+    const existing = new Set<string>();
     try {
-      // Check in chunks of 1000 to stay within array parameter limits
       for (let i = 0; i < hashes.length; i += 1000) {
-        const chunk = hashes.slice(i, i + 1000);
         const { data } = await supabase.rpc('check_resume_hashes_bulk', {
-          p_hashes: chunk,
-          p_org_id: organizationId,
-        });
-        (data || []).forEach((h: string) => existingHashes.add(h));
+          p_hashes: hashes.slice(i, i + 1000), p_org_id: organizationId });
+        (data || []).forEach((h: string) => existing.add(h));
       }
-    } catch (e) {
-      toast.error('Could not check for duplicates. Proceeding with all files.');
-    }
+    } catch { toast.warning('Could not check duplicates — uploading all files'); }
 
-    const newFiles   = accepted.filter((_, i) => !existingHashes.has(hashes[i]));
-    const newHashes  = hashes.filter((_, i) => !existingHashes.has(hashes[i]));
-    const dupCount   = accepted.length - newFiles.length;
-
-    setStats({ total: accepted.length, duplicates: dupCount, toUpload: newFiles.length, done: 0, failed: 0 });
-    setPhase('confirming');
-
-    // Auto-proceed if all files are new and < 100 files
-    if (dupCount === 0 && newFiles.length <= 100) {
-      await startUploading(newFiles, newHashes);
-    }
-    // Otherwise wait for user to click "Upload X files"
-
-    return { newFiles, newHashes };
+    const dups = hashes.filter(h => existing.has(h)).length;
+    setDup(dups); setNew(ok.length - dups); setPhase('confirming');
   }, [organizationId]);
 
-  const startUploading = async (newFiles: File[], newHashes: string[]) => {
-    if (!newFiles.length) {
-      toast.info('All files already in database. Nothing to upload.');
-      reset();
-      return;
+  const startUpload = useCallback(async () => {
+    // Re-fetch existing hashes (user may have waited)
+    const existing = new Set<string>();
+    for (let i = 0; i < allHashes.length; i += 1000) {
+      const { data } = await supabase.rpc('check_resume_hashes_bulk', {
+        p_hashes: allHashes.slice(i, i + 1000), p_org_id: organizationId });
+      (data || []).forEach((h: string) => existing.add(h));
     }
+    const newFiles  = allFiles.filter((_, i) => !existing.has(allHashes[i]));
+    const newHashes = allHashes.filter(h => !existing.has(h));
 
-    setPhase('uploading');
-    const failed: string[] = [];
-    let done = 0;
+    if (!newFiles.length) { toast.info('All files already in database'); handleClose(); return; }
 
-    // Worker function for concurrent uploads
+    // Register job in float, then close modal immediately
+    const jobId = crypto.randomUUID();
+    addJob({
+      id:         jobId,
+      fileName:   newFiles.length === 1 ? newFiles[0].name : `${allFiles.length} files`,
+      totalFiles: allFiles.length,
+      done:       0, failed: 0, duplicates: dupCount,
+      status:     'uploading',
+      startedAt:  new Date(),
+    });
+    reset(); onClose();
+
+    // Background upload
+    let done = 0, failed = 0;
     const queue = newFiles.map((f, i) => ({ file: f, hash: newHashes[i] }));
-    const inProgress: Promise<void>[] = [];
-
     const worker = async () => {
-      while (queue.length > 0 && !abortRef.current) {
-        const item = queue.shift();
-        if (!item) break;
-
+      while (queue.length > 0) {
+        const item = queue.shift(); if (!item) break;
         try {
-          // Upload to Supabase Storage
-          const ext        = item.file.name.split('.').pop()?.toLowerCase() || 'pdf';
-          const storageKey = `${BULK_PREFIX}/${organizationId}/${crypto.randomUUID()}-${sanitize(item.file.name)}`;
-
-          const { error: uploadErr } = await supabase.storage
-            .from(BUCKET)
-            .upload(storageKey, item.file, { cacheControl: '3600', upsert: false });
-
-          if (uploadErr) throw new Error(`Storage: ${uploadErr.message}`);
-
-          // Insert DB row — ON CONFLICT DO NOTHING (hash unique constraint)
-          const { error: dbErr } = await supabase.from('hr_resume_files').insert({
-            organization_id: organizationId,
-            uploaded_by:     user?.id || null,
-            file_name:       item.file.name,
-            file_size:       item.file.size,
-            mime_type:       item.file.type || _guessMime(item.file.name),
-            file_hash:       item.hash,
-            storage_path:    storageKey,
-            parse_status:    'pending',
-            ai_status:       'pending',
-            ingest_status:   'pending',
+          const key = `${BULK_PREFIX}/${organizationId}/${crypto.randomUUID()}-${sanitize(item.file.name)}`;
+          const { error: se } = await supabase.storage.from(BUCKET).upload(key, item.file, { cacheControl: '3600', upsert: false });
+          if (se) throw se;
+          const { error: de } = await supabase.from('hr_resume_files').insert({
+            organization_id: organizationId, uploaded_by: user?.id ?? null,
+            file_name: item.file.name, file_size: item.file.size,
+            mime_type: item.file.type || guessMime(item.file.name),
+            file_hash: item.hash, storage_path: key,
+            parse_status: 'pending', ai_status: 'pending', ingest_status: 'pending',
           });
-
-          if (dbErr && !dbErr.message?.includes('unique')) {
-            // Unique constraint errors are expected and safe to ignore
-            throw new Error(`DB: ${dbErr.message}`);
-          }
-
+          if (de && !de.message?.includes('unique') && !de.code?.includes('23505')) throw de;
           done++;
-        } catch (e: any) {
-          failed.push(item.file.name);
-        }
-
-        setStats(prev => ({ ...prev, done: done, failed: failed.length }));
+        } catch { failed++; }
+        updateJob(jobId, { done, failed });
       }
     };
-
-    for (let i = 0; i < CONCURRENCY; i++) {
-      inProgress.push(worker());
-    }
-    await Promise.all(inProgress);
-
-    setFailedFiles(failed);
-    setPhase('done');
-
-    if (done > 0) {
-      toast.success(`${done} files queued for processing. Worker will analyse them automatically.`);
-    }
-    if (failed.length > 0) {
-      toast.warning(`${failed.length} files failed to upload — see details below.`);
-    }
-  };
-
-  // ── Drag & Drop ──────────────────────────────────────────────────────────
-  const [isDragging, setIsDragging] = useState(false);
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
-  const progress = stats.toUpload > 0
-    ? Math.round(((stats.done + stats.failed) / stats.toUpload) * 100)
-    : 0;
+    await Promise.all(Array(CONCURRENCY).fill(null).map(() => worker()));
+    updateJob(jobId, { done, failed, status: 'done' });
+    if (done > 0)   toast.success(`${done} files queued for AI processing`);
+    if (failed > 0) toast.warning(`${failed} files failed to upload`);
+  }, [allFiles, allHashes, dupCount, organizationId, user, addJob, updateJob, onClose]);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onRequestClose={handleClose}
-      style={{
-        content: {
-          top: '50%', left: '50%', right: 'auto', bottom: 'auto',
-          marginRight: '-50%', transform: 'translate(-50%,-50%)',
-          width: '92%', maxWidth: 560, padding: 0,
-          border: 'none', borderRadius: 18,
-          boxShadow: '0 24px 80px rgba(0,0,0,0.22)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        },
-        overlay: { backgroundColor: 'rgba(17,12,46,0.55)', zIndex: 9999, backdropFilter: 'blur(4px)' },
-      }}
-    >
+    <Modal isOpen={isOpen} onRequestClose={handleClose} style={{
+      content: { top: '50%', left: '50%', right: 'auto', bottom: 'auto', marginRight: '-50%',
+        transform: 'translate(-50%,-50%)', width: '92%', maxWidth: 500,
+        padding: 0, border: 'none', borderRadius: 18, boxShadow: '0 24px 80px rgba(0,0,0,0.22)' },
+      overlay: { backgroundColor: 'rgba(17,12,46,0.55)', zIndex: 9999, backdropFilter: 'blur(4px)' },
+    }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg,#4C1D95,#6D28D9,#7C3AED)', padding: '18px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'linear-gradient(135deg,#4C1D95,#6D28D9)', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0 }}>Bulk Resume Upload</h2>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', margin: '2px 0 0' }}>Files upload directly — AI processing runs automatically in the background</p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', margin: '2px 0 0' }}>Uploads run in background — drag the progress window anywhere</p>
         </div>
-        <button onClick={handleClose} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 7, padding: 6, cursor: 'pointer', color: '#fff', display: 'flex' }}>
-          <X size={14} />
-        </button>
+        <button onClick={handleClose} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 7, padding: 6, cursor: 'pointer', color: '#fff', display: 'flex' }}><X size={14} /></button>
       </div>
 
-      {/* Body */}
-      <div style={{ padding: 20, background: '#faf9fb', flex: 1 }}>
+      <div style={{ padding: 20, background: '#faf9fb' }}>
+        {/* Info banner */}
+        <div style={{ display: 'flex', gap: 10, padding: '10px 14px', marginBottom: 14, background: 'linear-gradient(135deg,#ECFDF5,#F0FDF4)', border: '0.5px solid #6EE7B7', borderRadius: 10 }}>
+          <Zap size={14} style={{ color: '#059669', flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 11, color: '#059669', margin: 0 }}>
+            <strong style={{ color: '#065F46' }}>Upload and go.</strong> Click Upload → modal closes → a <strong>draggable floating window</strong> tracks every file. Navigate freely while thousands of files upload.
+          </p>
+        </div>
 
-        {/* IDLE / CONFIRMING — Drop zone */}
-        {(phase === 'idle' || phase === 'hashing' || phase === 'checking' || phase === 'confirming') && (
-          <>
-            {/* Info banner */}
-            <div style={{ display: 'flex', gap: 10, padding: '10px 14px', marginBottom: 16, background: 'linear-gradient(135deg,#ECFDF5,#F0FDF4)', border: '0.5px solid #6EE7B7', borderRadius: 10 }}>
-              <Zap size={15} style={{ color: '#059669', flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#065F46', margin: 0 }}>New upload system — no waiting</p>
-                <p style={{ fontSize: 11, color: '#059669', margin: '2px 0 0' }}>
-                  Files go directly to storage. Parsing → AI analysis → candidate creation happens automatically. You can close this and continue working.
-                </p>
-              </div>
+        {/* Idle */}
+        {phase === 'idle' && (
+          <label
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); processFiles(Array.from(e.dataTransfer.files)); }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '36px 24px',
+              border: `2px dashed ${dragging ? ACCENT : '#C4B5FD'}`, borderRadius: 14,
+              background: dragging ? '#EDE9FE' : '#fff', cursor: 'pointer', transition: 'all .2s ease' }}
+          >
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#EDE9FE,#DDD6FE)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <UploadCloud size={24} style={{ color: ACCENT }} />
             </div>
-
-            {/* Drop zone */}
-            <label
-              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-                padding: '32px 24px',
-                border: `2px dashed ${isDragging ? ACCENT : '#C4B5FD'}`,
-                borderRadius: 14, background: isDragging ? '#EDE9FE' : '#fff',
-                cursor: phase === 'idle' ? 'pointer' : 'default',
-                transition: 'all .2s ease',
-              }}
-            >
-              {phase === 'hashing' && (
-                <div style={{ textAlign: 'center' }}>
-                  <Loader2 size={32} style={{ color: ACCENT, animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: 0 }}>Computing file fingerprints…</p>
-                  <p style={{ fontSize: 11, color: '#9CA3AF', margin: '3px 0 0' }}>Checking for duplicates before uploading</p>
-                </div>
-              )}
-              {phase === 'checking' && (
-                <div style={{ textAlign: 'center' }}>
-                  <Loader2 size={32} style={{ color: ACCENT, animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: 0 }}>Checking database…</p>
-                </div>
-              )}
-              {phase === 'idle' && (
-                <>
-                  <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#EDE9FE,#DDD6FE)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <UploadCloud size={24} style={{ color: ACCENT }} />
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: 0 }}>Drop resumes here or click to browse</p>
-                    <p style={{ fontSize: 11, color: '#9CA3AF', margin: '3px 0 0' }}>PDF, DOCX, DOC · Any number of files · Duplicates skipped automatically</p>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.docx,.doc"
-                    multiple
-                    style={{ display: 'none' }}
-                    onChange={e => { const f = Array.from(e.target.files || []); handleFiles(f); }}
-                  />
-                </>
-              )}
-              {phase === 'confirming' && (
-                <div style={{ width: '100%' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-                    {[
-                      { label: 'Total selected', value: stats.total,      color: '#6b647a' },
-                      { label: 'Already in DB',  value: stats.duplicates, color: '#D97706' },
-                      { label: 'Will upload',    value: stats.toUpload,   color: '#059669' },
-                    ].map(s => (
-                      <div key={s.label} style={{ background: '#fff', border: '1px solid #ece9f0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value.toLocaleString()}</div>
-                        <div style={{ fontSize: 10, color: '#8b8499', marginTop: 2 }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {stats.toUpload > 0 ? (
-                    <button
-                      onClick={async () => {
-                        // Need to re-access files — store them
-                        if (fileInputRef.current?.files) {
-                          const all   = Array.from(fileInputRef.current.files);
-                          const hashes = await Promise.all(all.map(sha256));
-                          const existChk = await supabase.rpc('check_resume_hashes_bulk', { p_hashes: hashes, p_org_id: organizationId });
-                          const existing = new Set<string>((existChk.data || []) as string[]);
-                          const newF  = all.filter((_, i) => !existing.has(hashes[i]));
-                          const newH  = hashes.filter((_, i) => !existing.has(hashes[i]));
-                          await startUploading(newF, newH);
-                        }
-                      }}
-                      style={{ width: '100%', padding: '11px 0', borderRadius: 10, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: `0 2px 12px ${ACCENT}40` }}
-                    >
-                      <UploadCloud size={14} />
-                      Upload {stats.toUpload.toLocaleString()} new file{stats.toUpload !== 1 ? 's' : ''}
-                      <ChevronRight size={14} />
-                    </button>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '12px', background: '#ECFDF5', borderRadius: 10, border: '1px solid #6EE7B7' }}>
-                      <CheckCircle size={18} style={{ color: '#059669', margin: '0 auto 4px' }} />
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: 0 }}>All files already in database</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </label>
-          </>
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#374151', margin: 0 }}>Drop resumes here or click to browse</p>
+              <p style={{ fontSize: 11, color: '#9CA3AF', margin: '3px 0 0' }}>PDF · DOCX · DOC · Any quantity · Duplicates skipped</p>
+            </div>
+            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.doc" multiple style={{ display: 'none' }}
+              onChange={e => processFiles(Array.from(e.target.files || []))} />
+          </label>
         )}
 
-        {/* UPLOADING — progress */}
-        {phase === 'uploading' && (
-          <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
-              {[
-                { label: 'Uploading',  value: stats.toUpload,  color: ACCENT },
-                { label: 'Done',       value: stats.done,       color: '#059669' },
-                { label: 'Failed',     value: stats.failed,     color: '#DC2626' },
-              ].map(s => (
-                <div key={s.label} style={{ background: '#fff', border: '1px solid #ece9f0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value.toLocaleString()}</div>
-                  <div style={{ fontSize: 10, color: '#8b8499', marginTop: 2 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>Upload progress</span>
-                <span style={{ fontSize: 11, color: '#8b8499', fontFamily: 'monospace' }}>{progress}%</span>
-              </div>
-              <div style={{ height: 8, background: '#ece9f0', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${progress}%`, background: `linear-gradient(90deg,#6D28D9,${ACCENT})`, borderRadius: 4, transition: 'width .4s ease' }} />
-              </div>
-              <p style={{ fontSize: 10, color: '#8b8499', margin: '6px 0 0' }}>
-                {stats.done + stats.failed} of {stats.toUpload} files · {stats.done} uploaded · {stats.failed} failed
-              </p>
-            </div>
-
-            <div style={{ padding: '10px 14px', background: 'linear-gradient(135deg,#EDE9FE,#F5F3FF)', borderRadius: 10, fontSize: 11, color: '#5B21B6' }}>
-              <Loader2 size={11} style={{ display: 'inline', marginRight: 5, animation: 'spin 1s linear infinite' }} />
-              You can close this modal safely — uploads continue in the background and you'll see progress in the floating indicator.
-            </div>
-
-            <button
-              onClick={() => { abortRef.current = true; }}
-              style={{ width: '100%', marginTop: 12, padding: '8px', borderRadius: 8, border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Cancel remaining uploads
-            </button>
-          </div>
-        )}
-
-        {/* DONE */}
-        {phase === 'done' && (
-          <div style={{ textAlign: 'center' }}>
-            <CheckCircle size={40} style={{ color: '#059669', margin: '0 auto 12px', display: 'block' }} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1a1722', margin: '0 0 4px' }}>Upload complete</h3>
-            <p style={{ fontSize: 12, color: '#8b8499', margin: '0 0 16px' }}>
-              {stats.done} files queued. The pipeline will parse, analyse, and create candidates automatically.
+        {/* Hashing / checking */}
+        {(phase === 'hashing' || phase === 'checking') && (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <Loader2 size={32} style={{ color: ACCENT, animation: 'spin 1s linear infinite', margin: '0 auto 10px', display: 'block' }} />
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: 0 }}>
+              {phase === 'hashing' ? 'Computing fingerprints…' : 'Checking for duplicates…'}
             </p>
+            <p style={{ fontSize: 11, color: '#9CA3AF', margin: '4px 0 0' }}>
+              {allFiles.length.toLocaleString()} files · takes a few seconds
+            </p>
+          </div>
+        )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 16 }}>
+        {/* Confirming */}
+        {phase === 'confirming' && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
               {[
-                { label: 'Queued',     value: stats.done,       color: '#059669' },
-                { label: 'Duplicates', value: stats.duplicates, color: '#D97706' },
-                { label: 'Failed',     value: stats.failed,     color: '#DC2626' },
+                { l: 'Selected',      v: allFiles.length, c: '#6b647a' },
+                { l: 'Already in DB', v: dupCount,         c: '#D97706' },
+                { l: 'Will upload',   v: newCount,         c: '#059669' },
               ].map(s => (
-                <div key={s.label} style={{ background: '#fff', border: '1px solid #ece9f0', borderRadius: 10, padding: '10px 12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value.toLocaleString()}</div>
-                  <div style={{ fontSize: 10, color: '#8b8499', marginTop: 2 }}>{s.label}</div>
+                <div key={s.l} style={{ background: '#fff', border: '1px solid #ece9f0', borderRadius: 10, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: s.c }}>{s.v.toLocaleString()}</div>
+                  <div style={{ fontSize: 10, color: '#8b8499', marginTop: 3 }}>{s.l}</div>
                 </div>
               ))}
             </div>
 
-            {failedFiles.length > 0 && (
-              <div style={{ background: '#FFF5F5', border: '1px solid #FED7D7', borderRadius: 10, padding: '10px 14px', textAlign: 'left', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                  <AlertCircle size={12} style={{ color: '#DC2626' }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>{failedFiles.length} failed to upload</span>
-                </div>
-                <div style={{ maxHeight: 100, overflowY: 'auto' }}>
-                  {failedFiles.slice(0, 20).map(name => (
-                    <div key={name} style={{ fontSize: 10, color: '#6B7280', padding: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {name}
-                    </div>
-                  ))}
-                  {failedFiles.length > 20 && <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 3 }}>+{failedFiles.length - 20} more</div>}
-                </div>
+            {newCount === 0 ? (
+              <div style={{ textAlign: 'center', padding: 14, background: '#ECFDF5', borderRadius: 10, border: '1px solid #6EE7B7' }}>
+                <CheckCircle size={18} style={{ color: '#059669', display: 'block', margin: '0 auto 4px' }} />
+                <p style={{ fontSize: 13, fontWeight: 600, color: '#065F46', margin: 0 }}>All files already in database</p>
               </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, padding: '9px 12px', background: '#EDE9FE', borderRadius: 10, marginBottom: 12 }}>
+                  <FileText size={14} style={{ color: '#7C3AED', flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 11, color: '#5B21B6', margin: 0 }}>
+                    A <strong>draggable progress window</strong> will appear — drag it anywhere on your screen and keep working
+                  </p>
+                </div>
+                <button onClick={startUpload} style={{ width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, color: '#fff', fontSize: 13, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  boxShadow: `0 4px 16px ${ACCENT}40` }}>
+                  <UploadCloud size={14} />
+                  Upload {newCount.toLocaleString()} file{newCount !== 1 ? 's' : ''} in background
+                  <ChevronRight size={14} />
+                </button>
+                <button onClick={reset} style={{ width: '100%', marginTop: 8, padding: 9, borderRadius: 8,
+                  border: '1px solid #ece9f0', background: 'transparent', color: '#8b8499', fontSize: 11, cursor: 'pointer' }}>
+                  Choose different files
+                </button>
+              </>
             )}
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={reset} style={{ flex: 1, padding: '9px', borderRadius: 8, border: '1px solid #ece9f0', background: '#fff', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                Upload more
-              </button>
-              <button onClick={handleClose} style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                Done
-              </button>
-            </div>
           </div>
         )}
       </div>
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </Modal>
   );
 };
-
-function _guessMime(name: string): string {
-  const ext = name.toLowerCase().split('.').pop();
-  if (ext === 'pdf')  return 'application/pdf';
-  if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (ext === 'doc')  return 'application/msword';
-  return 'application/octet-stream';
-}
 
 export default BulkUploadV2Modal;

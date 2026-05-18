@@ -116,7 +116,7 @@ const ResumeProcessingPage: FC = () => {
       if (fileIds?.length) body.file_ids = fileIds;
 
       const res = await fetch(
-        `${import.meta.env.VITE_BULK_WORKER_URL || 'http://localhost:5010'}/api/bulk/retry`,
+        `${import.meta.env.VITE_BULK_WORKER_URL || 'http://172.19.0.4:5010'}/api/bulk/retry`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
       );
 

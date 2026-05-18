@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/jobs/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { Button } from "@/components/jobs/ui/button";
@@ -18,6 +19,9 @@ type StatusCount = {
 };
 
 const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
+
+  const userRole = useSelector((state: any) => state.auth.role);
+const user = useSelector((state: any) => state.auth.user);
   // Fetch sub status counts
   const {
     data: statusCounts = [],
@@ -25,8 +29,8 @@ const SubmissionOverviewCard = ({ job }: SubmissionOverviewCardProps) => {
     isError,
     refetch,
   } = useQuery({
-    queryKey: ["candidate-status-counts", job.id, "sub"],
-    queryFn: () => getCandidateStatusCounts(job.id, "sub"),
+    queryKey: ["candidate-status-counts", job.id, "sub", userRole, user?.id],
+    queryFn: () => getCandidateStatusCounts(job.id, "sub", userRole, user?.id),
     enabled: !!job.id,
   });
 

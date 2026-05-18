@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+import { useSelector } from "react-redux";
 import { UserPlus } from "lucide-react";
 import { JobData, Candidate } from "@/lib/types";
 import AddCandidateModal from "./AddCandidateModal";
@@ -10,6 +11,7 @@ import TopCandidatesCard from "./cards/TopCandidatesCard";
 import CandidatesTabsSection from "./sections/CandidatesTabsSection";
 
 
+
 interface JobDetailViewProps {
   job: JobData;
   candidates: Candidate[];
@@ -18,6 +20,8 @@ interface JobDetailViewProps {
 
 const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps) => {
   const [isCandidateModalOpen, setIsCandidateModalOpen] = useState(false);
+  const userRole = useSelector((state: any) => state.auth.role);
+const isVendor = userRole === "vendor";
 
   
   const handleOpenCandidateModal = () => {
@@ -35,7 +39,14 @@ const JobDetailView = ({ job, candidates, onCandidateAdded }: JobDetailViewProps
       {/* Submission Overview Card */}
       <SubmissionOverviewCard job={job} candidates={candidates} />
       
-      <TopCandidatesCard jobId={job.id} />
+      {isVendor ? (
+  <RecentActivityCard 
+    candidates={candidates} 
+    onAddCandidate={handleOpenCandidateModal} 
+  />
+) : (
+  <TopCandidatesCard jobId={job.id} />
+)}
 
       {/* Recent Activity Card */}
       {/* <RecentActivityCard 

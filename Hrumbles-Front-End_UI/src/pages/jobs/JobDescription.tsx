@@ -30,6 +30,7 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
+  const isVendor = userRole === 'vendor';
 
   // Format HR Budget to INR
   const formatINR = (amount: number) => {
@@ -65,7 +66,7 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
                 <p className="text-sm text-gray-500">{job.jobId}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            {/* <div className="flex items-center gap-2">
               <button
                 onClick={() => onToggleSaved(!isSaved)}
                 className={`p-2 rounded-xl transition-all ${isSaved ? 'bg-purple-100 text-purple-600' : 'hover:bg-gray-100 text-gray-600'}`}
@@ -75,14 +76,14 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
               <button className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600">
                 <Share2 className="w-5 h-5" />
               </button>
-              {/* <button 
+              <button 
                 onClick={onEditJob}
                 className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl hover:shadow-lg hover:scale-105 transition-all flex items-center gap-2"
               >
                 <Edit className="w-4 h-4" />
                 Edit
-              </button> */}
-            </div>
+              </button>
+            </div> */}
           </div>
         </div>
       </div>
@@ -102,19 +103,25 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
                   <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium">
                     {job.status}
                   </span>
+                  {!isVendor && (
                   <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium">
                     {job.jobType}
                   </span>
+                  )}
+                  {!isVendor && (
                   <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium">
                     {job.hiringMode}
                   </span>
+                  )}
                 </div>
                 <h2 className="text-4xl font-bold mb-3">{job.title}</h2>
                 <div className="flex flex-wrap items-center gap-4 text-white/90">
+                {!isVendor && (
                   <div className="flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
                     <span className="text-sm">{job.clientDetails?.clientName || job.clientOwner}</span>
                   </div>
+                )}
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
                     <span className="text-sm">{locationText}</span>
@@ -127,6 +134,32 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
               </div>
             </div>
             {/* Stats Grid - Integrated all budgets/positions/apps */}
+            {isVendor ? (
+  // Vendor sees only: Experience, Openings, Budget
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+      <div className="flex items-center gap-2 mb-1">
+        <Briefcase className="w-4 h-4" />
+        <span className="text-xs font-medium text-white/70">Experience</span>
+      </div>
+      <p className="text-lg font-bold">{experienceText}</p>
+    </div>
+    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+      <div className="flex items-center gap-2 mb-1">
+        <Users className="w-4 h-4" />
+        <span className="text-xs font-medium text-white/70">Openings</span>
+      </div>
+      <p className="text-lg font-bold">{job.numberOfCandidates} positions</p>
+    </div>
+    <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+      <div className="flex items-center gap-2 mb-1">
+        <DollarSign className="w-4 h-4" />
+        <span className="text-xs font-medium text-white/70">Budget</span>
+      </div>
+      <p className="text-lg font-bold">{hrBudget}</p>
+    </div>
+  </div>
+) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
                 <div className="flex items-center gap-2 mb-1">
@@ -185,6 +218,7 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
                 </div>
               )}
             </div>
+)}
           </div>
         </motion.div>
         {/* Main Content Grid: Skills (3/4) + Right Sidebar (1/4) */}

@@ -39,6 +39,7 @@ const JobView = () => {
   const user = useSelector((state: any) => state.auth.user);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === "employee";
+  const isVendor = userRole === "vendor";
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -211,8 +212,8 @@ useEffect(() => {
     data: candidatesData = [],
     refetch: refetchCandidates
   } = useQuery({
-    queryKey: ['job-candidates', id],
-    queryFn: () => getCandidatesByJobId(id || ""),
+    queryKey: ['job-candidates', id, userRole, user?.id],
+    queryFn: () => getCandidatesByJobId(id || "", undefined, userRole, user?.id),
     enabled: !!id,
   });
 
@@ -419,6 +420,7 @@ useEffect(() => {
           <h1 className="text-xl font-semibold whitespace-nowrap flex-nowrap">{job.title}</h1>
 {/* --- UPDATED ICONS SECTION --- */}
        {/* --- MODERN ACTION BUTTONS --- */}
+        {!isVendor && (
            <div className="inline-flex items-center gap-2 ml-4 bg-gray-100 dark:bg-gray-800 p-1.5 rounded-full shadow-inner">
              
              {/* 1. View Button - Pill Style */}
@@ -527,6 +529,7 @@ useEffect(() => {
                </DropdownMenuContent>
              </DropdownMenu>
            </div>
+        )}
         </div>
         
         {/* Action Buttons */}
@@ -574,6 +577,7 @@ useEffect(() => {
 {/* 2. Middle Tab Group (Shortlist + Job Desc) */}
          <div className="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-800 p-1 shadow-inner whitespace-nowrap">
             {/* My Shortlist Button */}
+             {!isVendor && (
             <button
               onClick={() => setIsWishlistModalOpen(true)}
               className={`
@@ -587,7 +591,9 @@ useEffect(() => {
               <Bookmark size={16} className={isShortlistActive ? "text-white" : "text-gray-500 group-hover:text-[#7731E8]"} />
               <span>My Shortlists</span>
             </button>
+             )}
 
+ {!isVendor && (
             <Link to={`/jobs/${id}/invites`}>
   <button
     className={`
@@ -600,6 +606,7 @@ useEffect(() => {
     <span className="hidden sm:inline">Invites</span>
   </button>
 </Link>
+ )}
 
             {/* Job Description Button */}
             <Link to={`/jobs/${id}/description`}>

@@ -150,6 +150,11 @@ export interface JobData {
     name: string;
     type: string;
   } | null;
+  assigned_vendor?: {
+  id: string;
+  name: string;
+  type: "vendor";
+} | null;
   budgets?: {
     clientBudget?: string;
     hrBudget?: string;
