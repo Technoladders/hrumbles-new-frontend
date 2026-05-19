@@ -112,11 +112,11 @@ export async function fetchVendors(organizationId: string) {
 // ─── Fetch existing job assignments ──────────────────────────────────────────
 export const fetchJobAssignments = async (jobId: string) => {
   try {
-    const { data, error } = await supabase
-      .from('hr_jobs')
-      .select('assigned_to, assigned_vendor, budget, budget_type')
-      .eq('id', jobId)
-      .single();
+const { data, error } = await supabase
+  .from('hr_jobs')
+  .select('assigned_to, assigned_vendor, budget, budget_type, vendor_budget, vendor_budget_type')
+  .eq('id', jobId)
+  .single();
 
     if (error) throw error;
 
@@ -124,6 +124,8 @@ export const fetchJobAssignments = async (jobId: string) => {
     const assignedVendor = data?.assigned_vendor ?? null;
     const budget         = data?.budget      ?? null;
     const budgetType     = data?.budget_type ?? null;
+    const vendorBudget      = data?.vendor_budget      ?? null;   // ← ADD
+const vendorBudgetType  = data?.vendor_budget_type ?? null;   // ← ADD
 
     let assignments: { value: string; label: string }[] = [];
 
@@ -145,6 +147,8 @@ export const fetchJobAssignments = async (jobId: string) => {
       vendorAssignment: assignedVendor,
       budget,
       budgetType,
+        vendorBudget,       // ← ADD
+  vendorBudgetType,   // ← ADD
     };
   } catch (error) {
     console.error('Error fetching job assignments:', error);
@@ -163,22 +167,22 @@ export const assignJob = async (
   userId?: string
 ) => {
   try {
-    const updatePayload =
-      assignmentType === 'vendor'
-        ? {
-            assigned_vendor: { type: 'vendor', id: assignmentId, name: assignmentName },
-            budget:      budget ? Number(budget) : null,
-            budget_type: budgetType || null,
-            updated_by:  userId,
-            updated_at:  new Date().toISOString(),
-          }
-        : {
-            assigned_to: { type: assignmentType, id: assignmentId, name: assignmentName },
-            budget:      budget ? Number(budget) : null,
-            budget_type: budgetType || null,
-            updated_by:  userId,
-            updated_at:  new Date().toISOString(),
-          };
+const updatePayload =
+  assignmentType === 'vendor'
+    ? {
+        assigned_vendor:   { type: 'vendor', id: assignmentId, name: assignmentName },
+        vendor_budget:     budget ? Number(budget) : null,
+        vendor_budget_type: budgetType || null,
+        updated_by:        userId,
+        updated_at:        new Date().toISOString(),
+      }
+    : {
+        assigned_to: { type: assignmentType, id: assignmentId, name: assignmentName },
+        budget:      budget ? Number(budget) : null,
+        budget_type: budgetType || null,
+        updated_by:  userId,
+        updated_at:  new Date().toISOString(),
+      };
 
     const { data, error } = await supabase
       .from('hr_jobs')

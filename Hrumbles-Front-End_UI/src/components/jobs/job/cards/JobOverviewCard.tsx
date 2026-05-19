@@ -16,10 +16,10 @@ const JobOverviewCard = ({ job, candidates }: JobOverviewCardProps) => {
   const isVendor = userRole === "vendor";
 
   // Format budget for display
-  const formatBudget = (amount: any, type: string) => {
-    if (!amount) return "N/A";
-    return `₹${Number(amount).toLocaleString('en-IN')} ${type || ''}`.trim();
-  };
+const formatBudget = (amount: any, type: string) => {
+  if (!amount) return "N/A";
+  return `₹${Number(amount).toLocaleString('en-IN')} ${type || ''}`.trim();
+};
 
   console.log("Rendering JobOverviewCard with job data:", job);
 
@@ -111,14 +111,17 @@ return (
 
           {/* Budget — always shown, label changes for vendor */}
           <li className="flex items-start justify-between">
-            <div className="flex items-center text-sm text-white">
-              <FileText size={16} className="mr-2 text-white" />
-              <span>Budget:</span>
-            </div>
-            <span className="font-small text-sm text-right text-white">
-              {formatBudget(job.hr_budget, job.hr_budget_type || job.budget_type)}
-            </span>
-          </li>
+  <div className="flex items-center text-sm text-white">
+    <FileText size={16} className="mr-2 text-white" />
+    <span>Budget:</span>
+  </div>
+  <span className="font-small text-sm text-right text-white">
+    {isVendor
+      ? formatBudget(job.vendor_budget, job.vendor_budget_type)   // ← vendor budget
+      : formatBudget(job.hr_budget, job.hr_budget_type || job.budget_type)
+    }
+  </span>
+</li>
         </ul>
       </CardContent>
     </Card>

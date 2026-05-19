@@ -6,6 +6,13 @@ import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 // Basic query functions for hr_jobs table
 // supabaseQueries.ts
 export const fetchAllJobs = async () => {
+
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
+
   const { data, error } = await supabase
     .from("hr_jobs")
     .select(`
@@ -15,6 +22,7 @@ export const fetchAllJobs = async () => {
      hr_job_candidates!job_id ( name ),
    candidate_count:hr_job_candidates!job_id(count)
     `) // Ensure assigned_to is included
+    .eq("organization_id", organization_id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -27,10 +35,17 @@ export const fetchAllJobs = async () => {
 };
 
 export const fetchJobsByType = async (jobType: string) => {
+
+      const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id, userId } = authData;
   const { data, error } = await supabase
     .from("hr_jobs")
     .select("*,  created_by:hr_employees!hr_jobs_created_by_fkey (first_name, last_name)")
     .eq("job_type_category", jobType)
+    .eq("organization_id", organization_id)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -57,6 +72,11 @@ export const fetchJobById = async (id: string) => {
 };
 
 export const fetchJobsAssignedToUser = async (userId: string) => {
+      const authData = getAuthDataFromLocalStorage();
+    if (!authData) {
+      throw new Error('Failed to retrieve authentication data');
+    }
+    const { organization_id } = authData;
   const { data: jobIds, error: idError } = await supabase
     .rpc('get_job_ids_for_user', { p_user_id: userId });
 
@@ -74,6 +94,7 @@ export const fetchJobsAssignedToUser = async (userId: string) => {
       created_by:hr_employees!hr_jobs_created_by_fkey ( first_name, last_name )
     `)
     .in('id', ids)
+    .eq("organization_id", organization_id)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

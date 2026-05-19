@@ -39,6 +39,8 @@ export const transformToJobData = (jobRecord: any): JobData => {
     hr_budget: jobRecord.budget,
     createdAt: jobRecord.created_at,
     hr_budget_type: jobRecord.budget_type,
+    vendor_budget:      jobRecord.vendor_budget      || null,  
+vendor_budget_type: jobRecord.vendor_budget_type || null,  
     hr_job_candidates: jobRecord.hr_job_candidates,
     currency_type: jobRecord.currency_type,
     budget_type: jobRecord.budget_type,

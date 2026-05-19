@@ -30,13 +30,10 @@ interface UseEmployeeProfileReturn {
 
 const isValidCandidate = (data: any): data is Candidate => {
   return (
-    data &&
+    !!data &&
     typeof data === "object" &&
     typeof data.id === "string" &&
-    typeof data.name === "string" &&
-    (typeof data.experience === "string" || data.experience === undefined) &&
-    (typeof data.matchScore === "number" || data.matchScore === undefined) &&
-    (typeof data.appliedDate === "string" || data.appliedDate === undefined)
+    typeof data.name === "string"
   );
 };
 

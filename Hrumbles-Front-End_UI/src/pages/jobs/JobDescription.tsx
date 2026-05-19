@@ -46,10 +46,16 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
   const experienceText = `${job.experience?.min?.years || 0}-${job.experience?.max?.years || 'N/A'} years`;
   const hrBudget = `${formatINR(job.hr_budget)} ${job.hr_budget_type}`;
   const clientBudget = job.clientDetails?.clientBudget ? formatDisplayValue(job.clientDetails.clientBudget) : null;
-  const vendorBudget = !isEmployee && job.budgets?.vendorBudget ? formatDisplayValue(job.budgets.vendorBudget) : null;
+  const vendorBudget = !isEmployee && job.vendor_budget
+  ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type || ''}`
+  : null;
   const locationText = job.location?.join(" • ") || "Remote";
   const postedDate = job.postedDate;
   const dueDate = job.dueDate;
+
+  console.log("vendor budget raw:", job.vendor_budget);
+  console.log("vendor budget type:", job.vendor_budget_type);
+  console.log("vendorBudget:", vendorBudget);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20">
@@ -152,12 +158,17 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
       <p className="text-lg font-bold">{job.numberOfCandidates} positions</p>
     </div>
     <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
-      <div className="flex items-center gap-2 mb-1">
-        <DollarSign className="w-4 h-4" />
-        <span className="text-xs font-medium text-white/70">Budget</span>
-      </div>
-      <p className="text-lg font-bold">{hrBudget}</p>
-    </div>
+  <div className="flex items-center gap-2 mb-1">
+    <DollarSign className="w-4 h-4" />
+    <span className="text-xs font-medium text-white/70">Budget</span>
+  </div>
+  <p className="text-lg font-bold">
+    {isVendor && job.vendor_budget
+      ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type || ''}`   
+      : hrBudget
+    }
+  </p>
+</div>
   </div>
 ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

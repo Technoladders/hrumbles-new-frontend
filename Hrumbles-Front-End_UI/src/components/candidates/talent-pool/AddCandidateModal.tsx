@@ -87,6 +87,7 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
   const [instantProgress,  setInstantProgress]  = useState(0);
   const [isInstantRunning, setIsInstantRunning] = useState(false);
   const [instantDone,      setInstantDone]      = useState(false);
+  const [preventAutoClose, setPreventAutoClose] = useState(false);
 
   // ── Background bulk state (>20) ─────────────────────────────────────────────
   const [bulkPhase,  setBulkPhase]  = useState<BulkPhase>('idle');
@@ -180,13 +181,12 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     );
     if (!files.length) { toast.error('No valid files. Accepted: PDF, DOCX, DOC'); return; }
 
-    if (files.length <= INSTANT_MAX) {
-      // ── Instant mode: AI processes each file right now ──────────────────────
-      await runInstantBulk(files);
-    } else {
-      // ── Background mode: hash check → confirm → float ───────────────────────
-      await startBackgroundFlow(files);
-    }
+if (files.length <= INSTANT_MAX) {
+  setPreventAutoClose(true);
+  await runInstantBulk(files);
+} else {
+  await startBackgroundFlow(files);
+}
   }, [organizationId, user]);
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -233,6 +233,9 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
     const fail = results.filter(r => r.status === 'failed').length;
     toast.success(`Done — ${ok} added${skip ? `, ${skip} skipped` : ''}${fail ? `, ${fail} failed` : ''}`);
     onCandidateAdded();   // refetch the table in the background
+    if (!preventAutoClose) {
+  handleClose();
+}
   };
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -296,7 +299,13 @@ const AddCandidateModal: FC<AddCandidateModalProps> = ({ isOpen, onClose, onCand
       startedAt:  new Date(),
     });
 
-    handleClose();
+    const handleClose = () => {
+  setResumeText('');
+  setTab('single');
+  resetBulk();
+  setPreventAutoClose(false);
+  onClose();
+};
 
     let done = 0, failed = 0;
     const queue = newFiles.map((f, i) => ({ file: f, hash: newHashes[i] }));

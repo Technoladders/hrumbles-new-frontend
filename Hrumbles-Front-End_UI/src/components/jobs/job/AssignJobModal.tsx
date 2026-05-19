@@ -148,6 +148,8 @@ export function AssignJobModal({ isOpen, onClose, job }: AssignJobModalProps) {
   const [selectedVendor, setSelectedVendor]           = useState(NO_SELECT);
   const [budget, setBudget]                           = useState("");
   const [budgetType, setBudgetType]                   = useState("LPA");
+  const [vendorBudget, setVendorBudget]   = useState("");          // ← ADD
+const [vendorBudgetType, setVendorBudgetType] = useState("LPA"); // ← ADD
   const [loading, setLoading]                         = useState(false);
   const [employees, setEmployees]                     = useState<{ value: string; label: string }[]>([]);
   const [teams, setTeams]                             = useState<TeamOption[]>([]);
@@ -240,14 +242,10 @@ const loadData = async () => {
         );
       }
 
-      // ── Budget pre-fill ─────────────────────────────────────────
-      if (assignmentData.budget != null) {
-        setBudget(assignmentData.budget.toString());
-      }
-
-      if (assignmentData.budgetType) {
-        setBudgetType(assignmentData.budgetType);
-      }
+     if (assignmentData.budget != null)      setBudget(assignmentData.budget.toString());
+if (assignmentData.budgetType)          setBudgetType(assignmentData.budgetType);
+if (assignmentData.vendorBudget != null) setVendorBudget(assignmentData.vendorBudget.toString()); // ← ADD
+if (assignmentData.vendorBudgetType)    setVendorBudgetType(assignmentData.vendorBudgetType);    // ← ADD
     }
 
   } catch (err) {
@@ -368,10 +366,11 @@ const loadData = async () => {
   };
 
   const handleSave = async () => {
-    if (!budget || Number(budget) <= 0) {
-      toast.error("Please enter a valid budget greater than 0");
-      return;
-    }
+const activeBudget = activeTab === 'external' ? vendorBudget : budget;
+if (!activeBudget || Number(activeBudget) <= 0) {
+  toast.error("Please enter a valid budget greater than 0");
+  return;
+}
     if (activeTab === "internal") {
       if (assignmentType === "individual") {
         if (selectedIndividuals.length === 0) { toast.error("Please select at least one employee"); return; }
@@ -383,11 +382,15 @@ const loadData = async () => {
         if (!selectedTeam || selectedTeam === NO_SELECT) { toast.error("Please select a team"); return; }
         await saveTeamAssignment(selectedTeam, budget, budgetType);
       }
-    } else {
-      if (!selectedVendor || selectedVendor === NO_SELECT) { toast.error("Please select a vendor"); return; }
-      const vendorName = vendors.find(v => v.value === selectedVendor)?.label ?? "";
-      await saveAssignment("vendor", selectedVendor, vendorName, budget, budgetType);
-    }
+} else {
+  if (!selectedVendor || selectedVendor === NO_SELECT) { toast.error("Please select a vendor"); return; }
+  if (!vendorBudget || Number(vendorBudget) <= 0) {
+    toast.error("Please enter a valid vendor budget greater than 0");
+    return;
+  }
+  const vendorName = vendors.find(v => v.value === selectedVendor)?.label ?? "";
+  await saveAssignment("vendor", selectedVendor, vendorName, vendorBudget, vendorBudgetType); // ← use vendor budget
+}
     // After successful assignment, update POCs
     try {
       await updateClientPocs();
@@ -527,13 +530,15 @@ const loadData = async () => {
     );
   };
 
-  const handleReset = () => {
-    setActiveTab("internal"); setAssignmentType("individual");
-    setSelectedIndividuals([]); setSelectedTeam(NO_SELECT);
-    setSelectedVendor(NO_SELECT); setBudget(""); setBudgetType("LPA");
-    setSelectedClientPocIds([]);
-    setSelectedInternalPocIds([]);
-  };
+const handleReset = () => {
+  setActiveTab("internal"); setAssignmentType("individual");
+  setSelectedIndividuals([]); setSelectedTeam(NO_SELECT);
+  setSelectedVendor(NO_SELECT);
+  setBudget(""); setBudgetType("LPA");
+  setVendorBudget(""); setVendorBudgetType("LPA");  // ← ADD
+  setSelectedClientPocIds([]);
+  setSelectedInternalPocIds([]);
+};
 
   const handleClose = () => { handleReset(); onClose(); };
   const teamIndent  = (level: number) => "\u00a0".repeat(level * 3);
@@ -780,36 +785,51 @@ const loadData = async () => {
               </div>
             )}
 
-            {/* Budget */}
-            <div className="space-y-1.5">
-              <SectionLabel>Budget</SectionLabel>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                    <IndianRupee className="h-3.5 w-3.5 text-slate-400" />
-                  </div>
-                  <Input
-                    type="number"
-                    placeholder="Enter amount"
-                    className="pl-8 h-8 text-sm border-slate-200 focus-visible:ring-violet-400"
-                    value={budget}
-                    onChange={handleBudgetChange}
-                    disabled={loading}
-                    min="0"
-                  />
-                </div>
-                <Select value={budgetType} onValueChange={setBudgetType} disabled={loading}>
-                  <SelectTrigger className="w-28 h-8 text-sm border-slate-200 focus:ring-violet-400">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LPA">LPA</SelectItem>
-                    <SelectItem value="Monthly">Monthly</SelectItem>
-                    <SelectItem value="Hourly">Hourly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+{/* Budget */}
+<div className="space-y-1.5">
+  <SectionLabel>
+    {activeTab === 'external' ? 'Vendor Budget' : 'Budget'}
+  </SectionLabel>
+  <div className="flex gap-2">
+    <div className="relative flex-1">
+      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+        <IndianRupee className="h-3.5 w-3.5 text-slate-400" />
+      </div>
+      <Input
+        type="number"
+        placeholder="Enter amount"
+        className="pl-8 h-8 text-sm border-slate-200 focus-visible:ring-violet-400"
+        value={activeTab === 'external' ? vendorBudget : budget}         
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "" || (/^\d*$/.test(v) && Number(v) >= 0)) {
+            activeTab === 'external'
+              ? setVendorBudget(v)    
+              : setBudget(v);
+          }
+        }}
+        disabled={loading}
+        min="0"
+      />
+    </div>
+    <Select
+      value={activeTab === 'external' ? vendorBudgetType : budgetType}    
+      onValueChange={(v) =>
+        activeTab === 'external' ? setVendorBudgetType(v) : setBudgetType(v) 
+      }
+      disabled={loading}
+    >
+      <SelectTrigger className="w-28 h-8 text-sm border-slate-200 focus:ring-violet-400">
+        <SelectValue placeholder="Type" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="LPA">LPA</SelectItem>
+        <SelectItem value="Monthly">Monthly</SelectItem>
+        <SelectItem value="Hourly">Hourly</SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
+</div>
 
             {/* Footer buttons */}
             <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">

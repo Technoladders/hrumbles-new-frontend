@@ -180,6 +180,9 @@ const MyInvitesPage: React.FC = () => {
     enabled: !!user?.id,
   });
 
+  console.log('Invites:', invites);
+  console.log("invitesdata", invites);
+
   const stats = useMemo(() => ({
     total:   invites.length,
     sent:    invites.filter(i => i.status === 'sent').length,
