@@ -35,9 +35,15 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({
   const isAdmin = role === "admin";
   const isSalesTeam = department === "Sales & Marketing";
 
+  const isSunlitOrg = "18836496-1ff5-4c37-b87d-9ad0e911d354"
+
   // showRecruitingWidgets: HR employees OR admins NOT in Sales & Marketing
   const showRecruitingWidgets =
     isHREmployee || (isAdmin && !isSalesTeam);
+
+    const showCandidateTimeline =
+  department === "Human Resource" &&
+  (role === "employee" || role === "admin");
 
   // ── Interview widget flags ────────────────────────────────────────────────
   // Admin → sees ALL org interviews (filterByEmployee = false)
@@ -51,7 +57,7 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({
     <div className="space-y-6">
       {/* ═══ ROW 1: Carousel + Time Tracker + Quick Actions ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-4">
           <DashboardHeroCarousel
             organizationId={organizationId}
             employeeId={carouselEmployeeId}
@@ -61,8 +67,8 @@ export const MetricsSection: React.FC<MetricsSectionProps> = ({
         <div className="lg:col-span-5">
           <TimeTracker employeeId={employeeId} />
         </div>
-        <div className="lg:col-span-2">
-          <QuickActionsCard showJobsLink={showRecruitingWidgets} />
+        <div className="lg:col-span-3">
+           <CandidateTimelineCard employeeId={employeeId} />
         </div>
       </div>
 

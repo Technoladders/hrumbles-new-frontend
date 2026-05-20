@@ -144,11 +144,17 @@ const vendorBudgetType  = data?.vendor_budget_type ?? null;   // ← ADD
     return {
       assignments,
       teamAssignment:   assignedTo?.type === 'team' ? assignedTo : null,
-      vendorAssignment: assignedVendor,
+      vendorAssignment: assignedVendor,   // keep for backward compat
+      // NEW: normalize to array regardless of old object or new array shape
+      vendorAssignments: Array.isArray(assignedVendor)
+        ? assignedVendor
+        : assignedVendor
+          ? [assignedVendor]
+          : [],
       budget,
       budgetType,
-        vendorBudget,       // ← ADD
-  vendorBudgetType,   // ← ADD
+      vendorBudget,
+      vendorBudgetType,
     };
   } catch (error) {
     console.error('Error fetching job assignments:', error);
@@ -160,29 +166,34 @@ const vendorBudgetType  = data?.vendor_budget_type ?? null;   // ← ADD
 export const assignJob = async (
   jobId: string,
   assignmentType: 'individual' | 'team' | 'vendor',
-  assignmentId: string,
-  assignmentName: string,
+  assignmentId: string,          // for vendor: comma-separated ids
+  assignmentName: string,        // for vendor: comma-separated names
   budget?: string,
   budgetType?: string,
   userId?: string
 ) => {
   try {
-const updatePayload =
-  assignmentType === 'vendor'
-    ? {
-        assigned_vendor:   { type: 'vendor', id: assignmentId, name: assignmentName },
-        vendor_budget:     budget ? Number(budget) : null,
-        vendor_budget_type: budgetType || null,
-        updated_by:        userId,
-        updated_at:        new Date().toISOString(),
-      }
-    : {
-        assigned_to: { type: assignmentType, id: assignmentId, name: assignmentName },
-        budget:      budget ? Number(budget) : null,
-        budget_type: budgetType || null,
-        updated_by:  userId,
-        updated_at:  new Date().toISOString(),
-      };
+    const updatePayload =
+      assignmentType === 'vendor'
+        ? {
+            // Store all vendors as array in assigned_vendor
+            assigned_vendor: assignmentId.split(',').map((id, i) => ({
+              type: 'vendor',
+              id:   id.trim(),
+              name: assignmentName.split(',')[i]?.trim() ?? '',
+            })),
+            vendor_budget:      budget ? Number(budget) : null,
+            vendor_budget_type: budgetType || null,
+            updated_by:         userId,
+            updated_at:         new Date().toISOString(),
+          }
+        : {
+            assigned_to: { type: assignmentType, id: assignmentId, name: assignmentName },
+            budget:      budget ? Number(budget) : null,
+            budget_type: budgetType || null,
+            updated_by:  userId,
+            updated_at:  new Date().toISOString(),
+          };
 
     const { data, error } = await supabase
       .from('hr_jobs')

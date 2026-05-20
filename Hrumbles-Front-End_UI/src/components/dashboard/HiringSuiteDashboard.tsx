@@ -25,6 +25,7 @@ import ContactsPipelineWidget from "./cards/ContactsPipelineWidget";
 import CompaniesPipelineWidget from "./cards/CompaniesPipelineWidget";
 import StageConversionChart from "./charts/StageConversionChart";
 import InterviewWidget from "./cards/InterviewWidget";
+import OrgCandidateTimelineCard from "./cards/OrgCandidateTimelineCard";
 
 // ── Hooks ──
 import { useCreditSummary, useCreditDailyTrend } from "./hooks/useCreditUsage";
@@ -237,34 +238,47 @@ const HiringSuiteDashboard: React.FC = () => {
         </div>
 
         {/* ═══ ROW 2 — WEEKLY ACTIVITY + SALES ACTIVITY ═══ */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-stretch">
-          <div className={isSalesSuiteEnabled ? "lg:col-span-8" : "lg:col-span-12"}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5 items-stretch" style={{ gridAutoRows: "400px" }}>
+          
+         
+            <div className="lg:col-span-4">
+               <OrgCandidateTimelineCard
+              organizationId={organizationId}
+              delay={0.2}
+            />
+            </div>
+
+            <div className={isSalesSuiteEnabled ? "lg:col-span-8" : "lg:col-span-8"}>
             <WeeklyActivityChart
               data={weeklyActivity || []}
               isLoading={activityLoading}
               delay={0.2}
             />
           </div>
-          {isSalesSuiteEnabled && (
-            <div className="lg:col-span-4">
-              <SalesActivityWidget delay={0.25} />
-            </div>
-          )}
+        
         </div>
 
         {/* ═══ ROW 3 — SALES PIPELINE (only if Sales Suite enabled) ═══ */}
         {isSalesSuiteEnabled && (
+          <>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-6">
               <ContactsPipelineWidget delay={0.2} />
             </div>
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-6">
               <CompaniesPipelineWidget delay={0.25} />
             </div>
-            <div className="lg:col-span-4">
+            
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-5">
+            <div className="lg:col-span-6">
+              <SalesActivityWidget delay={0.25} />
+            </div>
+            <div className="lg:col-span-6">
               <StageConversionChart delay={0.3} />
             </div>
-          </div>
+             </div>
+             </>
         )}
 
         {/* ═══ ANALYTICS DIVIDER ═══ */}
@@ -316,3 +330,4 @@ const HiringSuiteDashboard: React.FC = () => {
 };
 
 export default HiringSuiteDashboard;
+// timeline ui added for candidate

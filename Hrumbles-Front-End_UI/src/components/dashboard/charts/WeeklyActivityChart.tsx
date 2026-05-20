@@ -47,7 +47,7 @@ const WeeklyActivityChart: React.FC<WeeklyActivityChartProps> = ({ data, isLoadi
         </div>
       </div>
 
-      <div className="h-52">
+      <div className="h-[330px]">
         {isLoading ? (
           <div className="h-full flex items-center justify-center">
             <div className="animate-pulse text-xs text-gray-400">Loading...</div>

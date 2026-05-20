@@ -1,14 +1,13 @@
 // src/components/jobs/job-boards/JobBoardsHub.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
-  Radio, Zap, Settings, Search,
-  LayoutGrid, List, Sparkles, ArrowUpRight, Clock, Info,
+  Radio, Settings, Search, LayoutGrid, List, Sparkles, Clock,
 } from "lucide-react";
 import { ConfigureModal } from "./ConfigureModal";
 import { BoardLogo } from "./BoardLogos";
 import {
-  JOB_BOARDS, BOARDS_COUNT, FREE_REACH,
+  JOB_BOARDS, BOARDS_COUNT,
   type JobBoard,
 } from "./jobBoardsData";
 
@@ -36,7 +35,6 @@ const BoardCard: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ boa
       "group bg-white rounded-2xl border border-slate-200 p-5 flex flex-col items-center text-center transition-all duration-200",
       isComingSoon ? "opacity-50" : "hover:border-slate-300 hover:shadow-md",
     )}>
-      {/* Logo */}
       <div
         className={cn(
           "w-16 h-16 rounded-2xl flex items-center justify-center mb-4 overflow-hidden shadow-sm border border-slate-100",
@@ -48,10 +46,8 @@ const BoardCard: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ boa
         <BoardLogo boardId={board.id} size={36} />
       </div>
 
-      {/* Name */}
       <p className="text-sm font-semibold text-slate-800 mb-0.5">{board.name}</p>
 
-      {/* Region + tier */}
       <div className="flex items-center gap-1.5 mb-3">
         <span className="text-[9px] text-slate-400">{board.region}</span>
         <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
@@ -60,13 +56,11 @@ const BoardCard: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ boa
         </span>
       </div>
 
-      {/* Status pill */}
       <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full border mb-4", st.pill)}>
         <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", st.dot, (st as any).pulse && "animate-pulse")} />
         <span className="text-[10px] font-medium">{st.label}</span>
       </div>
 
-      {/* Action button */}
       {!isComingSoon ? (
         <button
           onClick={onConfigure}
@@ -80,8 +74,9 @@ const BoardCard: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ boa
           )}
         >
           <Settings size={11} />
-          {board.status === "partial" ? "View Setup" :
-           board.status === "available" ? "Setup Feed" : "Configure"}
+          {board.status === "partial"        ? "View Setup"  :
+           board.status === "available"      ? "Setup Feed"  :
+           board.status === "not_configured" ? "Configure"   : "Configure"}
         </button>
       ) : (
         <div className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-100 bg-slate-50">
@@ -103,7 +98,6 @@ const ListRow: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ board
       "bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-4 transition-all",
       isComingSoon ? "opacity-50" : "hover:border-slate-300 hover:shadow-sm",
     )}>
-      {/* Logo */}
       <div
         className={cn(
           "w-10 h-10 rounded-xl border border-slate-100 flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden",
@@ -115,7 +109,6 @@ const ListRow: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ board
         <BoardLogo boardId={board.id} size={24} />
       </div>
 
-      {/* Name + tagline */}
       <div className="w-44 flex-shrink-0">
         <p className="text-sm font-semibold text-slate-700">{board.name}</p>
         <p className="text-[10px] text-slate-400 truncate">{board.tagline}</p>
@@ -174,21 +167,20 @@ const Chip: React.FC<{ label: string; count: number; active: boolean; onClick: (
 );
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-type ViewMode = "grid" | "list";
+type ViewMode  = "grid" | "list";
 type FilterKey = "all" | "available" | "partial" | "not_configured" | "coming_soon";
 
 export const JobBoardsHub: React.FC = () => {
   const [view,      setView]      = useState<ViewMode>("grid");
   const [filter,    setFilter]    = useState<FilterKey>("all");
   const [search,    setSearch]    = useState("");
-  // ── FIX: typed as JobBoard | null — never passes null! with assertion ──
   const [configure, setConfigure] = useState<JobBoard | null>(null);
-
-  const feedUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/careerjet-xml-feed?org=demo`;
 
   const filtered = JOB_BOARDS.filter(b => {
     const q = search.toLowerCase();
-    const matchSearch = !q || b.name.toLowerCase().includes(q) || b.region.toLowerCase().includes(q)
+    const matchSearch = !q
+      || b.name.toLowerCase().includes(q)
+      || b.region.toLowerCase().includes(q)
       || b.tags.some(t => t.toLowerCase().includes(q));
     const matchFilter = filter === "all" || b.status === filter;
     return matchSearch && matchFilter;
@@ -203,7 +195,7 @@ export const JobBoardsHub: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 ">
+    <div className="min-h-screen bg-slate-50">
       <div className="max-w-9xl mx-auto px-6 py-8">
 
         {/* Header */}
@@ -220,7 +212,7 @@ export const JobBoardsHub: React.FC = () => {
             </div>
             <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Job Boards</h1>
             <p className="text-sm text-slate-400 mt-0.5">
-              Connect your ATS to {BOARDS_COUNT} job platforms and broadcast openings in one click.
+              Connect Xrilic to {BOARDS_COUNT} job platforms and broadcast openings in one click.
             </p>
           </div>
           <button
@@ -232,15 +224,6 @@ export const JobBoardsHub: React.FC = () => {
             Post to Free Boards
           </button>
         </div>
-
-        {/* Info banner */}
-        {/* <div className="mb-5 flex items-start gap-2.5 px-4 py-3 rounded-xl border border-blue-100 bg-blue-50">
-          <Info size={13} className="text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-blue-600 leading-relaxed">
-            <strong className="text-blue-700">Demo mode</strong> — Configure each board to save credentials.
-            Use the <strong className="text-blue-700">Broadcast</strong> button on any job row to post.
-          </p>
-        </div> */}
 
         {/* Toolbar */}
         <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -302,37 +285,11 @@ export const JobBoardsHub: React.FC = () => {
             ))}
           </div>
         )}
-
-        {/* Free callout */}
-        {/* <div className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Zap size={13} className="text-emerald-600" />
-                <h3 className="text-sm font-semibold text-emerald-800">Start for free — ₹0/month</h3>
-              </div>
-              <p className="text-[11px] text-emerald-700 max-w-md leading-relaxed">
-                CareerJet, WhatJobs, Talent.com and Recruit.net accept your existing XML feed.
-                Submit the URL once — jobs sync every 24–48h automatically.
-              </p>
-            </div>
-            <button className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl
-              text-xs font-semibold text-emerald-700 border border-emerald-200 bg-white
-              hover:bg-emerald-50 transition-all whitespace-nowrap">
-              Set up free boards <ArrowUpRight size={11} />
-            </button>
-          </div>
-        </div> */}
       </div>
 
-      {/*
-        ── FIX: Only render ConfigureModal when configure is non-null.
-           No board! assertion needed — TypeScript knows it's JobBoard here.
-      */}
       {configure && (
         <ConfigureModal
           board={configure}
-          feedUrl={feedUrl}
           isOpen={true}
           onClose={() => setConfigure(null)}
         />

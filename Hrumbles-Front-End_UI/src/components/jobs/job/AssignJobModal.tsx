@@ -165,6 +165,7 @@ const [vendorBudgetType, setVendorBudgetType] = useState("LPA"); // ← ADD
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const user           = useSelector((state: any) => state.auth.user);
+  const [selectedVendors, setSelectedVendors] = useState<{ value: string; label: string }[]>([]);
 
   // ── Load assignment data ─────────────────────────────────────────────────
   useEffect(() => {
@@ -225,22 +226,22 @@ const loadData = async () => {
             }
           }
 
-        } else if (assignedTo.type === "vendor") {
-          setActiveTab("external");
-          setSelectedVendor(assignedTo.id || NO_SELECT);
-        }
+} else if (assignedTo.type === "vendor") {
+  setActiveTab("external");
+  // handled below via vendorAssignments
+}
       }
 
       // ── Vendor assignment fallback pre-fill (NEW) ───────────────
       // This handles vendorAssignment object if fetchJobAssignments returns it
-      if (assignmentData.vendorAssignment) {
-        setActiveTab("external");
-        setSelectedVendor(
-          assignmentData.vendorAssignment.vendor_id ||
-          assignmentData.vendorAssignment.id ||
-          NO_SELECT
-        );
-      }
+if (assignmentData.vendorAssignments?.length > 0) {
+  setActiveTab("external");
+  // Pre-fill selectedVendors from normalized array
+  const prefilled = assignmentData.vendorAssignments
+    .filter((v: any) => v.id && v.name)
+    .map((v: any) => ({ value: v.id, label: v.name }));
+  setSelectedVendors(prefilled);
+}
 
      if (assignmentData.budget != null)      setBudget(assignmentData.budget.toString());
 if (assignmentData.budgetType)          setBudgetType(assignmentData.budgetType);
@@ -365,6 +366,80 @@ if (assignmentData.vendorBudgetType)    setVendorBudgetType(assignmentData.vendo
     await supabase.from("hr_jobs").update({ client_details: newDetails }).eq("id", job.id);
   };
 
+  const saveVendorAssignment = async (
+  vendors: { value: string; label: string }[],
+  budget: string,
+  budgetType: string,
+) => {
+  if (!job?.id) { toast.error("Job information is missing"); return; }
+  setLoading(true);
+  try {
+    // Fetch current assigned_vendor to check which are NEW (need email)
+    const { data: jobRow } = await supabase
+      .from("hr_jobs")
+      .select("assigned_vendor")
+      .eq("id", job.id)
+      .single();
+
+    const existingVendors: { id: string }[] = Array.isArray(jobRow?.assigned_vendor)
+      ? jobRow.assigned_vendor
+      : jobRow?.assigned_vendor
+        ? [jobRow.assigned_vendor]
+        : [];
+
+    const existingIds = new Set(existingVendors.map(v => v.id));
+
+    // Only newly added vendors get email
+    const newVendors = vendors.filter(v => !existingIds.has(v.value));
+
+    // Single DB update — all vendors at once
+    const allIds   = vendors.map(v => v.value).join(',');
+    const allNames = vendors.map(v => v.label).join(',');
+    await assignJob(job.id, "vendor", allIds, allNames, budget, budgetType, user?.id);
+
+    // Send ONE email per new vendor (not per save)
+    if (newVendors.length > 0) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: me } = await supabase
+        .from("hr_employees")
+        .select("first_name, last_name")
+        .eq("id", user?.id)
+        .single();
+      const assignedByName = me ? `${me.first_name} ${me.last_name}`.trim() : "Unknown";
+
+      for (const vendor of newVendors) {
+        const { data: v } = await supabase
+          .from("hr_employees")
+          .select("email")
+          .eq("id", vendor.value)
+          .single();
+
+        if (v?.email) {
+          await sendEmail(
+            session?.access_token,
+            [v.email],
+            job.title,
+            budget,
+            budgetType,
+            vendor.label,
+            assignedByName,
+            undefined,
+            true,   // isVendor = true ← THIS is what was missing
+          );
+        }
+      }
+    }
+
+    toast.success(
+      `${vendors.length} vendor(s) assigned!${newVendors.length > 0 ? ` ${newVendors.length} notified.` : " (no new notifications)"}`
+    );
+  } catch (err: any) {
+    toast.error("Failed to assign vendor. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
   const handleSave = async () => {
 const activeBudget = activeTab === 'external' ? vendorBudget : budget;
 if (!activeBudget || Number(activeBudget) <= 0) {
@@ -383,13 +458,16 @@ if (!activeBudget || Number(activeBudget) <= 0) {
         await saveTeamAssignment(selectedTeam, budget, budgetType);
       }
 } else {
-  if (!selectedVendor || selectedVendor === NO_SELECT) { toast.error("Please select a vendor"); return; }
+  if (selectedVendors.length === 0) {
+    toast.error("Please select at least one vendor");
+    return;
+  }
   if (!vendorBudget || Number(vendorBudget) <= 0) {
     toast.error("Please enter a valid vendor budget greater than 0");
     return;
   }
-  const vendorName = vendors.find(v => v.value === selectedVendor)?.label ?? "";
-  await saveAssignment("vendor", selectedVendor, vendorName, vendorBudget, vendorBudgetType); // ← use vendor budget
+  // Single call — all vendors in one payload
+  await saveVendorAssignment(selectedVendors, vendorBudget, vendorBudgetType);
 }
     // After successful assignment, update POCs
     try {
@@ -435,7 +513,7 @@ if (!activeBudget || Number(activeBudget) <= 0) {
         const { data: { session } } = await supabase.auth.getSession();
         const { data: me } = await supabase
           .from("hr_employees").select("first_name, last_name").eq("id", user?.id).single();
-        await sendEmail(session?.access_token, recipientEmails, job.title, budget, budgetType,
+          await sendEmail(session?.access_token, recipientEmails, job.title, budget, budgetType,
           teams.find(t => t.value === teamId)?.label ?? "Team",
           me ? `${me.first_name} ${me.last_name}`.trim() : "Unknown");
       }
@@ -449,64 +527,87 @@ if (!activeBudget || Number(activeBudget) <= 0) {
     }
   };
 
-  const saveAssignment = async (
-    type: "individual" | "team" | "vendor",
-    id: string, name: string, budget?: string, budgetType?: string
-  ) => {
-    if (!job?.id) { toast.error("Job information is missing"); return; }
-    setLoading(true);
-    try {
-      const { data: jobRow } = await supabase.from("hr_jobs").select("assigned_to").eq("id", job.id).single();
-      let recipientEmails: string[] = [];
-      let newAssigneeNames: string[] = [];
+const saveAssignment = async (
+  type: "individual" | "team" | "vendor",
+  id: string, name: string, budget?: string, budgetType?: string
+) => {
+  if (!job?.id) { toast.error("Job information is missing"); return; }
+  setLoading(true);
+  try {
+    const { data: jobRow } = await supabase
+      .from("hr_jobs").select("assigned_to").eq("id", job.id).single();
 
-      if (type === "individual") {
-        const currentIds = jobRow?.assigned_to?.id ? jobRow.assigned_to.id.split(",") : [];
-        const newIds     = id.split(",");
-        const newNames   = name.split(",");
-        const addedIds   = newIds.filter(nid => !currentIds.includes(nid));
-        newAssigneeNames = newNames.filter((_, i) => addedIds.includes(newIds[i]));
-        if (addedIds.length > 0) {
-          const { data: empData } = await supabase.from("hr_employees").select("email").in("id", addedIds);
-          recipientEmails = (empData ?? []).map(e => e.email);
-        }
-      }  else if (type === "vendor") {
-  const { data: v } = await supabase.from("hr_employees").select("email").eq("id", id).single();
+    let recipientEmails: string[] = [];
+    let newAssigneeNames: string[] = [];
+
+    if (type === "individual") {
+      const currentIds = jobRow?.assigned_to?.id ? jobRow.assigned_to.id.split(",") : [];
+      const newIds     = id.split(",");
+      const newNames   = name.split(",");
+      const addedIds   = newIds.filter(nid => !currentIds.includes(nid));
+      newAssigneeNames = newNames.filter((_, i) => addedIds.includes(newIds[i]));
+      if (addedIds.length > 0) {
+        const { data: empData } = await supabase
+          .from("hr_employees").select("email").in("id", addedIds);
+        recipientEmails = (empData ?? []).map(e => e.email);
+      }
+
+    } else if (type === "vendor") {
+      // ── Skip email if this vendor is already assigned ──────────
+      const alreadyAssigned =
+        jobRow?.assigned_to?.type === "vendor" &&
+        jobRow?.assigned_to?.id   === id;
+
+      if (!alreadyAssigned) {
+        const { data: v } = await supabase
+          .from("hr_employees").select("email").eq("id", id).single();
         if (v?.email) recipientEmails = [v.email];
         newAssigneeNames = [name];
       }
-
-      await assignJob(job.id, type, id, name, budget, budgetType, user?.id);
-
-      if (recipientEmails.length > 0) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const { data: me } = await supabase
-          .from("hr_employees").select("first_name, last_name").eq("id", user?.id).single();
-        await sendEmail(session?.access_token, recipientEmails, job.title, budget, budgetType,
-          newAssigneeNames.join(", "),
-          me ? `${me.first_name} ${me.last_name}`.trim() : "Unknown");
-      }
-
-      toast.success(`Job assigned successfully!${recipientEmails.length > 0 ? " Notification sent." : ""}`);
-      // handleReset(); onClose();
-    } catch (err: any) {
-      toast.error(err.message?.includes("email")
-        ? "Job assigned, but failed to send notification."
-        : "Failed to assign job. Please try again.");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  const sendEmail = async (
-    token: string | undefined,
-    to: string[], title: string,
-    budget?: string, budgetType?: string,
-    assignedTo?: string, assignedBy?: string,
-    jobId?: string,
-    clientName?: string,
-    pointOfContact?: string,
-  ) => {
+    await assignJob(job.id, type, id, name, budget, budgetType, user?.id);
+
+    if (recipientEmails.length > 0) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: me } = await supabase
+        .from("hr_employees").select("first_name, last_name").eq("id", user?.id).single();
+
+      await sendEmail(
+  session?.access_token,
+  recipientEmails,
+  job.title,
+  type === "vendor" ? vendorBudget : budget,
+  type === "vendor" ? vendorBudgetType : budgetType,
+  newAssigneeNames.join(", "),
+  me ? `${me.first_name} ${me.last_name}`.trim() : "Unknown",
+  undefined,
+  type === "vendor" ? null : job?.clientDetails?.clientName,      // null, not undefined
+  type === "vendor" ? null : job?.clientDetails?.pointOfContact,  // null, not undefined
+);
+    }
+
+    toast.success(`Job assigned successfully!${recipientEmails.length > 0 ? " Notification sent." : ""}`);
+  } catch (err: any) {
+    toast.error(err.message?.includes("email")
+      ? "Job assigned, but failed to send notification."
+      : "Failed to assign job. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const sendEmail = async (
+  token: string | undefined,
+  to: string[],
+  title: string,
+  budget?: string,
+  budgetType?: string,
+  assignedTo?: string,
+  assignedBy?: string,
+  jobId?: string,
+  isVendor?: boolean,
+) => {
     await fetch(
       "https://kbpeyfietrwlhwcwqhjw.supabase.co/functions/v1/send-job-assignment-email",
       {
@@ -516,16 +617,22 @@ if (!activeBudget || Number(activeBudget) <= 0) {
           "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImticGV5ZmlldHJ3bGh3Y3dxaGp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDA5NjEsImV4cCI6MjA1NDQxNjk2MX0.A-K4DO6D2qQZ66qIXY4BlmoHxc-W5B0itV-HAAM84YA",
           "Authorization": `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          to,
-          jobDetails: {
-            title, budget: budget || "N/A", budgetType: budgetType || "N/A",
-            assignedTo, assignedBy, assignedDate: format(new Date(), "yyyy-MM-dd"),
-            jobId:          job?.jobId                          || "N/A",
-            clientName:     job?.clientDetails?.clientName     || "N/A",
-            pointOfContact: job?.clientDetails?.pointOfContact || "N/A",
-          },
-        }),
+ body: JSON.stringify({
+        to,
+        jobDetails: {
+          title,
+          budget:         budget     || "N/A",
+          budgetType:     budgetType || "N/A",
+          assignedTo,
+          assignedBy,
+          assignedDate:   format(new Date(), "yyyy-MM-dd"),
+          jobId:          jobId ?? job?.jobId ?? "N/A",
+          isVendor:       isVendor === true,          // explicit boolean, never undefined
+          // Vendor gets NO client data — period
+          clientName:     isVendor === true ? "N/A" : (job?.clientDetails?.clientName     ?? "N/A"),
+          pointOfContact: isVendor === true ? "N/A" : (job?.clientDetails?.pointOfContact ?? "N/A"),
+        },
+      }),
       }
     );
   };
@@ -534,8 +641,9 @@ const handleReset = () => {
   setActiveTab("internal"); setAssignmentType("individual");
   setSelectedIndividuals([]); setSelectedTeam(NO_SELECT);
   setSelectedVendor(NO_SELECT);
+  setSelectedVendors([]);              // ← ADD
   setBudget(""); setBudgetType("LPA");
-  setVendorBudget(""); setVendorBudgetType("LPA");  // ← ADD
+  setVendorBudget(""); setVendorBudgetType("LPA");
   setSelectedClientPocIds([]);
   setSelectedInternalPocIds([]);
 };
@@ -755,35 +863,56 @@ const handleReset = () => {
             )}
 
             {/* External panel */}
-            {activeTab === "external" && (
-              <div className="space-y-3">
-                <SectionLabel>Vendor Selection</SectionLabel>
+           {activeTab === "external" && (
+  <div className="space-y-3">
+    <SectionLabel>Vendor Selection</SectionLabel>
 
-                <Select
-                  value={selectedVendor}
-                  onValueChange={setSelectedVendor}
-                  disabled={loading}
-                >
-                  <SelectTrigger className="h-8 text-sm border-slate-200 focus:ring-violet-400">
-                    <SelectValue placeholder="Select a vendor…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_SELECT}>
-                      <span className="text-slate-400 italic text-sm">Select a vendor…</span>
-                    </SelectItem>
-                    {vendors.length > 0 ? (
-                      vendors.map(v => (
-                        <SelectItem key={v.value} value={v.value} className="text-sm">
-                          {v.label}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-vendors" disabled>No vendors found</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+    {/* Multi-select dropdown */}
+    <Select
+      onValueChange={(value) => {
+        const vendor = vendors.find(v => v.value === value);
+        if (vendor && !selectedVendors.some(v => v.value === value)) {
+          setSelectedVendors(prev => [...prev, vendor]);
+        }
+      }}
+      disabled={loading}
+    >
+      <SelectTrigger className="h-8 text-sm border-slate-200 focus:ring-violet-400">
+        <SelectValue placeholder="Select vendor(s)…" />
+      </SelectTrigger>
+      <SelectContent>
+        {vendors.length > 0 ? (
+          vendors.map(v => (
+            <SelectItem
+              key={v.value}
+              value={v.value}
+              disabled={selectedVendors.some(sv => sv.value === v.value)}
+              className="text-sm cursor-pointer focus:bg-violet-50 focus:text-violet-700"
+            >
+              {v.label}
+            </SelectItem>
+          ))
+        ) : (
+          <SelectItem value="no-vendors" disabled>No vendors found</SelectItem>
+        )}
+      </SelectContent>
+    </Select>
+
+    {/* Selected vendor chips */}
+    {selectedVendors.length > 0 && (
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {selectedVendors.map(v => (
+          <Chip
+            key={v.value}
+            label={v.label}
+            onRemove={() => setSelectedVendors(prev => prev.filter(sv => sv.value !== v.value))}
+            disabled={loading}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
 {/* Budget */}
 <div className="space-y-1.5">

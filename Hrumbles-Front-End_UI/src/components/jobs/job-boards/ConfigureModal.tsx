@@ -4,14 +4,16 @@ import ReactDOM from "react-dom";
 import { cn } from "@/lib/utils";
 import {
   X, ExternalLink, Save, CheckCircle2, Eye, EyeOff,
-  Lock, Info, Copy, Check,
+  Lock, Info, Copy, Check, Loader2,
 } from "lucide-react";
 import type { JobBoard } from "./jobBoardsData";
+import { MASTER_FEED_URL } from "./jobBoardsData";
 import { BoardLogo } from "./BoardLogos";
+import { supabase } from "@/integrations/supabase/client";
+import { useSelector } from "react-redux";
 
 interface ConfigureModalProps {
   board:   JobBoard | null;
-  feedUrl: string;
   isOpen:  boolean;
   onClose: () => void;
 }
@@ -33,20 +35,49 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
 };
 
 export const ConfigureModal: React.FC<ConfigureModalProps> = ({
-  board, feedUrl, isOpen, onClose,
+  board, isOpen, onClose,
 }) => {
-  const [vals,  setVals]  = useState<Record<string, string>>({});
-  const [show,  setShow]  = useState<Record<string, boolean>>({});
-  const [saved, setSaved] = useState(false);
+  const [vals,    setVals]    = useState<Record<string, string>>({});
+  const [show,    setShow]    = useState<Record<string, boolean>>({});
+  const [saved,   setSaved]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Reset state when a different board opens
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
+
+  // Reset + load existing config when board changes
   useEffect(() => {
-    if (isOpen && board) {
-      setVals({});
-      setShow({});
-      setSaved(false);
+    if (!isOpen || !board || !organization_id) return;
+    setVals({});
+    setShow({});
+    setSaved(false);
+
+    // Only load saved config for API push boards (XML feed boards have no stored secrets)
+    if (board.integrationMode === "api_push") {
+      setLoading(true);
+      supabase
+        .from("hr_job_board_configs")
+        .select("api_token, api_email, extra_config")
+        .eq("organization_id", organization_id)
+        .eq("board_id", board.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            const loaded: Record<string, string> = {};
+            if (data.api_token) loaded["api_token"]      = data.api_token;
+            if (data.api_email) loaded["contact_email"]  = data.api_email;
+            // Load extra_config fields (client_id, account_id etc.)
+            if (data.extra_config) {
+              Object.entries(data.extra_config).forEach(([k, v]) => {
+                loaded[k] = String(v);
+              });
+            }
+            setVals(loaded);
+          }
+          setLoading(false);
+        });
     }
-  }, [isOpen, board?.id]);
+  }, [isOpen, board?.id, organization_id]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -54,12 +85,43 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
     return () => document.removeEventListener("keydown", fn);
   }, [isOpen, onClose]);
 
-  // ── Guard: don't render if board is null or modal is closed ──
   if (!isOpen || !board) return null;
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 1400);
+  const handleSave = async () => {
+    setSaving(true);
+
+    try {
+      if (board.integrationMode === "api_push" && organization_id) {
+        // Separate known fields from extra_config
+        const apiToken    = vals["api_token"]     || null;
+        const apiEmail    = vals["contact_email"] || null;
+        const extraFields = { ...vals };
+        delete extraFields["api_token"];
+        delete extraFields["contact_email"];
+
+        await supabase
+          .from("hr_job_board_configs")
+          .upsert(
+            {
+              organization_id,
+              board_id:     board.id,
+              api_token:    apiToken,
+              api_email:    apiEmail,
+              extra_config: Object.keys(extraFields).length > 0 ? extraFields : {},
+              is_active:    true,
+            },
+            { onConflict: "organization_id,board_id" },
+          );
+      }
+      // For xml_feed and manual boards — nothing to save server-side
+
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onClose(); }, 1400);
+    } catch (err) {
+      console.error("Save config error:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tierLabel = {
@@ -68,20 +130,31 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
     premium:  { cls: "bg-purple-50  text-purple-700  border-purple-200",  text: "Paid" },
   }[board.tier];
 
+  const modeLabel = {
+    xml_feed: { cls: "bg-blue-50 text-blue-600 border-blue-100",       text: "XML Feed" },
+    api_push: { cls: "bg-violet-50 text-violet-600 border-violet-100", text: "API Push" },
+    manual:   { cls: "bg-slate-50 text-slate-500 border-slate-200",    text: "Manual" },
+  }[board.integrationMode];
+
+  // For XML feed boards the feed_url field shows the master URL
+  const getFieldValue = (fieldKey: string) => {
+    if (fieldKey === "feed_url") return MASTER_FEED_URL;
+    return vals[fieldKey] || "";
+  };
+
+  const hasConfigFields = board.configFields.length > 0;
+  const hasSaveable     = board.configFields.some(f => f.type !== "readonly");
+
   return ReactDOM.createPortal(
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/25 backdrop-blur-[2px] z-[9998] animate-in fade-in duration-150"
         onClick={onClose}
       />
-
-      {/* Modal */}
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
         <div
           className="w-full max-w-md pointer-events-auto bg-white rounded-2xl border border-slate-200
-            shadow-xl shadow-slate-200/50 overflow-hidden
-            animate-in fade-in slide-in-from-bottom-2 duration-200"
+            shadow-xl shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200"
           onClick={e => e.stopPropagation()}
         >
           {/* Gradient top bar */}
@@ -91,19 +164,20 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
           <div className="px-6 pt-5 pb-4 border-b border-slate-100">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* Logo */}
                 <div
                   className="w-11 h-11 rounded-2xl flex items-center justify-center overflow-hidden shadow-sm"
                   style={{ background: `${board.brandColor}0D` }}
                 >
                   <BoardLogo boardId={board.id} size={30} />
                 </div>
-
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-sm font-bold text-slate-800">{board.name}</h2>
                     <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", tierLabel.cls)}>
                       {tierLabel.text}
+                    </span>
+                    <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", modeLabel.cls)}>
+                      {modeLabel.text}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">
@@ -111,7 +185,6 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
                   </p>
                 </div>
               </div>
-
               <button
                 onClick={onClose}
                 className="w-7 h-7 rounded-lg flex items-center justify-center border border-slate-200
@@ -130,21 +203,29 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
               <Info size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
               <div className="space-y-1.5">
                 <p className="text-[11px] text-blue-700 leading-relaxed">{board.setupNote}</p>
-                {board.setupUrl && (
-                  <a
-                    href={board.setupUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-semibold"
-                  >
-                    Open {board.name} portal <ExternalLink size={9} />
-                  </a>
-                )}
+{board.setupUrl && (
+  <a
+    href={board.setupUrl}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-semibold"
+  >
+    Open {board.name} portal <ExternalLink size={9} />
+  </a>
+)}
               </div>
             </div>
 
+            {/* Loading state */}
+            {loading && (
+              <div className="flex items-center justify-center py-4 gap-2 text-slate-400">
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-xs">Loading saved configuration…</span>
+              </div>
+            )}
+
             {/* Config fields */}
-            {board.configFields.length > 0 && (
+            {!loading && hasConfigFields && (
               <div className="space-y-3">
                 {board.configFields.map(field => (
                   <div key={field.key} className="space-y-1">
@@ -161,9 +242,9 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
                     {field.type === "readonly" ? (
                       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
                         <span className="text-[10px] text-slate-500 font-mono truncate flex-1">
-                          {field.key === "feed_url" ? feedUrl : ""}
+                          {getFieldValue(field.key)}
                         </span>
-                        <CopyButton text={field.key === "feed_url" ? feedUrl : ""} />
+                        <CopyButton text={getFieldValue(field.key)} />
                       </div>
                     ) : (
                       <div className="relative">
@@ -196,7 +277,6 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
               </div>
             )}
 
-            {/* Coming soon — no fields */}
             {board.status === "coming_soon" && (
               <p className="text-[11px] text-slate-400 text-center py-2">
                 No configuration needed yet — integration in progress.
@@ -204,8 +284,8 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
             )}
           </div>
 
-          {/* Footer */}
-          {board.configFields.length > 0 && (
+          {/* Footer — only show Save for boards with saveable fields */}
+          {!loading && hasSaveable && (
             <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
               <button
                 onClick={onClose}
@@ -216,13 +296,31 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
               </button>
               <button
                 onClick={handleSave}
+                disabled={saving}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold text-white transition-all shadow-sm",
-                  saved ? "bg-emerald-500" : "hover:opacity-90 active:scale-95",
+                  saved    ? "bg-emerald-500" :
+                  saving   ? "opacity-70 cursor-not-allowed" :
+                             "hover:opacity-90 active:scale-95",
                 )}
-                style={!saved ? { background: "linear-gradient(135deg, #9333ea, #ec4899)" } : undefined}
+                style={!saved && !saving ? { background: "linear-gradient(135deg, #9333ea, #ec4899)" } : undefined}
               >
-                {saved ? <><CheckCircle2 size={11} /> Saved!</> : <><Save size={11} /> Save</>}
+                {saved   ? <><CheckCircle2 size={11} /> Saved!</> :
+                 saving  ? <><Loader2 size={11} className="animate-spin" /> Saving…</> :
+                           <><Save size={11} /> Save</>}
+              </button>
+            </div>
+          )}
+
+          {/* Footer for XML feed / readonly-only boards */}
+          {!loading && !hasSaveable && hasConfigFields && (
+            <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/60 flex justify-end">
+              <button
+                onClick={onClose}
+                className="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200
+                  hover:border-slate-300 hover:bg-slate-50 transition-all"
+              >
+                Close
               </button>
             </div>
           )}

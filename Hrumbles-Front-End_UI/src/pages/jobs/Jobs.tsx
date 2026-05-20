@@ -225,8 +225,26 @@ const [broadcastJob, setBroadcastJob] = useState<JobData | null>(null);
 const [pocModalOpen, setPocModalOpen] = useState(false);
 const [selectedJobForPoc, setSelectedJobForPoc] = useState<JobData | null>(null);
  
-// Helper: read board post count for any job directly from localStorage
-const getBoardPostCount = (jobId: string) => Object.keys(getJobPosts(jobId)).length;
+// Fetch broadcast counts per job for this org (for badge display)
+const { data: boardPostCounts = [], refetch: refetchBoardCounts } = useQuery({
+  queryKey: ["job_board_post_counts", organization_id],
+  queryFn: async () => {
+    const { data, error } = await supabase
+      .from("hr_job_board_posts")
+      .select("job_id, board_id")
+      .eq("organization_id", organization_id)
+      .eq("is_active", true);
+    if (error) return [];
+    return data;
+  },
+  enabled: !!organization_id,
+  refetchOnWindowFocus: false,
+});
+
+// Helper to count boards for a specific job
+const getBoardPostCount = (jobId: string) =>
+  boardPostCounts.filter(r => r.job_id === jobId).length;
+
   
   // Check if current org is TUP
   // const isTupOrg = organization_id === TUP_ORG_CHECK || organization_id === TUP_ORG_ID;
@@ -295,6 +313,7 @@ const { data: allEmployees = [] } = useQuery({
   },
   enabled: !!organization_id && !ITECH_ORGANIZATION_ID.includes(organization_id),
 });
+
 
 const clientList = useMemo(() => {
   if (!jobs || jobs.length === 0) return [];
@@ -636,16 +655,33 @@ if (isLoading) {
     );
   };
 
-  const VendorCell = ({ assignedVendor }: { assignedVendor: any }) => {
-  if (!assignedVendor?.name) {
+// REPLACE VendorCell:
+
+const VendorCell = ({ assignedVendor }: { assignedVendor: any }) => {
+  // Normalize to array — handles old object shape and new array shape
+  const vendors: { name: string; id: string }[] = Array.isArray(assignedVendor)
+    ? assignedVendor
+    : assignedVendor?.name
+      ? [assignedVendor]
+      : [];
+
+  if (vendors.length === 0) {
     return <span className="text-gray-300 text-sm">—</span>;
   }
+
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
-      text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
-      <Building2 size={11} />
-      {assignedVendor.name}
-    </span>
+    <div className="flex flex-wrap gap-1">
+      {vendors.map((v, i) => (
+        <span
+          key={v.id ?? i}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+            text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200"
+        >
+          <Building2 size={10} />
+          {v.name}
+        </span>
+      ))}
+    </div>
   );
 };
 
@@ -1250,7 +1286,7 @@ const getVendorCandidateCount = (job: JobData) => {
   </div>
 
   {/* Date Range Picker */}
-  {!isRestrictedUser && (
+ 
     <div className="flex-shrink-0 order-5 w-full sm:w-auto">
       <EnhancedDateRangeSelector
         value={dateRange}
@@ -1259,10 +1295,10 @@ const getVendorCandidateCount = (job: JobData) => {
        
       />
     </div>
-  )}
+  
 
 {/* Status Filter */}
-{!isRestrictedUser && (
+
   <div className="flex-shrink-0 order-3 w-full sm:w-[150px]">
     <Select
       value={selectedStatus}
@@ -1303,10 +1339,10 @@ const getVendorCandidateCount = (job: JobData) => {
       </SelectContent>
     </Select>
   </div>
-)}
+
 
 {/* Client Filter */}
-{!isRestrictedUser && (
+{!isVendor && (
   <div className="flex-shrink-0 order-4 w-full sm:w-[150px]">
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -1440,8 +1476,8 @@ const getVendorCandidateCount = (job: JobData) => {
     isOpen={!!broadcastJob}
     onClose={() => setBroadcastJob(null)}
     onPosted={() => {
-      // Force re-render so badge updates immediately after posting
       setBroadcastJob(null);
+      refetchBoardCounts(); 
     }}
   />
 )}

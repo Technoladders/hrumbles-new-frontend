@@ -149,7 +149,7 @@ const InterviewRow: React.FC<{ interview: Interview; isCompleted?: boolean }> = 
 
   return (
     <div
-      className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl transition-colors border border-transparent ${
+      className={`flex items-start gap-1.5 px-2 py-1.5 rounded-xl transition-colors border border-transparent ${
         isCompleted
           ? "opacity-55 bg-gray-50/60"
           : "hover:bg-gray-50 hover:border-gray-100"
@@ -160,7 +160,7 @@ const InterviewRow: React.FC<{ interview: Interview; isCompleted?: boolean }> = 
         <span className="text-[9px] font-bold text-gray-500 leading-none uppercase">
           {dateStr.split(" ")[1]}
         </span>
-        <span className="text-[14px] font-extrabold text-gray-700 leading-none">
+        <span className="text-[10px] font-extrabold text-gray-700 leading-none">
           {dateStr.split(" ")[0]}
         </span>
       </div>
@@ -182,7 +182,7 @@ const InterviewRow: React.FC<{ interview: Interview; isCompleted?: boolean }> = 
         </div>
 
         <p
-          className={`text-[11.5px] font-semibold leading-tight truncate ${
+          className={`text-[9px] font-semibold leading-tight truncate ${
             isCompleted ? "line-through text-gray-400" : "text-gray-800"
           }`}
         >
@@ -191,7 +191,7 @@ const InterviewRow: React.FC<{ interview: Interview; isCompleted?: boolean }> = 
 
         {interview.jobTitle && (
           <p
-            className={`text-[10px] leading-tight mt-0.5 truncate ${
+            className={`text-[9px] leading-tight mt-0.5 truncate ${
               isCompleted ? "line-through text-gray-300" : "text-gray-400"
             }`}
           >
@@ -225,7 +225,7 @@ const InterviewRow: React.FC<{ interview: Interview; isCompleted?: boolean }> = 
             Done
           </span>
         ) : timeStr ? (
-          <span className="text-[10px] font-bold text-gray-600 tabular-nums bg-gray-50 px-1.5 py-0.5 rounded-md">
+          <span className="text-[9px] font-bold text-gray-600 tabular-nums bg-gray-50 px-1.5 py-0.5 rounded-md">
             {timeStr}
           </span>
         ) : (
@@ -380,7 +380,7 @@ const InterviewWidget: React.FC<InterviewWidgetProps> = ({
               Interviews
             </h3>
             <p className="text-[9px] text-gray-400 leading-tight mt-0.5">
-              {filterByEmployee ? "Your schedule" : "All org interviews"}
+              {filterByEmployee ? "Your schedule" : "All interviews"}
             </p>
           </div>
         </div>
