@@ -2,56 +2,41 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { Badge } from "@/components/jobs/ui/badge";
 import { Button } from "@/components/jobs/ui/button";
-import { X, ChevronDown, MapPin } from "lucide-react";
+import { X, ChevronDown, MapPin, Loader2 } from "lucide-react";
 import { City } from "country-state-city";
-
-// ---------- Persistent custom locations ----------
-const STORAGE_KEY = "hr_custom_locations"; // same key across all job creation
-
-const loadCustomLocations = (): string[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveCustomLocations = (locations: string[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(locations));
-  } catch {
-    // quota exceeded, ignore
-  }
-};
-// ------------------------------------------------
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface LocationSelectorProps {
   selectedLocations: string[];
   onChange: (locations: string[]) => void;
   placeholder?: string;
-  countryCode?: string; // default 'IN'
+  countryCode?: string;
+  organizationId: string;
 }
+
+// Helper to capitalize first letter of each word
+const capitalizeLocation = (name: string): string => {
+  return name
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
 
 export default function LocationSelector({
   selectedLocations = [],
   onChange,
   placeholder = "Search and select cities...",
   countryCode = "IN",
+  organizationId,
 }: LocationSelectorProps) {
-  const safeSelectedLocations = Array.isArray(selectedLocations)
-    ? selectedLocations
-    : [];
-
+  const safeSelectedLocations = Array.isArray(selectedLocations) ? selectedLocations : [];
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
-  // Persistent custom locations
-  const [customLocations, setCustomLocations] = useState<string[]>(loadCustomLocations);
-
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -62,7 +47,6 @@ export default function LocationSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Library cities
   const allCities = useMemo(() => {
     try {
       return City.getCitiesOfCountry(countryCode) ?? [];
@@ -71,11 +55,27 @@ export default function LocationSelector({
     }
   }, [countryCode]);
 
-  // Merged suggestions
+  const {
+    data: customLocations = [],
+    isLoading: isCustomLoading,
+  } = useQuery({
+    queryKey: ["custom_locations", organizationId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_locations")
+        .select("name")
+        .eq("organization_id", organizationId)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data?.map((row) => row.name) ?? [];
+    },
+    enabled: !!organizationId,
+    staleTime: 60_000,
+  });
+
   const suggestions = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
 
-    // 1. Show all custom entries when input is empty & focused
     if (trimmed.length === 0 && isOpen) {
       return customLocations
         .filter((loc) => !safeSelectedLocations.includes(loc))
@@ -83,7 +83,6 @@ export default function LocationSelector({
         .map((loc) => ({ name: loc, isCustom: true }));
     }
 
-    // 2. When typing: filter library + custom
     if (trimmed.length < 2) return [];
 
     const libraryMatches = allCities
@@ -102,38 +101,44 @@ export default function LocationSelector({
           !safeSelectedLocations.includes(loc) &&
           !allCities.some(
             (city) => city.name.toLowerCase() === loc.toLowerCase()
-          ) // avoid duplicating library cities
+          )
       )
       .slice(0, 5)
       .map((loc) => ({ name: loc, isCustom: true }));
 
-    // Show library first, then custom
     return [...libraryMatches, ...customMatches].slice(0, 20);
   }, [query, allCities, customLocations, safeSelectedLocations, isOpen]);
 
-  // Check if the typed string already exists as a library city
-  const exactLibraryMatch = useMemo(
-    () => allCities.some(
-      (city) => city.name.toLowerCase() === query.trim().toLowerCase()
-    ),
-    [query, allCities]
-  );
+  const handleAddCity = async (cityName: string, isCustom: boolean) => {
+    // Capitalize the first letter of each word
+    const formattedName = capitalizeLocation(cityName);
+    
+    if (safeSelectedLocations.includes(formattedName)) return;
 
-  // Add a city to selected list and optionally save custom
-  const handleAddCity = (cityName: string, isCustom = false) => {
-    if (!safeSelectedLocations.includes(cityName)) {
-      onChange([...safeSelectedLocations, cityName]);
-    }
+    onChange([...safeSelectedLocations, formattedName]);
 
-    // Persist custom location if it's not already saved and not a library city
-    if (isCustom || (!exactLibraryMatch && cityName === query.trim())) {
-      const alreadyStored = customLocations.some(
-        (loc) => loc.toLowerCase() === cityName.toLowerCase()
-      );
-      if (!alreadyStored) {
-        const updated = [cityName, ...customLocations].slice(0, 50); // keep max 50
-        setCustomLocations(updated);
-        saveCustomLocations(updated);
+    const isLibraryCity = allCities.some(
+      (c) => c.name.toLowerCase() === formattedName.toLowerCase()
+    );
+
+    if (isCustom || !isLibraryCity) {
+      if (!organizationId) {
+        console.warn("Cannot save custom location: organizationId is missing");
+        return;
+      }
+      
+      const { error } = await supabase
+        .from("custom_locations")
+        .upsert(
+          { organization_id: organizationId, name: formattedName },
+          { onConflict: "organization_id, name", ignoreDuplicates: true }
+        );
+      if (!error) {
+        queryClient.invalidateQueries({
+          queryKey: ["custom_locations", organizationId],
+        });
+      } else {
+        console.error("Failed to save custom location:", error);
       }
     }
 
@@ -141,11 +146,9 @@ export default function LocationSelector({
     inputRef.current?.focus();
   };
 
-  // Add custom typed location when not in library at all
   const handleAddCustom = () => {
     const trimmed = query.trim();
     if (trimmed.length === 0) return;
-    // If there's a library suggestion selected, we'd add that; but here we force custom
     handleAddCity(trimmed, true);
   };
 
@@ -163,12 +166,10 @@ export default function LocationSelector({
       const trimmed = query.trim();
       if (trimmed.length === 0) return;
 
-      // If there are suggestions, add the first one
       if (suggestions.length > 0) {
         const first = suggestions[0];
         handleAddCity(first.name, first.isCustom);
       } else {
-        // No suggestions, add as custom
         handleAddCustom();
       }
     } else if (e.key === "Escape") {
@@ -178,7 +179,6 @@ export default function LocationSelector({
 
   return (
     <div className="w-full" ref={containerRef}>
-      {/* Input + toggle */}
       <div className="relative">
         <div className="flex items-center border rounded-md focus-within:ring-1 focus-within:ring-purple-500">
           <input
@@ -204,36 +204,41 @@ export default function LocationSelector({
           </Button>
         </div>
 
-        {/* Dropdown */}
         {isOpen && (
           <div className="absolute z-50 mt-1 w-full bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-            {/* Empty state: show recent custom locations */}
-            {query.trim().length === 0 && customLocations.length > 0 && (
-              <>
-                <div className="px-3 py-1.5 text-xs text-gray-400 font-medium bg-gray-50">
-                  Your custom locations
-                </div>
-                {customLocations
-                  .filter((loc) => !safeSelectedLocations.includes(loc))
-                  .slice(0, 8)
-                  .map((loc) => (
-                    <button
-                      key={`custom-${loc}`}
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50 outline-none flex items-center gap-2"
-                      onClick={() => handleAddCity(loc, true)}
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      <MapPin className="h-3.5 w-3.5 text-violet-400" />
-                      {loc}
-                      <span className="text-xs text-gray-400 ml-auto">custom</span>
-                    </button>
-                  ))}
-                <hr className="my-1" />
-              </>
+            {isCustomLoading && (
+              <div className="flex items-center gap-2 px-3 py-2 text-sm text-gray-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading custom locations…
+              </div>
             )}
 
-            {/* Library suggestions */}
+            {query.trim().length === 0 &&
+              !isCustomLoading &&
+              customLocations.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 text-xs text-gray-400 font-medium bg-gray-50">
+                    Organisation custom locations
+                  </div>
+                  {customLocations
+                    .filter((loc) => !safeSelectedLocations.includes(loc))
+                    .slice(0, 8)
+                    .map((loc) => (
+                      <button
+                        key={`custom-${loc}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-purple-50 outline-none flex items-center gap-2"
+                        onClick={() => handleAddCity(loc, true)}
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-violet-400" />
+                        {loc}
+                        <span className="text-xs text-gray-400 ml-auto">custom</span>
+                      </button>
+                    ))}
+                  <hr className="my-1" />
+                </>
+              )}
+
             {suggestions
               .filter((s) => !s.isCustom)
               .map((s) => (
@@ -248,7 +253,6 @@ export default function LocationSelector({
                 </button>
               ))}
 
-            {/* Custom suggestions that match the query */}
             {suggestions
               .filter((s) => s.isCustom)
               .map((s) => (
@@ -265,9 +269,11 @@ export default function LocationSelector({
                 </button>
               ))}
 
-            {/* Add custom entry button (when typed text not in library nor custom) */}
-            {query.trim().length >= 2 &&
-              !exactLibraryMatch &&
+            {organizationId &&
+              query.trim().length >= 2 &&
+              !allCities.some(
+                (c) => c.name.toLowerCase() === query.trim().toLowerCase()
+              ) &&
               !customLocations.some(
                 (loc) => loc.toLowerCase() === query.trim().toLowerCase()
               ) && (
@@ -277,13 +283,18 @@ export default function LocationSelector({
                   onClick={handleAddCustom}
                   onMouseDown={(e) => e.preventDefault()}
                 >
-                  <span>+</span> Add "{query.trim()}" as a custom location
+                  <span>+</span> Add "{capitalizeLocation(query.trim())}" as a custom location
                 </button>
               )}
 
             {query.trim().length >= 2 &&
               suggestions.length === 0 &&
-              exactLibraryMatch && (
+              (allCities.some(
+                (c) => c.name.toLowerCase() === query.trim().toLowerCase()
+              ) ||
+                customLocations.some(
+                  (loc) => loc.toLowerCase() === query.trim().toLowerCase()
+                )) && (
                 <div className="px-3 py-2 text-sm text-gray-400">
                   Location already added or selected
                 </div>
@@ -292,7 +303,6 @@ export default function LocationSelector({
         )}
       </div>
 
-      {/* Clear all */}
       {safeSelectedLocations.length > 0 && (
         <button
           type="button"
@@ -303,7 +313,6 @@ export default function LocationSelector({
         </button>
       )}
 
-      {/* Selected chips */}
       {safeSelectedLocations.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">
           {safeSelectedLocations.map((location) => (

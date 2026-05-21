@@ -75,6 +75,7 @@ import { motion } from "framer-motion";
 import { TaskupActionModal, TaskupModalConfig } from './TaskupActionModal';
 import InviteCandidateModal from "@/components/jobs/job/invite/InviteCandidateModal";
 import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/job/invite/BulkInviteReviewModal';
+ import RevertStatusButton from '@/components/jobs/job/candidate/RevertStatusButton';
 
 const VALIDATION_QUEUE_KEY = "validationQueue";
 
@@ -133,6 +134,18 @@ const CandidatesList = forwardRef((props: CandidatesListProps, ref) => {
   const organizationId = useSelector((state: any) => state.auth.organization_id);
   const userRole = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === 'employee';
+
+
+  //   // ── Revert permission ──────────────────────────────────────────────────
+
+   const orgRevertEnabled  = useSelector((state: any) => state.auth.org_revert_status_enabled ?? false);
+   const userCanRevert     = useSelector((state: any) => state.auth.can_revert_status ?? false);
+   const canUserRevert     = orgRevertEnabled && (userRole === 'organization_superadmin' || userCanRevert);
+
+   console.log('org_revert_status_enabled →', orgRevertEnabled);
+   console.log('can_revert_status →', userCanRevert);
+   console.log('canUserRevert →', canUserRevert);
+   console.log('userRole →', userRole);
     // ADD NEW STATE FOR THE TASKUP MODAL
   const [isTaskupActionModalOpen, setIsTaskupActionModalOpen] = useState(false);
   const [taskupModalConfig, setTaskupModalConfig] = useState<TaskupModalConfig | null>(null);
@@ -2584,10 +2597,9 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
     )}
  </TableCell>
         {/* --- Action Cell (Right Fixed) --- */}
-        <TableCell className="sticky right-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
-          <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
-            {/* ... All your action buttons (Eye, Download, Pencil, etc.) go here ... */}
-            {/* The content inside this div does not need to change. */}
+       <TableCell className="sticky right-0 z-20 px-2 bg-purple-50 group-hover:bg-slate-50 py-1">
+  <div className="flex items-center space-x-1 rounded-full bg-slate-100 p-1 shadow-md border border-slate-200 w-fit">
+         
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2701,7 +2713,19 @@ const ScoreDisplay = ({ score, isValidated, isLoading, candidateId, hasSummary, 
                 </Tooltip>
               </TooltipProvider>
             )} */}
+
+                {canUserRevert && (
+      <RevertStatusButton
+        candidateId={candidate.id}
+        candidateName={candidate.name}
+        jobId={jobId}
+        currentSubStatusName={candidate.sub_status?.name ?? ''}
+        revertedByUserId={user?.id}
+        onRevertSuccess={onRefresh}
+      />
+    )}
           </div>
+
         </TableCell>
       </TableRow>
     ))}

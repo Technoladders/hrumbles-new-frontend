@@ -23,6 +23,13 @@ export interface SubStatus {
   parent_id: string;
 }
 
+export interface RevertResult {
+  success: boolean;
+  error?: string;
+  revertedFrom?: { mainStatusName: string; subStatusName: string };
+  revertedTo?: { mainStatusName: string; subStatusName: string };
+}
+
 // Fetch all statuses with their sub-statuses
 export const fetchAllStatuses = async (organizationId?: string): Promise<MainStatus[]> => {
   try {
@@ -1208,5 +1215,244 @@ export const sendStatusUpdateNotification = async (
     console.log('Successfully triggered status update email notification.');
   } catch (err) {
     console.error('Failed to send status update notification:', err.message);
+  }
+};
+
+export const getRevertableTimelineEntry = async (
+  candidateId: string
+): Promise<{
+  id: string;
+  previousState: {
+    mainStatusId: string;
+    subStatusId: string;
+    mainStatusName: string;
+    subStatusName: string;
+  } | null;
+  newState: {
+    mainStatusId: string;
+    subStatusId: string;
+    mainStatusName: string;
+    subStatusName: string;
+  };
+} | null> => {
+  const { data, error } = await supabase
+    .from('hr_candidate_timeline')
+    .select('id, previous_state, new_state')
+    .eq('candidate_id', candidateId)
+    .eq('event_type', 'status_change')
+    .eq('is_reverted', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+ 
+  if (error || !data) return null;
+ 
+  // The "Candidate Created" entry has no previous_state — we cannot revert past creation.
+  // Also guard: if previous_state is missing keys it is not safe to use.
+  const prev = data.previous_state as any;
+  if (!prev || !prev.mainStatusId || !prev.subStatusId) return null;
+ 
+  const next = data.new_state as any;
+  if (!next || !next.mainStatusId || !next.subStatusId) return null;
+ 
+  return {
+    id: data.id,
+    previousState: {
+      mainStatusId: prev.mainStatusId,
+      subStatusId: prev.subStatusId,
+      mainStatusName: prev.mainStatusName ?? '',
+      subStatusName: prev.subStatusName ?? '',
+    },
+    newState: {
+      mainStatusId: next.mainStatusId,
+      subStatusId: next.subStatusId,
+      mainStatusName: next.mainStatusName ?? '',
+      subStatusName: next.subStatusName ?? '',
+    },
+  };
+};
+ 
+/**
+ * Main revert function.
+ * Atomically:
+ *  1. Guards against double-revert (current DB status must match timeline new_state).
+ *  2. Restores hr_job_candidates to previous_state.
+ *  3. Removes / decrements the matching hr_status_change_counts row.
+ *  4. Soft-deletes the timeline entry (is_reverted = true).
+ *  5. Inserts a 'status_reverted' event in hr_candidate_timeline.
+ *  6. Writes an immutable row to hr_status_revert_log.
+ */
+export const revertCandidateStatus = async (
+  candidateId: string,
+  jobId: string,
+  revertedByUserId: string,
+  reason?: string
+): Promise<RevertResult> => {
+  try {
+    const authData = getAuthDataFromLocalStorage();
+    if (!authData) return { success: false, error: 'Authentication data not found.' };
+    const { organization_id } = authData;
+ 
+    // ── Step 1: Fetch the latest revertable timeline entry ────────────────────
+    const entry = await getRevertableTimelineEntry(candidateId);
+    if (!entry) {
+      return {
+        success: false,
+        error: 'No revertable status found. The candidate may already be at the earliest status.',
+      };
+    }
+    const { id: timelineEntryId, previousState, newState } = entry;
+ 
+    // ── Step 2: Stale-check — verify the candidate's current status still
+    //           matches what the timeline says it should be (race-condition guard)
+    const { data: currentCandidate, error: fetchErr } = await supabase
+      .from('hr_job_candidates')
+      .select('main_status_id, sub_status_id, metadata, name, email, phone, resume_url, current_salary, expected_salary')
+      .eq('id', candidateId)
+      .single();
+ 
+    if (fetchErr || !currentCandidate) {
+      return { success: false, error: 'Could not fetch candidate data.' };
+    }
+ 
+    if (
+      currentCandidate.main_status_id !== newState.mainStatusId ||
+      currentCandidate.sub_status_id !== newState.subStatusId
+    ) {
+return {
+  success: false,
+  error:
+    "Status mismatch detected — the candidate's status was changed by someone else. Please refresh and try again.",
+};
+    }
+ 
+    // ── Step 3: Restore hr_job_candidates to previous state ──────────────────
+    const { error: updateErr } = await supabase
+      .from('hr_job_candidates')
+      .update({
+        main_status_id: previousState!.mainStatusId,
+        sub_status_id: previousState!.subStatusId,
+        updated_by: revertedByUserId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', candidateId);
+ 
+    if (updateErr) {
+      console.error('[revertCandidateStatus] Failed to update hr_job_candidates:', updateErr);
+      return { success: false, error: 'Failed to restore candidate status.' };
+    }
+ 
+    // ── Step 4: Handle hr_status_change_counts ────────────────────────────────
+    // Find the most recent count row matching (candidate, FROM status)
+    let deletedCountEntryId: string | null = null;
+    const { data: countRow, error: countFetchErr } = await supabase
+      .from('hr_status_change_counts')
+      .select('id, count')
+      .eq('candidate_id', candidateId)
+      .eq('main_status_id', newState.mainStatusId)
+      .eq('sub_status_id', newState.subStatusId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+ 
+    if (!countFetchErr && countRow) {
+      deletedCountEntryId = countRow.id;
+      if (countRow.count > 1) {
+        // Decrement instead of delete to preserve history integrity
+        await supabase
+          .from('hr_status_change_counts')
+          .update({ count: countRow.count - 1, updated_at: new Date().toISOString() })
+          .eq('id', countRow.id);
+      } else {
+        // count === 1 → safe to delete the row entirely
+        await supabase
+          .from('hr_status_change_counts')
+          .delete()
+          .eq('id', countRow.id);
+      }
+    } else {
+      // Non-fatal: log and continue — the counts table is supplementary
+      console.warn('[revertCandidateStatus] Could not find matching count row — skipping decrement.', countFetchErr);
+    }
+ 
+    // ── Step 5: Soft-delete the timeline entry ────────────────────────────────
+    const { error: softDeleteErr } = await supabase
+      .from('hr_candidate_timeline')
+      .update({
+        is_reverted: true,
+        reverted_by: revertedByUserId,
+        reverted_at: new Date().toISOString(),
+      })
+      .eq('id', timelineEntryId);
+ 
+    if (softDeleteErr) {
+      console.error('[revertCandidateStatus] Failed to soft-delete timeline entry:', softDeleteErr);
+      // Non-fatal — we already restored the candidate; log and continue.
+    }
+ 
+    // ── Step 6: Insert a new 'status_reverted' timeline event ─────────────────
+    await supabase.from('hr_candidate_timeline').insert({
+      candidate_id: candidateId,
+      created_by: revertedByUserId,
+      event_type: 'status_reverted',
+      previous_state: {
+        mainStatusId: newState.mainStatusId,
+        subStatusId: newState.subStatusId,
+        mainStatusName: newState.mainStatusName,
+        subStatusName: newState.subStatusName,
+      },
+      new_state: {
+        mainStatusId: previousState!.mainStatusId,
+        subStatusId: previousState!.subStatusId,
+        mainStatusName: previousState!.mainStatusName,
+        subStatusName: previousState!.subStatusName,
+      },
+      event_data: {
+        action: 'Status reverted',
+        reason: reason ?? null,
+        reverted_timeline_entry_id: timelineEntryId,
+        timestamp: new Date().toISOString(),
+      },
+      organization_id,
+    });
+ 
+    // ── Step 7: Write immutable audit log row ─────────────────────────────────
+    await supabase.from('hr_status_revert_log').insert({
+      candidate_id: candidateId,
+      job_id: jobId,
+      organization_id,
+ 
+      reverted_from_main_status_id: newState.mainStatusId,
+      reverted_from_sub_status_id: newState.subStatusId,
+      reverted_from_state: newState,
+ 
+      reverted_to_main_status_id: previousState!.mainStatusId,
+      reverted_to_sub_status_id: previousState!.subStatusId,
+      reverted_to_state: previousState,
+ 
+      reverted_timeline_entry_id: timelineEntryId,
+      deleted_count_entry_id: deletedCountEntryId ?? undefined,
+ 
+      reverted_by: revertedByUserId,
+      reverted_at: new Date().toISOString(),
+      reason: reason ?? null,
+ 
+      candidate_snapshot: currentCandidate, // snapshot taken before the revert
+    });
+ 
+    return {
+      success: true,
+      revertedFrom: {
+        mainStatusName: newState.mainStatusName,
+        subStatusName: newState.subStatusName,
+      },
+      revertedTo: {
+        mainStatusName: previousState!.mainStatusName,
+        subStatusName: previousState!.subStatusName,
+      },
+    };
+  } catch (err: any) {
+    console.error('[revertCandidateStatus] Unexpected error:', err);
+    return { success: false, error: err?.message ?? 'An unexpected error occurred.' };
   }
 };

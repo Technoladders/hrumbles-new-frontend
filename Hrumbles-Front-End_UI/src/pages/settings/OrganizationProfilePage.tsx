@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Building2, MapPin, Phone, Mail, Globe, FileText, Camera,
   Edit3, Save, X, Loader2, CheckCircle, Upload, AlertCircle,
-  Hash, Shield,
+  Hash, Shield, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import RevertStatusEmployeeToggle from '@/components/settings/RevertStatusEmployeeToggle';
 
 const STATES_IN = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
 
@@ -29,6 +30,8 @@ const OrganizationProfilePage: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [profileExists, setProfileExists] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+const [orgRevertEnabled, setOrgRevertEnabled] = useState(false);
   const [draft, setDraft] = useState<typeof emptyProfile>(emptyProfile);
   const [draftPrefix, setDraftPrefix] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +43,7 @@ const OrganizationProfilePage: React.FC = () => {
     try {
       const [{ data: prof }, { data: org }] = await Promise.all([
         supabase.from('hr_organization_profile').select('*').eq('organization_id', organizationId).single(),
-        supabase.from('hr_organizations').select('name, invoice_prefix').eq('id', organizationId).single(),
+        supabase.from('hr_organizations').select('name, invoice_prefix, revert_status_enabled').eq('id', organizationId).single(),
       ]);
 
       if (prof) {
@@ -54,7 +57,20 @@ const OrganizationProfilePage: React.FC = () => {
         setIsEditing(true); // Auto-open edit mode if no profile yet
       }
 
-      if (org) { setOrgName(org.name || ''); setInvoicePrefix(org.invoice_prefix || ''); setDraftPrefix(org.invoice_prefix || ''); }
+      if (org) {
+  setOrgName(org.name || '');
+  setInvoicePrefix(org.invoice_prefix || '');
+  setDraftPrefix(org.invoice_prefix || '');
+  setOrgRevertEnabled(org.revert_status_enabled || false);
+
+  const { data: empData } = await supabase
+    .from('hr_employees')
+    .select('id, first_name, last_name, can_revert_status')
+    .eq('organization_id', organizationId)
+    .order('first_name');
+
+  setEmployees(empData || []);
+}
     } catch (err) {
       toast.error('Failed to load profile');
     } finally { setIsLoading(false); }
@@ -348,6 +364,48 @@ const OrganizationProfilePage: React.FC = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* REVERT STATUS PERMISSIONS */}
+<Card className="shadow-sm border-none">
+  <CardHeader className="pb-2">
+    <CardTitle className="flex items-center gap-2 text-sm font-bold text-gray-700">
+      <RotateCcw className="h-4 w-4 text-amber-500" />
+      Revert Status Permissions
+    </CardTitle>
+  </CardHeader>
+
+  <CardContent className="space-y-3">
+    <p className="text-xs text-gray-500">
+      Control which employees can revert candidate statuses.
+    </p>
+
+    {employees.length === 0 ? (
+      <div className="text-sm text-gray-400">
+        No employees found.
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {employees.map((employee) => (
+          <div
+            key={employee.id}
+            className="flex items-center justify-between rounded-lg border p-3"
+          >
+            <span className="text-sm font-medium text-gray-700">
+              { `${employee.first_name} ${employee.last_name}`}
+            </span>
+
+            <RevertStatusEmployeeToggle
+              employeeId={employee.id}
+              employeeName={`${employee.first_name} ${employee.last_name}`}
+              initialCanRevert={employee.can_revert_status}
+              orgRevertEnabled={orgRevertEnabled}
+            />
+          </div>
+        ))}
+      </div>
+    )}
+  </CardContent>
+</Card>
       </div>
 
       {/* SAVE BUTTON BOTTOM (sticky convenience) */}

@@ -1,136 +1,156 @@
-
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useSelector } from "react-redux";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RegularizationRequest } from "@/types/time-tracker-types";
-import { fetchRegularizationRequests, approveRegularizationRequest, rejectRegularizationRequest } from "@/api/regularization";
+import {
+  fetchRegularizationRequests,
+  approveRegularizationRequest,
+  rejectRegularizationRequest,
+} from "@/api/regularization";
 import { toast } from "sonner";
 
 export const useRegularizationApproval = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [requests, setRequests] = useState<RegularizationRequest[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<RegularizationRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("pending");
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [actionType, setActionType] = useState<'approve' | 'reject' | null>(null);
+  const [searchTerm, setSearchTerm]           = useState("");
+  const [activeTab, setActiveTab]             = useState("pending");
   const [selectedRequest, setSelectedRequest] = useState<RegularizationRequest | null>(null);
-  const [approverNotes, setApproverNotes] = useState("");
+  const [sheetOpen, setSheetOpen]             = useState(false);
+  const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
+  const [actionType, setActionType]           = useState<'approve' | 'reject' | null>(null);
+  const [approverNotes, setApproverNotes]     = useState("");
+  const [selectedIds, setSelectedIds]         = useState<string[]>([]);
+  const [isActioning, setIsActioning]         = useState(false);
 
-  useEffect(() => {
-    loadRequests();
-  }, []);
+  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const userId         = useSelector((state: any) => state.auth.user?.id);
+  const queryClient    = useQueryClient();
 
-  useEffect(() => {
-    if (requests.length > 0) {
-      filterRequests();
-    }
-  }, [searchTerm, requests, activeTab]);
+  const QUERY_KEY = ['regularization-approval', organizationId];
 
-  const loadRequests = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchRegularizationRequests();
-      setRequests(data);
-    } catch (error) {
-      console.error("Error loading regularization requests:", error);
-      toast.error("Failed to load regularization requests");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: requests = [], isLoading, refetch } = useQuery({
+    queryKey: QUERY_KEY,
+    queryFn:  () => fetchRegularizationRequests(organizationId),
+    enabled:  !!organizationId,
+    staleTime: 30 * 1000,
+  });
 
-  const filterRequests = () => {
-    let filtered = [...requests];
-    
-    if (activeTab === "pending") {
-      filtered = filtered.filter(req => req.status === "pending");
-    } else if (activeTab === "approved") {
-      filtered = filtered.filter(req => req.status === "approved");
-    } else if (activeTab === "rejected") {
-      filtered = filtered.filter(req => req.status === "rejected");
-    }
-    
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(req => {
-        const employeeName = req.employees?.name?.toLowerCase() || '';
-        return employeeName.includes(term);
+  const counts = useMemo(() => ({
+    pending:   requests.filter(r => r.status === 'pending').length,
+    approved:  requests.filter(r => r.status === 'approved').length,
+    rejected:  requests.filter(r => r.status === 'rejected').length,
+    cancelled: requests.filter(r => r.status === 'cancelled').length,
+  }), [requests]);
+
+  const filteredRequests = useMemo(() => {
+    let list = requests.filter(r => r.status === activeTab);
+    if (searchTerm.trim()) {
+      const t = searchTerm.toLowerCase();
+      list = list.filter(r => {
+        const name = `${r.employee?.first_name ?? ''} ${r.employee?.last_name ?? ''}`.toLowerCase();
+        return name.includes(t);
       });
     }
-    
-    setFilteredRequests(filtered);
+    return list;
+  }, [requests, activeTab, searchTerm]);
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+
+  // ── Detail sheet ────────────────────────────────────────────────────────────
+  const openDetail = (req: RegularizationRequest) => {
+    setSelectedRequest(req);
+    setSheetOpen(true);
   };
 
-  const handleViewDetails = (request: RegularizationRequest) => {
-    setSelectedRequest(request);
-    setDetailsOpen(true);
+  // ── Inline action (row expand) ───────────────────────────────────────────────
+  const openInlineAction = (req: RegularizationRequest, type: 'approve' | 'reject') => {
+    if (expandedActionId === req.id && actionType === type) {
+      closeInlineAction();
+    } else {
+      setExpandedActionId(req.id);
+      setActionType(type);
+      setApproverNotes("");
+    }
   };
 
-  const openActionDialog = (request: RegularizationRequest, action: 'approve' | 'reject') => {
-    setSelectedRequest(request);
-    setActionType(action);
+  const closeInlineAction = () => {
+    setExpandedActionId(null);
+    setActionType(null);
     setApproverNotes("");
-    setActionDialogOpen(true);
   };
 
-  const handleAction = async () => {
-    if (!selectedRequest || !actionType) {
-      toast.error("Missing required information");
+  const handleAction = async (requestId: string) => {
+    if (!actionType) return;
+    if (actionType === 'reject' && !approverNotes.trim()) {
+      toast.error("Rejection reason is required");
       return;
     }
-
+    setIsActioning(true);
     try {
-      let success = false;
-      
+      let ok = false;
       if (actionType === 'approve') {
-        success = await approveRegularizationRequest(
-          selectedRequest.id,
-          approverNotes
-        );
+        ok = await approveRegularizationRequest(requestId, userId, approverNotes);
       } else {
-        if (!approverNotes) {
-          toast.error("You must provide a reason for rejection");
-          return;
-        }
-        success = await rejectRegularizationRequest(
-          selectedRequest.id,
-          approverNotes
-        );
+        ok = await rejectRegularizationRequest(requestId, userId, approverNotes);
       }
-      
-      if (success) {
-        setActionDialogOpen(false);
-        loadRequests();
+      if (ok) {
+        closeInlineAction();
+        setSelectedIds(p => p.filter(id => id !== requestId));
+        invalidate();
       }
-    } catch (error) {
-      console.error("Error processing regularization request:", error);
-      toast.error(`Failed to ${actionType} regularization request`);
+    } finally {
+      setIsActioning(false);
     }
   };
 
-  const getPendingCount = () => {
-    return requests.filter(req => req.status === "pending").length;
+  // ── Bulk approve ─────────────────────────────────────────────────────────────
+  const handleBulkApprove = async (bulkNotes: string) => {
+    if (!selectedIds.length) return;
+    setIsActioning(true);
+    try {
+      const results = await Promise.all(
+        selectedIds.map(id => approveRegularizationRequest(id, userId, bulkNotes))
+      );
+      const n = results.filter(Boolean).length;
+      toast.success(`${n} request${n !== 1 ? 's' : ''} approved`);
+      setSelectedIds([]);
+      invalidate();
+    } finally {
+      setIsActioning(false);
+    }
   };
 
+  // ── Selection ────────────────────────────────────────────────────────────────
+  const toggleSelect = (id: string) =>
+    setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const toggleSelectAll = () => {
+    const ids = filteredRequests.map(r => r.id);
+    setSelectedIds(p => p.length === ids.length ? [] : ids);
+  };
+
+  const clearSelection = () => setSelectedIds([]);
+
   return {
-    searchTerm,
-    setSearchTerm,
+    searchTerm, setSearchTerm,
     filteredRequests,
-    loading,
-    activeTab,
-    setActiveTab,
-    detailsOpen,
-    setDetailsOpen,
-    actionDialogOpen,
-    setActionDialogOpen,
+    isLoading,
+    activeTab, setActiveTab,
+    selectedRequest, setSelectedRequest,
+    sheetOpen, setSheetOpen,
+    expandedActionId,
     actionType,
-    selectedRequest,
-    approverNotes,
-    setApproverNotes,
-    handleViewDetails,
-    openActionDialog,
+    approverNotes, setApproverNotes,
+    selectedIds,
+    isActioning,
+    counts,
+    openDetail,
+    openInlineAction,
+    closeInlineAction,
     handleAction,
-    getPendingCount,
-    loadRequests
+    handleBulkApprove,
+    toggleSelect,
+    toggleSelectAll,
+    clearSelection,
+    refetch,
   };
 };

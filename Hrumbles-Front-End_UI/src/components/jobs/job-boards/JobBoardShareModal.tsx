@@ -568,8 +568,8 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
 
       // ── For WhatJobs — call the push edge function ────────────────────────
       if (isApi && board.id === "whatjobs") {
-        const isRepost = !!prevPosts["whatjobs"];
-        const command  = isRepost ? "update" : "add";
+const isRepost = !!(prevPosts["whatjobs"] as any)?.external_job_id;
+const command  = isRepost ? "update" : "add";
 
         const { data: wjData, error: wjErr } = await supabase.functions.invoke("whatjobs-post", {
           body: { job_board_post_id: upsertResult.id, command },

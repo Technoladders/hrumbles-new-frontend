@@ -170,6 +170,8 @@ import BulkProgressFloat from '@/components/candidates/talent-pool/BulkProgressF
 import DraggableUploadFloat    from '@/components/candidates/talent-pool/DraggableUploadFloat';
 import ResumeProcessingPage from '@/pages/talent-pool/ResumeProcessingPage';
 import { UploadFloatProvider } from '@/components/candidates/talent-pool/DraggableUploadFloat';
+import { TalentIntelligencePage } from "./pages/TalentIntelligence";
+
 
 import VendorDashboard from "./pages/VendorDashboard";
 
@@ -567,6 +569,7 @@ function AppContent() {
               <Route path="/contacts-v2/list/:fileId" element={<ContactsV2Page />} />
               <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
               <Route path="/recruiter-x" element={<RocketReachSearchPage />} />
+              <Route path="/talent-intelligence" element={<TalentIntelligencePage />} />
               <Route path="/employee/time-tracker" element={<TimeTracker />} />
               <Route path="/employee/timesheet" element={<Timesheet />} />
               <Route path="/employee/regularization" element={<EmployeeRegularization />} />

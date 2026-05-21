@@ -13,7 +13,7 @@ import {
   Building, X, Check, Settings, RefreshCw, Shield,
   CreditCard, Eye, EyeOff, Pencil, ExternalLink, AlertTriangle,
   BarChart2, Activity, Monitor, Smartphone, LogOut,
-  MapPin as MapPinIcon, Search, KeyRound, Zap,
+  MapPin as MapPinIcon, Search, KeyRound, Zap, RotateCcw
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -21,6 +21,7 @@ import { ManageVerificationPricingModal } from "./OrganizationManagement/ManageV
 import TrialSubscriptionCard from "./OrganizationManagement/TrialSubscriptionCard";
 import EditSubscriptionModal from "./OrganizationManagement/EditSubscriptionModal";
 import SubscriptionBillingModal from "./OrganizationManagement/SubscriptionBillingModal";
+import RevertStatusOrgToggle from "./RevertStatusOrgToggle";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface OrgDetails {
@@ -48,7 +49,7 @@ interface OrgDetails {
   invoice_prefix: string | null;
   subdomain: string | null;
   complete_profile: boolean;
-  notification_recipients: any;
+  revert_status_enabled: boolean;
 }
 
 interface OrgProfile {
@@ -1142,6 +1143,18 @@ const SingleOrganizationDashboard: FC = () => {
                   <ToggleField label="Trial Extended" value={!!details.trial_extended}
                     onToggle={async () => { await saveOrgField("trial_extended", !details.trial_extended); toast.success("Updated"); }} />
                 </div>
+              </div>
+                            {/* ── Revert Status Feature Toggle ── */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <RotateCcw size={14} className="text-amber-500" />
+                  Pipeline Features
+                </h3>
+                <RevertStatusOrgToggle
+                  organizationId={details.id}
+                  initialEnabled={!!details.revert_status_enabled}
+                  organizationName={profile?.company_name || details.name}
+                />
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                 <h3 className="text-sm font-bold text-gray-900 mb-4">Role Credit Limits</h3>

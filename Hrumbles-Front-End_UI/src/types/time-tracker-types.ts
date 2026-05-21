@@ -102,20 +102,34 @@ export interface TimeLog {
   date: string;
   title?: string;
   notes?: string;
-  clock_in_time?: string;
-  clock_out_time?: string;
-  duration_minutes?: number;
+  clock_in_time?: string | null;
+  clock_out_time?: string | null;
+  duration_minutes?: number | null;
   is_submitted: boolean;
+  is_approved?: boolean | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
+  rejection_reason?: string | null;
+  clarification_status?: string | null;
+  clarification_response?: string | null;
+  clarification_submitted_at?: string | null;
+  status?: 'normal' | 'grace_period' | 'auto_terminated' | 'absent' | null;
+  project_id?: string | null;
+  project?: { name: string } | null;
   break_logs?: Array<{
-    break_start: string;
-    break_end: string;
-    break_duration_minutes: number;
+    id?: string;
+    time_log_id?: string;
+    break_start_time: string;
+    break_end_time?: string | null;
+    duration_minutes?: number | null;
+    break_type?: string;
+    created_at?: string;
   }>;
-  total_working_hours?: number;
-  project_time_data?: { projects: DetailedTimesheetEntry[] };
+  total_working_hours?: number | null;
+  project_time_data?: { projects: DetailedTimesheetEntry[] } | null;
   recruiter_report_data?: RecruitmentReport | any;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface DetailedTimesheetEntry {
@@ -147,4 +161,41 @@ export interface RecruitmentReport {
   walkIns: { expected: number; proofAttached: boolean; reminderNeeded: boolean };
   qualityCheck: { reviewedCount: number; candidateNames: string };
   targets: { source: number; calls: number; lineups: number; closures: number };
+}
+
+
+// ─── New: Regularization types ───────────────────────────────────────────────
+export type RegularizationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface RegularizationRequest {
+  id: string;
+  employee_id: string;
+  time_log_id?: string | null;
+  date: string;                        // yyyy-MM-dd
+  original_clock_in?: string | null;   // stored as "yyyy-MM-ddTHH:mm:ss"
+  original_clock_out?: string | null;
+  requested_clock_in: string;          // stored as "yyyy-MM-ddTHH:mm:ss"
+  requested_clock_out: string;
+  reason: string;
+  status: RegularizationStatus;
+  approver_id?: string | null;
+  approver_notes?: string | null;
+  organization_id: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  employee?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email?: string | null;
+    department_id?: string | null;
+  } | null;
+  time_log?: {
+    id: string;
+    clock_in_time?: string | null;
+    clock_out_time?: string | null;
+    duration_minutes?: number | null;
+    date: string;
+  } | null;
 }

@@ -181,7 +181,7 @@ const JobInformationStep = ({
           </div>
           <div className="space-y-2">
             <Label htmlFor="jobLocation">Job Location <span className="text-red-500">*</span></Label>
-            <LocationSelector selectedLocations={data.jobLocation || []} onChange={(locations) => handleFieldChange('jobLocation', locations)} />
+            <LocationSelector selectedLocations={data.jobLocation || []} onChange={(locations) => handleFieldChange('jobLocation', locations)} organizationId={organizationId} />
              <p className="text-xs text-gray-500">Multiple locations selectable.</p>
           </div>
         </div>
