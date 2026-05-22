@@ -89,9 +89,9 @@ function RevealBlock({ profile, onRevealDone }: RevealBlockProps) {
     const setErr  = revealType === "email" ? setEmailErr  : setPhoneErr;
     setLoad(true); setErr(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("contactout-enrich", {
-        body: { linkedinUrl: profile.linkedin_url, revealType, organizationId, userId },
-      });
+   const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal-contact", {
+     body: { linkedinUrl: profile.linkedin_url, revealType, organizationId, userId },
+   });
       if (fnErr || data?.error) { setErr(data?.message ?? fnErr?.message ?? "Reveal failed"); return; }
 
       const newEmails: TIRevealedEmail[] = data.allEmails ?? [];

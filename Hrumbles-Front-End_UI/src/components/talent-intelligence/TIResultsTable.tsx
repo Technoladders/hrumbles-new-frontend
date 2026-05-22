@@ -135,9 +135,9 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
     const setE = type==="email" ? setEErr  : setPErr;
     setL(true); setE(null);
     try {
-      const { data, error } = await supabase.functions.invoke("contactout-enrich", {
-        body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
-      });
+   const { data, error } = await supabase.functions.invoke("ti-reveal-contact", {
+     body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
+   });
       if (error||data?.error) { setE(data?.message ?? error?.message ?? "Failed"); return; }
       const ne: TIRevealedEmail[] = data.allEmails ?? [];
       const np: TIRevealedPhone[] = data.allPhones ?? [];
