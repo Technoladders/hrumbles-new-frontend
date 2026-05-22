@@ -83,34 +83,65 @@ function RevealBlock({ profile, onRevealDone }: RevealBlockProps) {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const reveal = async (revealType: "email" | "phone") => {
-    if (!organizationId) return;
-    const setLoad = revealType === "email" ? setEmailLoad : setPhoneLoad;
-    const setErr  = revealType === "email" ? setEmailErr  : setPhoneErr;
-    setLoad(true); setErr(null);
-    try {
-   const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal-contact", {
-     body: { linkedinUrl: profile.linkedin_url, revealType, organizationId, userId },
-   });
-      if (fnErr || data?.error) { setErr(data?.message ?? fnErr?.message ?? "Reveal failed"); return; }
-
-      const newEmails: TIRevealedEmail[] = data.allEmails ?? [];
-      const newPhones: TIRevealedPhone[] = data.allPhones ?? [];
-      const merged = {
-        emails: revealType === "email" ? newEmails : emails,
-        phones: revealType === "phone" ? newPhones : phones,
-      };
-      setEmails(merged.emails); setPhones(merged.phones);
-      onRevealDone(merged.emails, merged.phones);
-
-      const updates: Record<string,any> = { revealed_at: new Date().toISOString() };
-      if (merged.emails.length) updates.revealed_emails = merged.emails;
-      if (merged.phones.length) updates.revealed_phones = merged.phones;
-      supabase.from("master_contactout_profiles").update(updates).eq("id", profile.id).then(() => {});
-    } catch (err: any) {
-      setErr(err?.message ?? "Failed");
-    } finally { setLoad(false); }
-  };
+const reveal = async (revealType: "email" | "phone") => {
+  if (!organizationId) return;
+  const setLoad = revealType === "email" ? setEmailLoad : setPhoneLoad;
+  const setErr  = revealType === "email" ? setEmailErr  : setPhoneErr;
+  setLoad(true); setErr(null);
+  try {
+    const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal-contact", {
+      body: { linkedinUrl: profile.linkedin_url, revealType, organizationId, userId },
+    });
+ 
+    if (fnErr || data?.error) {
+      const msg = data?.message ?? data?.error ?? fnErr?.message ?? "Reveal failed";
+      if (data?.code === "INSUFFICIENT_CREDITS") setErr(`Insufficient credits. ${msg}`);
+      else setErr(msg);
+      return;
+    }
+ 
+    const newEmails: TIRevealedEmail[] = data.allEmails ?? [];
+    const newPhones: TIRevealedPhone[] = data.allPhones ?? [];
+ 
+    const mergedEmails = revealType === "email" ? newEmails : emails;
+    const mergedPhones = revealType === "phone" ? newPhones : phones;
+ 
+    setEmails(mergedEmails);
+    setPhones(mergedPhones);
+    onRevealDone(mergedEmails, mergedPhones);
+ 
+    // NOTE: No frontend supabase.update() here.
+    // Edge function handles persistence with service role.
+ 
+  } catch (err: any) {
+    setErr(err?.message ?? "Reveal failed. Please try again.");
+  } finally {
+    setLoad(false);
+  }
+};
+ 
+// ── REPLACE the existing useEffect (profile.id change sync) ───
+ 
+useEffect(() => {
+  setEmails(profile.revealed_emails ?? []);
+  setPhones(profile.revealed_phones ?? []);
+  setEmailErr(null);
+  setPhoneErr(null);
+}, [profile.id]);
+ 
+// ── ADD these syncs for length changes (cross-reveal type updates) ─
+ 
+useEffect(() => {
+  if ((profile.revealed_emails?.length ?? 0) > emails.length) {
+    setEmails(profile.revealed_emails ?? []);
+  }
+}, [profile.revealed_emails?.length ?? 0]);
+ 
+useEffect(() => {
+  if ((profile.revealed_phones?.length ?? 0) > phones.length) {
+    setPhones(profile.revealed_phones ?? []);
+  }
+}, [profile.revealed_phones?.length ?? 0]);
 
   const ca = profile.contact_availability;
   const canEmail = ca?.personal_email || ca?.work_email;

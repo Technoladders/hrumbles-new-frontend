@@ -4,7 +4,7 @@
 //  2. Tooltip/popover via ReactDOM.createPortal — always above sticky header
 //  3. First-col sticky corner: z-index layering (header-first > header > body-first > body)
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReactDOM from "react-dom";
 import {
   Mail, Phone, Linkedin, ChevronLeft, ChevronRight,
@@ -129,28 +129,56 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
 
   const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(() => setCopied(null), 1500); };
 
-  const reveal = async (type: "email"|"phone") => {
-    if (!organizationId) return;
-    const setL = type==="email" ? setELoad : setPLoad;
-    const setE = type==="email" ? setEErr  : setPErr;
-    setL(true); setE(null);
-    try {
-   const { data, error } = await supabase.functions.invoke("ti-reveal-contact", {
-     body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
-   });
-      if (error||data?.error) { setE(data?.message ?? error?.message ?? "Failed"); return; }
-      const ne: TIRevealedEmail[] = data.allEmails ?? [];
-      const np: TIRevealedPhone[] = data.allPhones ?? [];
-      const m = { emails: type==="email"?ne:emails, phones: type==="phone"?np:phones };
-      setEmails(m.emails); setPhones(m.phones);
-      onRevealDone(m.emails, m.phones);
-      const u: Record<string,any> = { revealed_at: new Date().toISOString() };
-      if (m.emails.length) u.revealed_emails = m.emails;
-      if (m.phones.length) u.revealed_phones = m.phones;
-      supabase.from("master_contactout_profiles").update(u).eq("id", profile.id).then(() => {});
-    } catch(e: any) { setE(e?.message ?? "Failed"); }
-    finally { setL(false); }
-  };
+const reveal = async (type: "email"|"phone") => {
+  if (!organizationId) return;
+  const setLoad = type==="email" ? setELoad : setPLoad;
+  const setErr  = type==="email" ? setEErr  : setPErr;
+  setLoad(true); setErr(null);
+  try {
+    const { data, error } = await supabase.functions.invoke("ti-reveal-contact", {
+      body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
+    });
+ 
+    if (error || data?.error) {
+      setErr(data?.message ?? data?.error ?? error?.message ?? "Reveal failed");
+      return;
+    }
+ 
+    const ne: TIRevealedEmail[] = data.allEmails ?? [];
+    const np: TIRevealedPhone[] = data.allPhones ?? [];
+    const m = {
+      emails: type === "email" ? ne : emails,
+      phones: type === "phone" ? np : phones,
+    };
+    setEmails(m.emails);
+    setPhones(m.phones);
+    onRevealDone(m.emails, m.phones);
+ 
+    // NOTE: No frontend supabase.update() here.
+    // The edge function (ti-reveal-contact) persists to master_contactout_profiles
+    // using service role, which is guaranteed to succeed regardless of RLS.
+    // This ensures data is available on the next page load / RPC call.
+ 
+  } catch (e: any) {
+    setErr(e?.message ?? "Failed");
+  } finally {
+    setLoad(false);
+  }
+};
+ 
+// ── ADD these useEffect syncs (if not already present) ────────
+// They ensure that when the RPC returns updated profile data (after refresh),
+// the component re-renders with the correct revealed state.
+ 
+useEffect(() => {
+  setEmails(profile.revealed_emails ?? []);
+  setEErr(null);
+}, [profile.id, profile.revealed_emails?.length ?? 0]);
+ 
+useEffect(() => {
+  setPhones(profile.revealed_phones ?? []);
+  setPErr(null);
+}, [profile.id, profile.revealed_phones?.length ?? 0]);
 
   const ca       = profile.contact_availability;
   const hasEmail = ca?.personal_email || ca?.work_email;
