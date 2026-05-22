@@ -200,7 +200,7 @@ const InvoiceDetails: React.FC<Props> = ({ invoiceId }) => {
                       <tr key={idx}>
                         <td className="py-4 px-3 text-gray-800">
                           <div className="font-bold">{item.title || item.description || 'N/A'}</div>
-                          {item.description && item.title && <div className="text-gray-500 text-[10px] mt-1">{item.description}</div>}
+                          {item.description && item.title && <div className="text-gray-500 text-[10px] mt-1 whitespace-pre-wrap break-words">{item.description}</div>}
                         </td>
                         <td className="py-4 px-3 text-right text-gray-600">{item.quantity || 1}</td>
                         <td className="py-4 px-3 text-right text-gray-600">{fmt(item.rate || 0)}</td>

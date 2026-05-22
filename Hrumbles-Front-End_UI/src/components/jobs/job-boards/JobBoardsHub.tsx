@@ -1,5 +1,5 @@
 // src/components/jobs/job-boards/JobBoardsHub.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   Radio, Settings, Search, LayoutGrid, List, Sparkles, Clock,
@@ -10,6 +10,8 @@ import {
   JOB_BOARDS, BOARDS_COUNT,
   type JobBoard,
 } from "./jobBoardsData";
+import { supabase } from "@/integrations/supabase/client";
+import { useSelector } from "react-redux";
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS = {
@@ -75,7 +77,7 @@ const BoardCard: React.FC<{ board: JobBoard; onConfigure: () => void }> = ({ boa
         >
           <Settings size={11} />
           {board.status === "partial"        ? "View Setup"  :
-           board.status === "available"      ? "Setup Feed"  :
+           board.status === "available"      ? "Manage"      :
            board.status === "not_configured" ? "Configure"   : "Configure"}
         </button>
       ) : (
@@ -171,12 +173,45 @@ type ViewMode  = "grid" | "list";
 type FilterKey = "all" | "available" | "partial" | "not_configured" | "coming_soon";
 
 export const JobBoardsHub: React.FC = () => {
-  const [view,      setView]      = useState<ViewMode>("grid");
-  const [filter,    setFilter]    = useState<FilterKey>("all");
-  const [search,    setSearch]    = useState("");
-  const [configure, setConfigure] = useState<JobBoard | null>(null);
+  const [view,            setView]            = useState<ViewMode>("grid");
+  const [filter,          setFilter]          = useState<FilterKey>("all");
+  const [search,          setSearch]          = useState("");
+  const [configure,       setConfigure]       = useState<JobBoard | null>(null);
+  // Dynamic: which API-push boards have tokens configured for this org
+  const [configuredBoards, setConfiguredBoards] = useState<string[]>([]);
 
-  const filtered = JOB_BOARDS.filter(b => {
+  const organization_id = useSelector((state: any) => state.auth.organization_id);
+
+  // ── Fetch which boards are configured for this org from DB ─────────────────
+  useEffect(() => {
+    if (!organization_id) return;
+    supabase
+      .from("hr_job_board_configs")
+      .select("board_id")
+      .eq("organization_id", organization_id)
+      .eq("is_active", true)
+      .then(({ data }) => {
+        if (data) setConfiguredBoards(data.map(r => r.board_id));
+      });
+  }, [organization_id]);
+
+  // ── Merge static board data with dynamic DB status ─────────────────────────
+  // For api_push boards: if token saved in DB → "available", else → "not_configured"
+  // For xml_feed and manual boards: keep static status as-is
+  const getBoardWithDynamicStatus = (board: JobBoard): JobBoard => {
+    if (board.integrationMode === "api_push") {
+      const isConfigured = configuredBoards.includes(board.id);
+      return {
+        ...board,
+        status: isConfigured ? "available" : "not_configured",
+      };
+    }
+    return board;
+  };
+
+  const boardsWithStatus = JOB_BOARDS.map(getBoardWithDynamicStatus);
+
+  const filtered = boardsWithStatus.filter(b => {
     const q = search.toLowerCase();
     const matchSearch = !q
       || b.name.toLowerCase().includes(q)
@@ -187,11 +222,11 @@ export const JobBoardsHub: React.FC = () => {
   });
 
   const counts = {
-    all:            JOB_BOARDS.length,
-    available:      JOB_BOARDS.filter(b => b.status === "available").length,
-    partial:        JOB_BOARDS.filter(b => b.status === "partial").length,
-    not_configured: JOB_BOARDS.filter(b => b.status === "not_configured").length,
-    coming_soon:    JOB_BOARDS.filter(b => b.status === "coming_soon").length,
+    all:            boardsWithStatus.length,
+    available:      boardsWithStatus.filter(b => b.status === "available").length,
+    partial:        boardsWithStatus.filter(b => b.status === "partial").length,
+    not_configured: boardsWithStatus.filter(b => b.status === "not_configured").length,
+    coming_soon:    boardsWithStatus.filter(b => b.status === "coming_soon").length,
   };
 
   return (

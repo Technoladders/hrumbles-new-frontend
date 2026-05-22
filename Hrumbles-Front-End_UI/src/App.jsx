@@ -569,7 +569,7 @@ function AppContent() {
               <Route path="/contacts-v2/list/:fileId" element={<ContactsV2Page />} />
               <Route path="/contacts-v2/discovery" element={<ContactsV2Page />} />
               <Route path="/recruiter-x" element={<RocketReachSearchPage />} />
-              <Route path="/talent-intelligence" element={<TalentIntelligencePage />} />
+              <Route path="/profile-hub" element={<TalentIntelligencePage />} />
               <Route path="/employee/time-tracker" element={<TimeTracker />} />
               <Route path="/employee/timesheet" element={<Timesheet />} />
               <Route path="/employee/regularization" element={<EmployeeRegularization />} />

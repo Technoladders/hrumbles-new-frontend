@@ -1,235 +1,417 @@
-// src/components/talent-intelligence/TIResultsTable.tsx  — v2
-// Proper table layout with inline reveal in email/phone columns + actions
+// src/components/talent-intelligence/TIResultsTable.tsx  — v5
+// Fixes:
+//  1. Sticky header — position:sticky on each <th> (not thead) with solid bg
+//  2. Tooltip/popover via ReactDOM.createPortal — always above sticky header
+//  3. First-col sticky corner: z-index layering (header-first > header > body-first > body)
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import {
   Mail, Phone, Linkedin, ChevronLeft, ChevronRight,
-  Eye, Loader2, Check, Copy, ExternalLink, Send,
-  Zap, MoreHorizontal,
+  Eye, Loader2, Check, Copy, Send, ExternalLink, Zap,
+  Bookmark, BookmarkCheck, Globe, X,
 } from "lucide-react";
-import { useSelector } from "react-redux";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
-import { TIProfile, TIRevealedEmail, TIRevealedPhone, TI_PAGE_SIZE } from "@/types/talentIntelligence";
+import {
+  TIProfile, TIRevealedEmail, TIRevealedPhone, TI_PAGE_SIZE,
+  calcYearsExperience,
+} from "@/types/talentIntelligence";
 
-// ── Helpers ───────────────────────────────────────────────────
+// ── CSS for sticky column solid backgrounds ───────────────────
+const STICKY_CSS = `
+  .ti-table tbody tr td.ti-col-sticky { background: #ffffff; }
+  .ti-table tbody tr:nth-child(even) td.ti-col-sticky { background: #f9f9fb; }
+  .ti-table tbody tr:hover td.ti-col-sticky { background: #f5f3ff !important; }
+`;
 
-function initials(name: string | null) {
-  return (name ?? "?").split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
-}
+// ── Portal tooltip (renders at document.body — always on top) ─
+function PortalTip({ trigger, content }: { trigger: React.ReactNode; content: React.ReactNode }) {
+  const [visible, setVisible]   = useState(false);
+  const [style,   setStyle]     = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const timer      = useRef<ReturnType<typeof setTimeout>>();
 
-function Avatar({ profile }: { profile: TIProfile }) {
-  const [imgErr, setImgErr] = useState(false);
-  if (profile.profile_picture_url && !imgErr) {
-    return (
-      <img src={profile.profile_picture_url} alt={profile.full_name ?? ""}
-        className="w-8 h-8 rounded-full object-cover border border-slate-200 flex-shrink-0"
-        onError={() => setImgErr(true)} />
-    );
-  }
+  const calcPos = useCallback(() => {
+    if (!triggerRef.current) return;
+    const r   = triggerRef.current.getBoundingClientRect();
+    const tip = { w: 240, h: 200 }; // estimated popover size
+    const left = Math.min(r.left, window.innerWidth - tip.w - 8);
+    const spaceAbove = r.top;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const goBelow = spaceAbove < tip.h && spaceBelow >= tip.h;
+    setStyle({
+      position: "fixed",
+      left: Math.max(8, left),
+      zIndex: 99999,
+      ...(goBelow
+        ? { top:    r.bottom + 6 }
+        : { bottom: window.innerHeight - r.top + 6 }),
+    });
+  }, []);
+
+  const show = () => { calcPos(); clearTimeout(timer.current); timer.current = setTimeout(() => setVisible(true), 220); };
+  const hide = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setVisible(false), 140); };
+
   return (
-    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
-      {initials(profile.full_name)}
+    <div ref={triggerRef} className="inline-flex" onMouseEnter={show} onMouseLeave={hide}>
+      {trigger}
+      {visible && ReactDOM.createPortal(
+        <div style={style}
+          className="bg-white border border-slate-200 rounded-xl shadow-2xl p-3 min-w-[160px] max-w-[250px] animate-in fade-in zoom-in-95 duration-100"
+          onMouseEnter={() => clearTimeout(timer.current)}
+          onMouseLeave={hide}>
+          {content}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
 
-function SeniorityBadge({ v }: { v: string | null }) {
-  if (!v) return null;
-  const map: Record<string, string> = {
-    "Entry": "bg-slate-100 text-slate-600",
-    "Senior": "bg-blue-100 text-blue-700",
-    "Manager": "bg-amber-100 text-amber-700",
-    "Director": "bg-orange-100 text-orange-700",
-    "VP": "bg-red-100 text-red-700",
-    "CXO": "bg-purple-100 text-purple-700",
-    "Owner / Founder": "bg-rose-100 text-rose-700",
-    "Partner": "bg-indigo-100 text-indigo-700",
-    "Head": "bg-cyan-100 text-cyan-700",
-    "Intern": "bg-green-100 text-green-700",
-  };
+// ── Avatar ────────────────────────────────────────────────────
+
+function Avatar({ profile, size = 26 }: { profile: TIProfile; size?: number }) {
+  const [err, setErr] = useState(false);
+  const sz  = `${size}px`;
+  const ini = (profile.full_name ?? "?").split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
+  if (profile.profile_picture_url && !err) {
+    return (
+      <img src={profile.profile_picture_url} alt={profile.full_name ?? ""}
+        style={{ width: sz, height: sz }}
+        className="rounded-full object-cover ring-1 ring-slate-100 flex-shrink-0"
+        onError={() => setErr(true)} />
+    );
+  }
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap ${map[v] ?? "bg-slate-100 text-slate-600"}`}>
-      {v}
-    </span>
+    <div style={{ width: sz, height: sz, fontSize: Math.round(size * 0.34) }}
+      className="rounded-full bg-gradient-to-br from-violet-100 to-purple-200 ring-1 ring-slate-100 flex items-center justify-center font-bold text-violet-700 flex-shrink-0">
+      {ini}
+    </div>
+  );
+}
+
+// ── Company logo ──────────────────────────────────────────────
+
+function CompanyLogo({ profile }: { profile: TIProfile }) {
+  const [err, setErr] = useState(false);
+  const domain = profile.company_domain ?? (profile.company as any)?.domain;
+  const logo   = (profile.company as any)?.logo_url;
+  if (logo && !err)   return <img src={logo} alt="" className="w-4 h-4 rounded object-contain flex-shrink-0" onError={() => setErr(true)} />;
+  if (domain && !err) return <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`} alt="" className="w-4 h-4 rounded flex-shrink-0" onError={() => setErr(true)} />;
+  return (
+    <div className="w-4 h-4 rounded bg-slate-100 flex items-center justify-center flex-shrink-0 text-[8px] font-bold text-slate-400">
+      {(profile.company_name ?? "?")[0]}
+    </div>
   );
 }
 
 // ── Inline reveal cell ────────────────────────────────────────
 
 interface RevealCellProps {
-  profileId:     string;
-  linkedinUrl:   string;
-  revealType:    "email" | "phone";
-  available:     boolean;
-  initialEmails: TIRevealedEmail[];
-  initialPhones: TIRevealedPhone[];
-  onRevealDone:  (emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
+  profile:      TIProfile;
+  onRevealDone: (emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
 }
 
-function RevealCell({
-  profileId, linkedinUrl, revealType, available,
-  initialEmails, initialPhones, onRevealDone,
-}: RevealCellProps) {
-  const authData        = getAuthDataFromLocalStorage();
-  const organizationId  = authData?.organization_id ?? null;
-  const userId          = authData?.userId ?? null;
+function RevealCell({ profile, onRevealDone }: RevealCellProps) {
+  const auth           = getAuthDataFromLocalStorage();
+  const organizationId = auth?.organization_id ?? null;
+  const userId         = auth?.userId ?? null;
 
-  const [emails,   setEmails]   = useState<TIRevealedEmail[]>(initialEmails);
-  const [phones,   setPhones]   = useState<TIRevealedPhone[]>(initialPhones);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
-  const [copied,   setCopied]   = useState(false);
+  const [emails, setEmails] = useState<TIRevealedEmail[]>(profile.revealed_emails ?? []);
+  const [phones, setPhones] = useState<TIRevealedPhone[]>(profile.revealed_phones ?? []);
+  const [eLoad,  setELoad]  = useState(false);
+  const [pLoad,  setPLoad]  = useState(false);
+  const [eErr,   setEErr]   = useState<string|null>(null);
+  const [pErr,   setPErr]   = useState<string|null>(null);
+  const [copied, setCopied] = useState<string|null>(null);
 
-  // Sync when initial data changes (another cell triggered reveal)
-  React.useEffect(() => { setEmails(initialEmails); }, [initialEmails.length]);
-  React.useEffect(() => { setPhones(initialPhones); }, [initialPhones.length]);
+  const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(() => setCopied(null), 1500); };
 
-  const revealed = revealType === "email" ? emails : phones;
-  const primary  = revealType === "email"
-    ? (emails.find(e => e.is_primary) ?? emails[0])
-    : (phones.find(p => p.recommended) ?? phones[0]);
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const doReveal = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!organizationId || loading) return;
-    setLoading(true); setError(null);
+  const reveal = async (type: "email"|"phone") => {
+    if (!organizationId) return;
+    const setL = type==="email" ? setELoad : setPLoad;
+    const setE = type==="email" ? setEErr  : setPErr;
+    setL(true); setE(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("contactout-enrich", {
-        body: { linkedinUrl, revealType, organizationId, userId },
+      const { data, error } = await supabase.functions.invoke("contactout-enrich", {
+        body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
       });
-      if (fnErr || data?.error) {
-        setError(data?.message ?? fnErr?.message ?? "Reveal failed");
-        return;
-      }
-      const newEmails: TIRevealedEmail[] = data.allEmails ?? [];
-      const newPhones: TIRevealedPhone[] = data.allPhones ?? [];
-      const merged = {
-        emails: revealType === "email" ? newEmails : emails,
-        phones: revealType === "phone" ? newPhones : phones,
-      };
-      setEmails(merged.emails);
-      setPhones(merged.phones);
-      onRevealDone(merged.emails, merged.phones);
-
-      // Persist to master table
-      const updates: Record<string, any> = { revealed_at: new Date().toISOString() };
-      if (merged.emails.length) updates.revealed_emails = merged.emails;
-      if (merged.phones.length) updates.revealed_phones = merged.phones;
-      supabase.from("master_contactout_profiles").update(updates).eq("id", profileId).then(() => {});
-    } catch (err: any) {
-      setError(err?.message ?? "Failed");
-    } finally {
-      setLoading(false);
-    }
+      if (error||data?.error) { setE(data?.message ?? error?.message ?? "Failed"); return; }
+      const ne: TIRevealedEmail[] = data.allEmails ?? [];
+      const np: TIRevealedPhone[] = data.allPhones ?? [];
+      const m = { emails: type==="email"?ne:emails, phones: type==="phone"?np:phones };
+      setEmails(m.emails); setPhones(m.phones);
+      onRevealDone(m.emails, m.phones);
+      const u: Record<string,any> = { revealed_at: new Date().toISOString() };
+      if (m.emails.length) u.revealed_emails = m.emails;
+      if (m.phones.length) u.revealed_phones = m.phones;
+      supabase.from("master_contactout_profiles").update(u).eq("id", profile.id).then(() => {});
+    } catch(e: any) { setE(e?.message ?? "Failed"); }
+    finally { setL(false); }
   };
 
-  if (!available) {
-    return <span className="text-[10px] text-slate-300">—</span>;
-  }
+  const ca       = profile.contact_availability;
+  const hasEmail = ca?.personal_email || ca?.work_email;
+  const hasPhone = ca?.phone;
+  const pe = emails[0];
+  const pp = phones[0];
 
-  // Already revealed: show primary value + copy
-  if (primary) {
-    const val = revealType === "email" ? (primary as TIRevealedEmail).email : (primary as TIRevealedPhone).number;
-    return (
-      <div className="flex items-center gap-1 min-w-0">
-        <span className="text-xs text-slate-700 font-medium truncate max-w-[130px]" title={val}>{val}</span>
-        {revealed.length > 1 && (
-          <span className="text-[9px] text-slate-400 bg-slate-100 rounded px-1 flex-shrink-0">+{revealed.length - 1}</span>
-        )}
-        <button onClick={e => { e.stopPropagation(); copyToClipboard(val); }}
-          className="p-0.5 text-slate-400 hover:text-violet-600 flex-shrink-0 transition-colors">
-          {copied ? <Check size={10} className="text-green-500" /> : <Copy size={10} />}
-        </button>
-      </div>
-    );
-  }
+  const allEmailsContent = (
+    <div className="space-y-1.5">
+      <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Emails</p>
+      {emails.map((e, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+          <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{e.email}</span>
+          <button onClick={() => copy(e.email)} className="text-slate-300 hover:text-violet-500 flex-shrink-0 transition-colors">
+            {copied===e.email ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 
-  // Not revealed yet
+  const allPhonesContent = (
+    <div className="space-y-1.5">
+      <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Phones</p>
+      {phones.map((p, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+          <span className="text-[10px] font-mono text-slate-700 flex-1">{p.number}</span>
+          {p.recommended && <span className="text-[7px] px-1 bg-green-100 text-green-700 rounded flex-shrink-0">✓</span>}
+          <button onClick={() => copy(p.number)} className="text-slate-300 hover:text-violet-500 flex-shrink-0 transition-colors">
+            {copied===p.number ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="flex items-center gap-1">
-      {error ? (
-        <span className="text-[10px] text-red-500 truncate max-w-[100px]">{error}</span>
-      ) : (
-        <button onClick={doReveal} disabled={loading}
-          className="flex items-center gap-1 px-2 py-0.5 rounded border border-violet-200 text-violet-600 text-[10px] font-medium hover:bg-violet-50 disabled:opacity-50 transition-colors whitespace-nowrap">
-          {loading ? <Loader2 size={9} className="animate-spin" /> : <Eye size={9} />}
-          {loading ? "…" : "Reveal"}
-        </button>
+    <div className="flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
+      {/* Email */}
+      {hasEmail && (
+        pe ? (
+          <PortalTip trigger={
+            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 cursor-default max-w-[130px] group/cell">
+              <Check size={8} className="text-emerald-500 flex-shrink-0" />
+              <span className="text-[9px] font-mono text-slate-700 truncate">{pe.email}</span>
+              {emails.length > 1 && <span className="text-[8px] text-slate-400 flex-shrink-0">+{emails.length-1}</span>}
+            </div>
+          } content={allEmailsContent} />
+        ) : (
+          <button disabled={eLoad} onClick={() => reveal("email")}
+            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
+              eErr ? "border-red-200 text-red-400" : "border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
+            {eLoad ? <Loader2 size={8} className="animate-spin" /> : <Mail size={8} />}
+            {eLoad ? "…" : "Email"}
+          </button>
+        )
       )}
+      {/* Phone */}
+      {hasPhone && (
+        pp ? (
+          <PortalTip trigger={
+            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 cursor-default max-w-[130px]">
+              <Check size={8} className="text-emerald-500 flex-shrink-0" />
+              <span className="text-[9px] font-mono text-slate-700 truncate">{pp.number}</span>
+              {phones.length > 1 && <span className="text-[8px] text-slate-400 flex-shrink-0">+{phones.length-1}</span>}
+            </div>
+          } content={allPhonesContent} />
+        ) : (
+          <button disabled={pLoad} onClick={() => reveal("phone")}
+            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
+              pErr ? "border-red-200 text-red-400" : "border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
+            {pLoad ? <Loader2 size={8} className="animate-spin" /> : <Phone size={8} />}
+            {pLoad ? "…" : "Phone"}
+          </button>
+        )
+      )}
+      {!hasEmail && !hasPhone && <span className="text-[9px] text-slate-300">—</span>}
+    </div>
+  );
+}
+
+// ── Skills cell ───────────────────────────────────────────────
+
+function SkillsCell({ skills, activeSkillLabels }: { skills: string[] | null; activeSkillLabels?: Set<string> }) {
+  const all  = skills ?? [];
+  const top  = all.slice(0, 2);
+  const rest = all.slice(2);
+  if (!all.length) return <span className="text-[9px] text-slate-300">—</span>;
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {top.map(sk => {
+        const isMatch = activeSkillLabels?.has(sk.toLowerCase());
+        return (
+          <span key={sk} className={cn("px-1.5 py-0.5 rounded text-[9px] font-medium border",
+            isMatch ? "bg-violet-100 text-violet-700 border-violet-300 ring-1 ring-violet-400" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            {sk}
+          </span>
+        );
+      })}
+      {rest.length > 0 && (
+        <PortalTip
+          trigger={
+            <button className="text-[9px] text-violet-500 hover:text-violet-700 font-bold transition-colors px-0.5">
+              +{rest.length}
+            </button>
+          }
+          content={
+            <div>
+              <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Skills ({all.length})</p>
+              <div className="flex flex-wrap gap-1">
+                {all.map(sk => {
+                  const m = activeSkillLabels?.has(sk.toLowerCase());
+                  return (
+                    <span key={sk} className={cn("px-1.5 py-0.5 rounded text-[9px] font-medium border",
+                      m ? "bg-violet-100 text-violet-700 border-violet-300" : "bg-slate-100 text-slate-500 border-slate-200")}>
+                      {sk}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Invite contact picker ─────────────────────────────────────
+
+interface InvitePickerProps {
+  emails:    TIRevealedEmail[];
+  phones:    TIRevealedPhone[];
+  onConfirm: (email: string|null, phone: string|null) => void;
+  onClose:   () => void;
+}
+
+function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps) {
+  const ref            = useRef<HTMLDivElement>(null);
+  const personalEmails = emails.filter(e => e.type==="personal"||e.is_primary);
+  const displayEmails  = personalEmails.length > 0 ? personalEmails : emails.slice(0,1);
+  const [sel, setSel]  = useState<{ kind:"email"|"phone"; value:string }|null>(
+    displayEmails[0] ? { kind:"email", value:displayEmails[0].email }
+    : phones[0]      ? { kind:"phone", value:phones[0].number }
+    : null
+  );
+
+  React.useEffect(() => {
+    const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    setTimeout(() => document.addEventListener("mousedown", fn), 100);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [onClose]);
+
+  return (
+    <div ref={ref}
+      className="absolute right-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl z-[9999] p-3 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Invite via</p>
+        <button onClick={onClose} className="text-slate-300 hover:text-slate-500 transition-colors"><X size={10} /></button>
+      </div>
+      {displayEmails.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Email</p>
+          {displayEmails.map((e, i) => (
+            <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1 transition-colors">
+              <input type="radio" name="ti-invite-sel" checked={sel?.kind==="email"&&sel.value===e.email}
+                onChange={() => setSel({kind:"email",value:e.email})} className="accent-violet-600 flex-shrink-0" />
+              <span className="text-[10px] font-mono text-slate-700 truncate">{e.email}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      {phones.length > 0 && (
+        <div className="space-y-0.5">
+          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Phone</p>
+          {phones.slice(0,3).map((ph, i) => (
+            <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1 transition-colors">
+              <input type="radio" name="ti-invite-sel" checked={sel?.kind==="phone"&&sel.value===ph.number}
+                onChange={() => setSel({kind:"phone",value:ph.number})} className="accent-violet-600 flex-shrink-0" />
+              <div className="flex items-center gap-1.5 flex-1">
+                <span className="text-[10px] font-mono text-slate-700">{ph.number}</span>
+                {ph.recommended && <span className="text-[8px] px-1 bg-green-100 text-green-700 rounded">✓</span>}
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+      <button disabled={!sel}
+        onClick={() => sel && onConfirm(sel.kind==="email"?sel.value:null, sel.kind==="phone"?sel.value:null)}
+        className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90 text-white disabled:opacity-40 transition-all flex items-center justify-center gap-1.5">
+        <Send size={10} /> Continue →
+      </button>
     </div>
   );
 }
 
 // ── Pagination ────────────────────────────────────────────────
 
-interface PaginationProps { page: number; total: number; onPageChange: (p: number) => void; }
-function Pagination({ page, total, onPageChange }: PaginationProps) {
+function Pagination({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / TI_PAGE_SIZE);
   if (totalPages <= 1) return null;
-  const start = (page - 1) * TI_PAGE_SIZE + 1;
-  const end   = Math.min(page * TI_PAGE_SIZE, total);
-
-  const range: (number | "…")[] = [];
-  if (totalPages <= 7) { for (let i = 1; i <= totalPages; i++) range.push(i); }
+  const start = (page-1)*TI_PAGE_SIZE+1, end = Math.min(page*TI_PAGE_SIZE,total);
+  const range: (number|"…")[] = [];
+  if (totalPages <= 7) { for (let i=1;i<=totalPages;i++) range.push(i); }
   else {
-    range.push(1);
-    if (page > 3) range.push("…");
-    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) range.push(i);
-    if (page < totalPages - 2) range.push("…");
-    range.push(totalPages);
+    range.push(1); if (page>3) range.push("…");
+    for (let i=Math.max(2,page-1);i<=Math.min(totalPages-1,page+1);i++) range.push(i);
+    if (page<totalPages-2) range.push("…"); range.push(totalPages);
   }
-
   return (
-    <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-white flex-shrink-0">
+    <div className="flex items-center justify-between px-4 py-2 border-t border-slate-100 bg-white flex-shrink-0">
       <p className="text-xs text-slate-500">
-        <span className="font-medium text-slate-700">{start}–{end}</span> of{" "}
-        <span className="font-medium text-slate-700">{total.toLocaleString()}</span>
+        <span className="font-medium text-slate-700">{start}–{end}</span> of <span className="font-medium text-slate-700">{total.toLocaleString()}</span>
       </p>
       <div className="flex items-center gap-1">
-        <button onClick={() => onPageChange(page - 1)} disabled={page === 1}
-          className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors">
-          <ChevronLeft size={14} />
-        </button>
-        {range.map((r, i) => r === "…" ? (
-          <span key={`e${i}`} className="px-1.5 text-slate-400 text-xs">…</span>
-        ) : (
-          <button key={r} onClick={() => onPageChange(r as number)}
-            className={`w-7 h-7 rounded text-xs font-medium transition-colors ${r === page ? "bg-violet-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
-            {r}
-          </button>
-        ))}
-        <button onClick={() => onPageChange(page + 1)} disabled={page === Math.ceil(total / TI_PAGE_SIZE)}
-          className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors">
-          <ChevronRight size={14} />
-        </button>
+        <button onClick={()=>onChange(page-1)} disabled={page===1} className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"><ChevronLeft size={13}/></button>
+        {range.map((r,i) => r==="…"
+          ? <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
+          : <button key={r} onClick={()=>onChange(r as number)} className={cn("w-6 h-6 rounded text-xs font-medium transition-colors", r===page?"bg-violet-600 text-white":"text-slate-600 hover:bg-slate-100")}>{r}</button>
+        )}
+        <button onClick={()=>onChange(page+1)} disabled={page===Math.ceil(total/TI_PAGE_SIZE)} className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"><ChevronRight size={13}/></button>
       </div>
     </div>
   );
 }
 
 // ── Skeleton ──────────────────────────────────────────────────
-
 function SkeletonRow() {
   return (
-    <tr className="animate-pulse">
-      {Array.from({ length: 9 }).map((_, i) => (
-        <td key={i} className="px-3 py-3">
-          <div className="h-3 bg-slate-100 rounded w-full" />
-        </td>
+    <tr className="animate-pulse border-b border-slate-50">
+      {[160,120,130,140,130,110,70].map((w,i)=>(
+        <td key={i} className="px-3 py-2"><div className="h-3 bg-slate-100 rounded" style={{width:`${Math.min(w,100)}%`}}/></td>
       ))}
     </tr>
   );
 }
 
-// ── Main table ────────────────────────────────────────────────
+// ── Column config ─────────────────────────────────────────────
+const COLS = [
+  { label:"Profile",  minW:160 },
+  { label:"Contact",  minW:128 },
+  { label:"Title",    minW:130 },
+  { label:"Skills",   minW:148 },
+  { label:"Company",  minW:130 },
+  { label:"Location", minW:110 },
+  { label:"Actions",  minW:80  },
+] as const;
+
+// ── Sticky th style helper ─────────────────────────────────────
+// z: header-first=31, header-rest=30, body-first=1, body-rest=auto
+const thStyle = (i: number): React.CSSProperties => ({
+  position:  "sticky",
+  top:        0,
+  background: "#f8fafc",
+  zIndex:     i === 0 ? 31 : 30,
+  ...(i === 0 ? { left: 0 } : {}),
+});
+
+// ── Main export ───────────────────────────────────────────────
 
 export interface TIResultsTableProps {
   profiles:        TIProfile[];
@@ -237,26 +419,43 @@ export interface TIResultsTableProps {
   page:            number;
   isLoading:       boolean;
   isSearching:     boolean;
+  activeFilters:   { skillChips?: { label: string; mode: string }[]; titles?: string[]; query?: string };
   onSelectProfile: (p: TIProfile) => void;
-  onInvite:        (p: TIProfile) => void;
+  onInvite:        (p: TIProfile, email: string|null, phone: string|null) => void;
   onPageChange:    (p: number) => void;
   onRevealUpdate:  (id: string, emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
 }
 
 export function TIResultsTable({
   profiles, total, page, isLoading, isSearching,
-  onSelectProfile, onInvite, onPageChange, onRevealUpdate,
+  activeFilters, onSelectProfile, onInvite, onPageChange, onRevealUpdate,
 }: TIResultsTableProps) {
+  const [saved,          setSaved]          = useState<Set<string>>(new Set());
+  const [invitePickerId, setInvitePickerId] = useState<string|null>(null);
+
+  const activeSkillLabels = new Set(
+    (activeFilters.skillChips ?? [])
+      .filter(c => c.mode==="must"||c.mode==="nice")
+      .map(c => c.label.toLowerCase())
+  );
+
+  // ── Skeleton ─────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead><tr className="bg-slate-50 border-b border-slate-200">
-            {["Profile","Title","Company","Location","Seniority","Skills","Email","Phone","Actions"].map(h => (
-              <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>{Array.from({ length: 10 }).map((_, i) => <SkeletonRow key={i} />)}</tbody>
+        <style>{STICKY_CSS}</style>
+        <table className="w-full border-collapse ti-table" style={{ minWidth: 960 }}>
+          <thead>
+            <tr>
+              {COLS.map((c,i) => (
+                <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }}
+                  className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide border-b border-slate-200">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{Array.from({length:10}).map((_,i)=><SkeletonRow key={i}/>)}</tbody>
         </table>
       </div>
     );
@@ -266,151 +465,168 @@ export function TIResultsTable({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      {isSearching && <div className="h-0.5 bg-gradient-to-r from-violet-400 via-violet-600 to-violet-400 animate-pulse flex-shrink-0" />}
+      <style>{STICKY_CSS}</style>
 
-      {/* Table */}
+      {isSearching && (
+        <div className="h-0.5 bg-gradient-to-r from-violet-500 via-purple-400 to-pink-500 animate-pulse flex-shrink-0" />
+      )}
+
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse min-w-[960px]">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-slate-50 border-b border-slate-200">
-              {[
-                { label: "Profile",   cls: "w-[200px]" },
-                { label: "Title",     cls: "w-[160px]" },
-                { label: "Company",   cls: "w-[140px]" },
-                { label: "Location",  cls: "w-[130px]" },
-                { label: "Level",     cls: "w-[100px]" },
-                { label: "Skills",    cls: "w-[160px]" },
-                { label: "Email",     cls: "w-[170px]" },
-                { label: "Phone",     cls: "w-[140px]" },
-                { label: "Actions",   cls: "w-[90px]"  },
-              ].map(col => (
-                <th key={col.label} className={`px-3 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap ${col.cls}`}>
-                  {col.label}
+        <table className="w-full border-collapse ti-table" style={{ minWidth: 960 }}>
+          {/* ── Header — sticky via inline style on each th ── */}
+          <thead>
+            <tr>
+              {COLS.map((c,i) => (
+                <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }}
+                  className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap border-b border-slate-200">
+                  {c.label}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50">
-            {profiles.map(profile => {
-              const isOpenToWork = profile.work_status === "open_to_work";
-              const currentExp   = (profile.experience ?? []).find(e => e.is_current);
-              const company      = profile.company_name ?? currentExp?.company_name ?? "—";
-              const skills       = (profile.skills ?? []).slice(0, 3);
-              const hasEmail     = !!(profile.contact_availability?.personal_email || profile.contact_availability?.work_email);
-              const hasPhone     = !!profile.contact_availability?.phone;
+
+          {/* ── Body ── */}
+          <tbody>
+            {profiles.map((profile, idx) => {
+              const isOTW     = profile.work_status === "open_to_work";
+              const yrs       = calcYearsExperience(profile.experience);
+              const domain    = profile.company_domain ?? (profile.company as any)?.domain;
+              const isSaved   = saved.has(profile.id);
+              const hasReveal = (profile.revealed_emails?.length??0)>0 || (profile.revealed_phones?.length??0)>0;
+              const showPick  = invitePickerId === profile.id;
+
+              const titleWords = [
+                ...(activeFilters.titles ?? []),
+                ...(activeFilters.query?.split(/\s+/).filter(w=>w.length>2) ?? []),
+              ].map(w=>w.toLowerCase()).filter(Boolean);
+
+              const highlightTitle = (text: string) => {
+                if (!titleWords.length) return <>{text}</>;
+                const parts = text.split(new RegExp(`(${titleWords.join("|")})`, "gi"));
+                return <>{parts.map((p,i) => titleWords.includes(p.toLowerCase()) ? <mark key={i} className="bg-yellow-100 text-yellow-900 rounded px-0.5 not-italic">{p}</mark> : <span key={i}>{p}</span>)}</>;
+              };
 
               return (
-                <tr key={profile.id}
-                  onClick={() => onSelectProfile(profile)}
-                  className="hover:bg-violet-50/40 cursor-pointer transition-colors group">
+                <tr key={profile.id} onClick={() => onSelectProfile(profile)}
+                  className="border-b border-slate-50 cursor-pointer group"
+                  style={{ background: idx%2===0 ? undefined : "#f9f9fb" }}>
 
-                  {/* Profile */}
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                  {/* 1. Profile — sticky left */}
+                  <td className="px-3 py-2 ti-col-sticky" style={{ position:"sticky", left:0, zIndex:1 }}>
+                    <div className="flex items-center gap-2 min-w-0">
                       <div className="relative flex-shrink-0">
                         <Avatar profile={profile} />
-                        {isOpenToWork && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border border-white flex items-center justify-center">
-                            <Zap size={6} className="text-white" />
+                        {isOTW && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border border-white flex items-center justify-center">
+                            <Zap size={5} className="text-white" />
                           </div>
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-violet-700 transition-colors leading-tight">
-                          {profile.full_name ?? "Unknown"}
-                        </p>
-                        {profile.linkedin_url && (
-                          <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="text-[#0A66C2] hover:text-[#004182] transition-colors inline-flex items-center gap-0.5">
-                            <Linkedin size={9} />
-                          </a>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-[11px] font-semibold text-slate-800 truncate leading-tight group-hover:text-violet-700 transition-colors">
+                            {profile.full_name ?? "Unknown"}
+                          </span>
+                          {profile.linkedin_url && (
+                            <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer"
+                              onClick={e=>e.stopPropagation()}
+                              className="flex-shrink-0 text-slate-300 hover:text-[#0A66C2] transition-colors">
+                              <Linkedin size={9} />
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          {profile.seniority && (
+                            <span className="text-[8px] px-1 py-px rounded bg-violet-100 text-violet-700 font-bold leading-none whitespace-nowrap">{profile.seniority}</span>
+                          )}
+                          {yrs !== null && (
+                            <span className="text-[8px] text-slate-400 leading-none">{yrs}y</span>
+                          )}
+                          {isOTW && (
+                            <span className="text-[7px] px-1 py-px rounded-full bg-green-100 text-green-700 font-bold leading-none">OTW</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
 
-                  {/* Title */}
-                  <td className="px-3 py-2.5">
-                    <p className="text-xs text-slate-600 truncate max-w-[150px]" title={profile.title ?? ""}>
-                      {profile.title ?? "—"}
-                    </p>
+                  {/* 2. Contact */}
+                  <td className="px-3 py-2" onClick={e=>e.stopPropagation()}>
+                    <RevealCell profile={profile} onRevealDone={(em,ph)=>onRevealUpdate(profile.id,em,ph)} />
                   </td>
 
-                  {/* Company */}
-                  <td className="px-3 py-2.5">
-                    <p className="text-xs text-slate-700 font-medium truncate max-w-[130px]" title={company}>{company}</p>
-                    {profile.company_industry && (
-                      <p className="text-[10px] text-slate-400 truncate max-w-[130px]">{profile.company_industry}</p>
+                  {/* 3. Title — compact */}
+                  <td className="px-3 py-2">
+                    <p className="text-[10px] text-slate-700 leading-snug font-medium truncate max-w-[125px]" title={profile.title??""}>
+                      {profile.title ? highlightTitle(profile.title) : <span className="text-slate-300">—</span>}
+                    </p>
+                    {profile.job_function && (
+                      <p className="text-[9px] text-slate-400 truncate mt-0.5 max-w-[125px]">{profile.job_function}</p>
                     )}
                   </td>
 
-                  {/* Location */}
-                  <td className="px-3 py-2.5">
-                    <p className="text-xs text-slate-500 truncate max-w-[120px]" title={profile.location ?? ""}>{profile.location ?? "—"}</p>
+                  {/* 4. Skills */}
+                  <td className="px-3 py-2">
+                    <SkillsCell skills={profile.skills} activeSkillLabels={activeSkillLabels.size>0?activeSkillLabels:undefined} />
                   </td>
 
-                  {/* Level + Function */}
-                  <td className="px-3 py-2.5">
-                    <div className="space-y-1">
-                      <SeniorityBadge v={profile.seniority} />
-                      {profile.job_function && (
-                        <p className="text-[10px] text-slate-400 truncate max-w-[90px]">{profile.job_function}</p>
-                      )}
-                    </div>
+                  {/* 5. Company */}
+                  <td className="px-3 py-2">
+                    {profile.company_name ? (
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <CompanyLogo profile={profile} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold text-slate-700 truncate leading-tight">{profile.company_name}</p>
+                          {domain && (
+                            <a href={`https://${domain}`} target="_blank" rel="noopener noreferrer"
+                              onClick={e=>e.stopPropagation()}
+                              className="flex items-center gap-0.5 text-[8px] text-slate-400 hover:text-violet-500 transition-colors mt-0.5">
+                              <Globe size={7}/><span className="truncate">{domain}</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : <span className="text-[9px] text-slate-300">—</span>}
                   </td>
 
-                  {/* Skills */}
-                  <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {skills.map(sk => (
-                        <span key={sk} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] truncate max-w-[70px]" title={sk}>{sk}</span>
-                      ))}
-                      {(profile.skills?.length ?? 0) > 3 && (
-                        <span className="text-[10px] text-slate-400">+{(profile.skills?.length ?? 0) - 3}</span>
-                      )}
-                    </div>
+                  {/* 6. Location */}
+                  <td className="px-3 py-2">
+                    <p className="text-[10px] text-slate-500 truncate max-w-[105px]">{profile.location ?? "—"}</p>
+                    {profile.country && profile.location!==profile.country && (
+                      <p className="text-[9px] text-slate-400 truncate mt-0.5">{profile.country}</p>
+                    )}
                   </td>
 
-                  {/* Email */}
-                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <RevealCell
-                      profileId={profile.id}
-                      linkedinUrl={profile.linkedin_url}
-                      revealType="email"
-                      available={hasEmail}
-                      initialEmails={profile.revealed_emails ?? []}
-                      initialPhones={profile.revealed_phones ?? []}
-                      onRevealDone={(em, ph) => onRevealUpdate(profile.id, em, ph)}
-                    />
-                  </td>
-
-                  {/* Phone */}
-                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <RevealCell
-                      profileId={profile.id}
-                      linkedinUrl={profile.linkedin_url}
-                      revealType="phone"
-                      available={hasPhone}
-                      initialEmails={profile.revealed_emails ?? []}
-                      initialPhones={profile.revealed_phones ?? []}
-                      onRevealDone={(em, ph) => onRevealUpdate(profile.id, em, ph)}
-                    />
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={() => onSelectProfile(profile)}
-                        title="View profile"
-                        className="p-1.5 rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors">
-                        <ExternalLink size={13} />
+                  {/* 7. Actions */}
+                  <td className="px-3 py-2" onClick={e=>e.stopPropagation()}>
+                    <div className="flex items-center gap-0.5 relative">
+                      <button onClick={()=>onSelectProfile(profile)} title="View profile"
+                        className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all">
+                        <ExternalLink size={11}/>
                       </button>
-                      <button onClick={() => onInvite(profile)}
-                        title="Send invite"
-                        className="p-1.5 rounded text-slate-400 hover:text-green-600 hover:bg-green-50 transition-colors">
-                        <Send size={13} />
+                      <button
+                        onClick={()=>hasReveal && setInvitePickerId(showPick?null:profile.id)}
+                        title={hasReveal?"Send invite":"Reveal contact first to invite"}
+                        disabled={!hasReveal}
+                        className={cn("w-6 h-6 flex items-center justify-center rounded transition-all",
+                          hasReveal ? "text-slate-400 hover:text-green-600 hover:bg-green-50" : "text-slate-200 cursor-not-allowed")}>
+                        <Send size={11}/>
                       </button>
+                      <button
+                        onClick={()=>setSaved(p=>{const s=new Set(p); isSaved?s.delete(profile.id):s.add(profile.id); return s;})}
+                        title={isSaved?"Saved":"Save"}
+                        className={cn("w-6 h-6 flex items-center justify-center rounded transition-all",
+                          isSaved?"text-emerald-600 bg-emerald-50":"text-slate-400 hover:text-violet-600 hover:bg-violet-50")}>
+                        {isSaved ? <BookmarkCheck size={11}/> : <Bookmark size={11}/>}
+                      </button>
+                      {showPick && (
+                        <InvitePicker
+                          emails={profile.revealed_emails??[]}
+                          phones={profile.revealed_phones??[]}
+                          onConfirm={(em,ph)=>{ setInvitePickerId(null); onInvite(profile,em,ph); }}
+                          onClose={()=>setInvitePickerId(null)}
+                        />
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -420,8 +636,7 @@ export function TIResultsTable({
         </table>
       </div>
 
-      {/* Pagination */}
-      <Pagination page={page} total={total} onPageChange={onPageChange} />
+      <Pagination page={page} total={total} onChange={onPageChange} />
     </div>
   );
 }

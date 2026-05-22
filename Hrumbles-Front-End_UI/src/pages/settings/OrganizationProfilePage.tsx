@@ -374,26 +374,33 @@ const [orgRevertEnabled, setOrgRevertEnabled] = useState(false);
     </CardTitle>
   </CardHeader>
 
-  <CardContent className="space-y-3">
+<CardContent className="space-y-3">
+  <div className="flex items-center justify-between">
     <p className="text-xs text-gray-500">
       Control which employees can revert candidate statuses.
     </p>
+    {employees.length > 0 && (
+      <Badge variant="outline" className="text-xs">
+        {employees.length} employee{employees.length !== 1 ? 's' : ''}
+      </Badge>
+    )}
+  </div>
 
-    {employees.length === 0 ? (
-      <div className="text-sm text-gray-400">
-        No employees found.
-      </div>
-    ) : (
-      <div className="space-y-2">
+  {employees.length === 0 ? (
+    <div className="text-sm text-gray-400 text-center py-6">
+      No employees found.
+    </div>
+  ) : (
+    <div className="border rounded-lg overflow-hidden max-h-80 overflow-y-auto">
+      <div className="divide-y divide-gray-100">
         {employees.map((employee) => (
           <div
             key={employee.id}
-            className="flex items-center justify-between rounded-lg border p-3"
+            className="flex items-center justify-between py-2.5 px-3 hover:bg-gray-50 transition-colors"
           >
             <span className="text-sm font-medium text-gray-700">
-              { `${employee.first_name} ${employee.last_name}`}
+              {`${employee.first_name} ${employee.last_name}`}
             </span>
-
             <RevertStatusEmployeeToggle
               employeeId={employee.id}
               employeeName={`${employee.first_name} ${employee.last_name}`}
@@ -403,8 +410,9 @@ const [orgRevertEnabled, setOrgRevertEnabled] = useState(false);
           </div>
         ))}
       </div>
-    )}
-  </CardContent>
+    </div>
+  )}
+</CardContent>
 </Card>
       </div>
 

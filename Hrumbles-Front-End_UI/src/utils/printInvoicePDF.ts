@@ -124,7 +124,7 @@ export async function printInvoicePDF(invoiceId: string): Promise<void> {
         <td style="padding:16px 12px;color:#1f2937;font-size:12px">
           <div style="font-weight:700">${item.title || item.description || 'N/A'}</div>
           ${item.description && item.title
-            ? `<div style="color:#6b7280;font-size:10px;margin-top:4px">${item.description}</div>` : ''}
+    ? `<div style="color:#6b7280;font-size:10px;margin-top:4px;white-space:pre-wrap;word-wrap:break-word">${item.description}</div>` : ''}
         </td>
         <td style="padding:16px 12px;text-align:right;color:#4b5563;font-size:12px">${item.quantity || 1}</td>
         <td style="padding:16px 12px;text-align:right;color:#4b5563;font-size:12px">${fmt(item.rate || 0)}</td>
@@ -170,19 +170,19 @@ export async function printInvoicePDF(invoiceId: string): Promise<void> {
     </div>` : '<div></div>';
 
   // ── 10. Notes / Terms block ──────────────────────────────────────────────────
-  const notesBlock = (inv.notes || inv.terms) ? `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;font-size:11px;margin-top:40px">
+const notesBlock = (inv.notes || inv.terms) ? `
+    <div style="font-size:11px;margin-bottom:32px">
       ${inv.notes ? `
-        <div>
+        <div style="margin-bottom:16px">
           <div style="font-weight:700;color:#1f2937;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1em;font-size:9px">Notes</div>
           <p style="color:#6b7280;line-height:1.625;white-space:pre-wrap;margin:0">${inv.notes}</p>
-        </div>` : '<div></div>'}
+        </div>` : ''}
       ${inv.terms ? `
         <div>
           <div style="font-weight:700;color:#1f2937;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1em;font-size:9px">Terms &amp; Conditions</div>
           <p style="color:#6b7280;line-height:1.625;white-space:pre-wrap;margin:0">${inv.terms}</p>
         </div>` : ''}
-    </div>` : '';
+   </div>` : '<div></div>';
 
   // ── 11. Logo / fallback ──────────────────────────────────────────────────────
   const logoHtml = biller?.logo_url
@@ -314,7 +314,7 @@ export async function printInvoicePDF(invoiceId: string): Promise<void> {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-bottom:40px">
 
       <!-- LEFT: payment receipt (only if paid) -->
-      ${paymentBlock}
+       ${notesBlock}
 
       <!-- RIGHT: totals — flex flex-col items-end -->
       <div style="display:flex;flex-direction:column;align-items:flex-end">
@@ -358,7 +358,7 @@ export async function printInvoicePDF(invoiceId: string): Promise<void> {
       </div>
     </div>
 
-    ${notesBlock}
+    ${paymentBlock}
 
     <!-- Footer: mt-12 text-center pt-6 border-t border-gray-100 -->
     <div style="margin-top:48px;text-align:center;padding-top:24px;border-top:1px solid #f3f4f6">

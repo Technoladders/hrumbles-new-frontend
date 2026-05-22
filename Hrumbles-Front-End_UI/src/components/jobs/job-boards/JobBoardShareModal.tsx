@@ -6,15 +6,17 @@ import { cn } from "@/lib/utils";
 import {
   X, Radio, Zap, CheckCircle2, Loader2, ArrowRight,
   Globe, Sparkles, ChevronDown, ChevronUp,
-  AlertCircle, History, Lock, Info,
+  AlertCircle, History, Lock, Info, Pause, Play,
+  ExternalLink, RefreshCw,
 } from "lucide-react";
 import {
   JOB_BOARDS, XML_FEED_BOARDS, API_PUSH_BOARDS,
   formatPostedDate,
-  type JobBoard, type PostRecord, type PostHistory,
+  type JobBoard, type PostRecord,
 } from "./jobBoardsData";
 import { supabase } from "@/integrations/supabase/client";
 import { useSelector } from "react-redux";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface JobData {
@@ -52,61 +54,66 @@ interface ReviewFormData {
   description: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function buildReviewDefaults(job: JobData, orgProfile: any): ReviewFormData {
-  const locArr = Array.isArray(job.location) ? job.location : [job.location || ""];
-  const loc    = locArr[0] || "";
-  const parts  = loc.split(",").map((s: string) => s.trim());
-  const isRemote = locArr.some(l => l.toLowerCase().includes("remote"));
+interface ExtendedPostRecord extends PostRecord {
+  postId?:              string;
+  externalJobId?:       string;
+  externalJobUrl?:      string;
+  syncStatus?:          string;
+  override_title?:       string | null;
+  override_company?:     string | null;
+  override_city?:        string | null;
+  override_state?:       string | null;
+  override_country?:     string | null;
+  override_salary_min?:  number | null;
+  override_salary_max?:  number | null;
+  override_description?: string | null;
+  override_job_type?:    string | null;
+  override_is_remote?:   boolean | null;
+}
 
-  let company = "";
-  try {
-    const cd = typeof job.client_details === "string"
-      ? JSON.parse(job.client_details) : (job.client_details || {});
-    company = cd?.clientName?.trim() || "";
-  } catch {}
-  if (!company && orgProfile?.company_name) company = orgProfile.company_name;
-
-  let salaryMin = "";
-  let salaryMax = "";
-  if (job.budget) {
-    const b = Number(job.budget);
-    if (!(job.budget_type === "LPA" && b > 500)) {
-      salaryMin = String(b);
-      salaryMax = String(b);
+// ─── Error message parser ─────────────────────────────────────────────────────
+function parseWjError(msg: any): string {
+  if (!msg) return "WhatJobs API error";
+  // Already a readable string
+  if (typeof msg === "string") {
+    try {
+      const parsed = JSON.parse(msg);
+      return parseWjError(parsed);
+    } catch {
+      return msg;
     }
   }
-
-  const jt = (job.job_type || "").toLowerCase();
-  const jobType = jt.includes("part") ? "Part time"
-    : jt.includes("contract") ? "Contract"
-    : jt.includes("internship") ? "Internship"
-    : "Full time";
-
-  return {
-    title:       job.title || "",
-    company,
-    city:        parts[0] || "",
-    state:       parts[1] || "",
-    country:     parts[2] || "India",
-    salaryMin,
-    salaryMax,
-    jobType,
-    isRemote,
-    description: job.description || "",
-  };
+  // Nested object like { jobDescription: { jobDescription: ["..."] } }
+  if (typeof msg === "object") {
+    const firstKey = Object.keys(msg)[0];
+    if (!firstKey) return "Validation error";
+    const sub = msg[firstKey];
+    if (typeof sub === "object" && !Array.isArray(sub)) {
+      const subKey = Object.keys(sub)[0];
+      if (subKey && Array.isArray(sub[subKey]) && sub[subKey][0]) {
+        return `${firstKey}: ${sub[subKey][0]}`;
+      }
+    }
+    if (Array.isArray(sub) && sub[0]) return `${firstKey}: ${sub[0]}`;
+    return JSON.stringify(msg);
+  }
+  return String(msg);
 }
 
 // ─── Board row ────────────────────────────────────────────────────────────────
 const ModalBoardRow: React.FC<{
-  board:     JobBoard;
-  selected:  boolean;
-  onToggle:  () => void;
-  result?:   PostingResult;
-  posting?:  boolean;
-  prevPost?: PostRecord;
-  disabled?: boolean;
-}> = ({ board, selected, onToggle, result, posting, prevPost, disabled }) => {
+  board:       JobBoard;
+  selected:    boolean;
+  onToggle:    () => void;
+  result?:     PostingResult;
+  posting?:    boolean;
+  prevPost?:   ExtendedPostRecord;
+  disabled?:   boolean;
+  onPause?:    () => void;
+  onActivate?: () => void;
+  pausing?:    boolean;
+}> = ({ board, selected, onToggle, result, posting, prevPost, disabled, onPause, onActivate, pausing }) => {
+
   const getState = () => {
     if (result?.success)           return "success";
     if (result && !result.success) return "error";
@@ -114,10 +121,20 @@ const ModalBoardRow: React.FC<{
     if (selected)                  return "selected";
     return "idle";
   };
-  const state           = getState();
+
+  const state = getState();
+
   const isComingSoon    = board.status === "coming_soon";
-  const isNotConfigured = board.status === "not_configured";
-  const isBlocked       = isComingSoon || (isNotConfigured && !prevPost);
+  // Visual blocked: coming soon, OR disabled API-push without prior post
+  const isApiPush       = board.integrationMode === "api_push";
+  const isBlocked       = isComingSoon
+    || (isApiPush && disabled && !prevPost)
+    || (board.status === "not_configured" && !isApiPush && !prevPost);
+
+  const isPaused        = prevPost?.syncStatus === "paused";
+  const isFailed        = prevPost?.syncStatus === "failed" && !result && !selected;
+  // Only show pause button if last sync was actually successful
+  const hasLiveExternal = !!prevPost?.externalJobId && prevPost?.syncStatus === "success";
 
   return (
     <div
@@ -125,21 +142,27 @@ const ModalBoardRow: React.FC<{
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all",
         isBlocked         && "opacity-50 cursor-not-allowed bg-slate-50 border-slate-100",
-        !isBlocked && !result && !posting && "cursor-pointer",
+        !isBlocked && !result && !posting && !isFailed && "cursor-pointer",
         state === "success"  && "bg-emerald-50  border-emerald-200",
         state === "error"    && "bg-red-50      border-red-200",
         state === "posting"  && "bg-purple-50   border-purple-200",
         state === "selected" && !result && !posting && "bg-purple-50 border-purple-200",
-        state === "idle" && !isBlocked && "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+        isPaused && !selected && !result   && "bg-amber-50  border-amber-200",
+        isFailed                           && "bg-red-50/40 border-red-100",
+        state === "idle" && !isBlocked && !isPaused && !isFailed && "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50",
       )}
     >
+      {/* Logo */}
       <div className="w-7 h-7 rounded-lg border border-slate-100 flex items-center justify-center flex-shrink-0 bg-white shadow-sm">
         <BoardLogo boardId={board.id} size={16} />
       </div>
 
+      {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-semibold text-slate-700 truncate">{board.name}</span>
+
+          {/* Tier */}
           <span className={cn(
             "text-[8px] font-medium px-1 py-0.5 rounded-full border flex-shrink-0",
             board.tier === "free"     ? "text-emerald-700 border-emerald-200 bg-emerald-50" :
@@ -148,7 +171,8 @@ const ModalBoardRow: React.FC<{
           )}>
             {board.tierLabel}
           </span>
-          {/* Integration mode badge */}
+
+          {/* Integration mode */}
           <span className={cn(
             "text-[8px] font-medium px-1 py-0.5 rounded-full border flex-shrink-0",
             board.integrationMode === "xml_feed" ? "text-blue-600 border-blue-100 bg-blue-50" :
@@ -158,47 +182,133 @@ const ModalBoardRow: React.FC<{
             {board.integrationMode === "xml_feed" ? "XML Feed" :
              board.integrationMode === "api_push" ? "API Push" : "Manual"}
           </span>
+
+          {/* Status badges */}
+          {isPaused && (
+            <span className="text-[8px] text-amber-600 bg-amber-50 px-1 py-0.5 rounded-full border border-amber-200">
+              Paused
+            </span>
+          )}
+          {isFailed && (
+            <span className="text-[8px] text-red-500 bg-red-50 px-1 py-0.5 rounded-full border border-red-200 flex items-center gap-0.5">
+              <AlertCircle size={7} /> Last failed
+            </span>
+          )}
           {isComingSoon && (
             <span className="text-[8px] text-slate-400 bg-slate-100 px-1 py-0.5 rounded-full border border-slate-200">
               Coming soon
             </span>
           )}
-          {isNotConfigured && !prevPost && !isComingSoon && (
+          {/* Configure first — for API push not configured AND for other not_configured */}
+          {isBlocked && !isComingSoon && (
             <span className="text-[8px] text-amber-600 bg-amber-50 px-1 py-0.5 rounded-full border border-amber-200 flex items-center gap-0.5">
               <Lock size={7} /> Configure first
             </span>
           )}
         </div>
+
+        {/* Sub-line */}
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[9px] text-slate-400">{board.region}</span>
-          {prevPost && !result && !posting && (
-            <span className="flex items-center gap-0.5 text-[9px] text-blue-500">
-              <History size={8} />
-              Posted {formatPostedDate(prevPost.postedAt)}
-            </span>
+
+          {/* Status sub-text — only for non-failed, non-selected */}
+          {prevPost && !result && !posting && !selected && (() => {
+            if (prevPost.syncStatus === "failed") {
+              return (
+                <span className="flex items-center gap-0.5 text-[9px] text-red-400">
+                  <RefreshCw size={8} /> Retry needed
+                </span>
+              );
+            }
+            if (prevPost.syncStatus === "paused") {
+              return (
+                <span className="flex items-center gap-0.5 text-[9px] text-amber-500">
+                  <Pause size={8} /> Paused
+                </span>
+              );
+            }
+            if (prevPost.syncStatus === "success") {
+              return (
+                <span className="flex items-center gap-0.5 text-[9px] text-blue-500">
+                  <History size={8} />
+                  Posted {formatPostedDate(prevPost.postedAt)}
+                </span>
+              );
+            }
+            return null;
+          })()}
+
+          {/* External job URL */}
+          {prevPost?.externalJobUrl && prevPost.syncStatus === "success" && !result && !posting && (
+            <a
+              href={prevPost.externalJobUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-0.5 text-[9px] text-purple-500 hover:text-purple-700"
+            >
+              <ExternalLink size={8} /> View live
+            </a>
           )}
+
+          {/* Result message */}
           {result && (
             <span className={cn("text-[9px] font-medium",
               result.success ? "text-emerald-600" : "text-red-500")}>
               {result.message}
             </span>
           )}
+
           {posting && <span className="text-[9px] text-purple-500">Posting…</span>}
         </div>
       </div>
 
-      <div className="flex-shrink-0 w-5 flex items-center justify-center">
-        {state === "success"  && <CheckCircle2 size={14} className="text-emerald-500" />}
-        {state === "error"    && <AlertCircle  size={14} className="text-red-400" />}
-        {state === "posting"  && <Loader2      size={14} className="text-purple-500 animate-spin" />}
-        {state === "selected" && !result && !posting && (
-          <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: "#9333ea" }}>
-            <div className="w-2 h-2 rounded-full" style={{ background: "#9333ea" }} />
-          </div>
-        )}
-        {state === "idle" && !isBlocked && <div className="w-4 h-4 rounded-full border-2 border-slate-300" />}
-        {state === "idle" && isBlocked  && <div className="w-4 h-4 rounded-full border-2 border-slate-200" />}
-      </div>
+      {/* Pause/Activate — only for live API push posts */}
+      {hasLiveExternal && !result && !posting && !selected && (
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {isPaused ? (
+            <button
+              onClick={onActivate}
+              disabled={pausing}
+              className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-[9px] font-medium
+                text-emerald-600 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition-all disabled:opacity-50"
+            >
+              {pausing ? <Loader2 size={9} className="animate-spin" /> : <Play size={9} />}
+              Activate
+            </button>
+          ) : (
+            <button
+              onClick={onPause}
+              disabled={pausing}
+              className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-[9px] font-medium
+                text-amber-600 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-all disabled:opacity-50"
+            >
+              {pausing ? <Loader2 size={9} className="animate-spin" /> : <Pause size={9} />}
+              Pause
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Right indicator */}
+      {(!hasLiveExternal || selected || result) && (
+        <div className="flex-shrink-0 w-5 flex items-center justify-center">
+          {state === "success"  && <CheckCircle2 size={14} className="text-emerald-500" />}
+          {state === "error"    && <AlertCircle  size={14} className="text-red-400" />}
+          {state === "posting"  && <Loader2      size={14} className="text-purple-500 animate-spin" />}
+          {state === "selected" && !result && !posting && (
+            <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: "#9333ea" }}>
+              <div className="w-2 h-2 rounded-full" style={{ background: "#9333ea" }} />
+            </div>
+          )}
+          {state === "idle" && !isBlocked && !hasLiveExternal && (
+            <div className="w-4 h-4 rounded-full border-2 border-slate-300" />
+          )}
+          {state === "idle" && isBlocked && (
+            <div className="w-4 h-4 rounded-full border-2 border-slate-200" />
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -242,26 +352,40 @@ const PostingProgress: React.FC<{
 
 // ─── Review form ──────────────────────────────────────────────────────────────
 const ReviewForm: React.FC<{
-  form:     ReviewFormData;
-  onChange: (f: ReviewFormData) => void;
-}> = ({ form, onChange }) => {
-  const set      = (key: keyof ReviewFormData, val: any) => onChange({ ...form, [key]: val });
+  form:        ReviewFormData;
+  onChange:    (f: ReviewFormData) => void;
+  isWhatJobs?: boolean;
+}> = ({ form, onChange, isWhatJobs }) => {
+  const set = (key: keyof ReviewFormData, val: any) => onChange({ ...form, [key]: val });
+
   const inputCls = "w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px] text-slate-700 " +
     "placeholder:text-slate-400 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100 transition-all";
   const labelCls = "block text-[10px] font-semibold text-slate-500 mb-1";
 
+  const wordCount   = form.description.trim().split(/\s+/).filter(Boolean).length;
+  const minWords    = isWhatJobs ? 150 : 0;
+  const descOk      = isWhatJobs ? wordCount >= 150 : form.description.length >= 50;
+
   return (
     <div className="space-y-3">
+      {/* Title */}
       <div>
         <label className={labelCls}>Job Title <span className="text-red-400">*</span></label>
         <input className={inputCls} value={form.title}
           onChange={e => set("title", e.target.value)} placeholder="e.g. Senior React Developer" />
+        {form.title && !/^[a-zA-Z]/.test(form.title) && (
+          <p className="text-[9px] text-red-400 mt-0.5">Must start with a letter (WhatJobs requirement)</p>
+        )}
       </div>
+
+      {/* Company */}
       <div>
         <label className={labelCls}>Company Name <span className="text-red-400">*</span></label>
         <input className={inputCls} value={form.company}
           onChange={e => set("company", e.target.value)} placeholder="e.g. Acme Pvt Ltd" />
       </div>
+
+      {/* Location */}
       <div className="grid grid-cols-3 gap-2">
         <div>
           <label className={labelCls}>City</label>
@@ -271,7 +395,7 @@ const ReviewForm: React.FC<{
         <div>
           <label className={labelCls}>State</label>
           <input className={inputCls} value={form.state}
-            onChange={e => set("state", e.target.value)} placeholder="Delhi" />
+            onChange={e => set("state", e.target.value)} placeholder="Maharashtra" />
         </div>
         <div>
           <label className={labelCls}>Country</label>
@@ -279,6 +403,8 @@ const ReviewForm: React.FC<{
             onChange={e => set("country", e.target.value)} placeholder="India" />
         </div>
       </div>
+
+      {/* Remote toggle */}
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -295,6 +421,8 @@ const ReviewForm: React.FC<{
         </button>
         <label className={labelCls + " mb-0"}>Remote position</label>
       </div>
+
+      {/* Job type */}
       <div>
         <label className={labelCls}>Job Type</label>
         <select className={inputCls} value={form.jobType} onChange={e => set("jobType", e.target.value)}>
@@ -305,6 +433,8 @@ const ReviewForm: React.FC<{
           <option>Temporary</option>
         </select>
       </div>
+
+      {/* Salary */}
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className={labelCls}>Salary Min (₹/yr) <span className="text-slate-400">optional</span></label>
@@ -317,79 +447,154 @@ const ReviewForm: React.FC<{
             onChange={e => set("salaryMax", e.target.value)} placeholder="e.g. 1800000" />
         </div>
       </div>
+
+      {/* Description */}
       <div>
         <label className={labelCls}>
           Description <span className="text-red-400">*</span>
-          <span className="text-slate-400 font-normal ml-1">(min 50 chars)</span>
+          {isWhatJobs && (
+            <span className="text-slate-400 font-normal ml-1">
+              (min 150 words for WhatJobs)
+            </span>
+          )}
         </label>
         <textarea
-          className={inputCls + " min-h-[90px] resize-y"}
+          className={inputCls + " min-h-[120px] resize-y"}
           value={form.description}
           onChange={e => set("description", e.target.value)}
           placeholder="Job description shown on job boards…"
         />
-        <p className={cn("text-[9px] mt-0.5 text-right",
-          form.description.length < 50 ? "text-red-400" : "text-slate-400")}>
-          {form.description.length} chars {form.description.length < 50 ? "(need 50+)" : "✓"}
-        </p>
+        <div className="flex items-center justify-between mt-0.5">
+          <p className={cn("text-[9px]", descOk ? "text-slate-400" : "text-red-400")}>
+            {isWhatJobs
+              ? `${wordCount} words ${!descOk ? `(need ${minWords - wordCount} more words)` : "✓"}`
+              : `${form.description.length} chars ${!descOk ? "(need 50+)" : "✓"}`}
+          </p>
+          {isWhatJobs && !descOk && (
+            <p className="text-[9px] text-amber-500">
+              WhatJobs requires minimum 150 words
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-// ─── Success screen ───────────────────────────────────────────────────────────
-const SuccessScreen: React.FC<{
-  results:    PostingResult[];
-  boards:     JobBoard[];
-  jobTitle:   string;
-  totalReach: number;
-  onClose:    () => void;
-}> = ({ results, boards, jobTitle, totalReach, onClose }) => {
-  const ok = results.filter(r => r.success);
+// ─── Done screen (success + errors combined) ───────────────────────────────────
+const DoneScreen: React.FC<{
+  results:  PostingResult[];
+  boards:   JobBoard[];
+  jobTitle: string;
+  onClose:  () => void;
+}> = ({ results, boards, jobTitle, onClose }) => {
+  const ok       = results.filter(r => r.success);
+  const failed   = results.filter(r => !r.success);
+  const allFailed = ok.length === 0;
+  const totalReach = ok.reduce((s, r) => s + r.reach, 0);
+
   return (
     <div className="text-center space-y-4 py-2">
+      {/* Icon */}
       <div className="relative w-16 h-16 mx-auto">
         <div className="absolute inset-0 rounded-full opacity-20 animate-ping"
-          style={{ background: "linear-gradient(135deg, #10b981, #059669)" }} />
-        <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center border border-emerald-100"
-          style={{ background: "linear-gradient(135deg, #10b98112, #05966912)" }}>
-          <CheckCircle2 size={30} className="text-emerald-500" />
+          style={{ background: allFailed
+            ? "linear-gradient(135deg, #ef4444, #dc2626)"
+            : "linear-gradient(135deg, #10b981, #059669)" }} />
+        <div className="relative w-16 h-16 rounded-2xl flex items-center justify-center border"
+          style={{
+            borderColor: allFailed ? "#fecaca" : "#a7f3d0",
+            background:  allFailed
+              ? "linear-gradient(135deg, #ef444412, #dc262612)"
+              : "linear-gradient(135deg, #10b98112, #05966912)",
+          }}>
+          {allFailed
+            ? <AlertCircle size={30} className="text-red-500" />
+            : <CheckCircle2 size={30} className="text-emerald-500" />}
         </div>
       </div>
+
+      {/* Summary */}
       <div>
         <h3 className="text-base font-bold text-slate-800">
-          Posted to {ok.length} board{ok.length !== 1 ? "s" : ""}
+          {allFailed
+            ? "Posting failed"
+            : ok.length === results.length
+              ? `Posted to ${ok.length} board${ok.length !== 1 ? "s" : ""}`
+              : `${ok.length} posted · ${failed.length} failed`}
         </h3>
         <p className="text-[12px] text-slate-500 mt-0.5">
-          <strong className="text-slate-700">{jobTitle}</strong> is now live
+          <strong className="text-slate-700">{jobTitle}</strong>
         </p>
       </div>
-      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-purple-100 bg-purple-50">
-        <Globe size={13} className="text-purple-500" />
-        <span className="text-sm font-bold text-purple-700">~{(totalReach / 1000).toFixed(1)}K</span>
-        <span className="text-[11px] text-purple-500">estimated reach</span>
-      </div>
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        {ok.map(r => {
-          const board = boards.find(b => b.id === r.boardId);
-          if (!board) return null;
-          return (
-            <div key={r.boardId} className="flex flex-col items-center gap-1">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center border border-slate-200 bg-white shadow-sm">
-                <BoardLogo boardId={board.id} size={20} />
+
+      {/* Reach */}
+      {ok.length > 0 && (
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-purple-100 bg-purple-50">
+          <Globe size={13} className="text-purple-500" />
+          <span className="text-sm font-bold text-purple-700">~{(totalReach / 1000).toFixed(1)}K</span>
+          <span className="text-[11px] text-purple-500">estimated reach</span>
+        </div>
+      )}
+
+      {/* Successful boards */}
+      {ok.length > 0 && (
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          {ok.map(r => {
+            const board = boards.find(b => b.id === r.boardId);
+            if (!board) return null;
+            return (
+              <div key={r.boardId} className="flex flex-col items-center gap-1">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center border border-emerald-200 bg-emerald-50 shadow-sm">
+                  <BoardLogo boardId={board.id} size={20} />
+                </div>
+                <span className="text-[8px] text-slate-400">{board.name}</span>
               </div>
-              <span className="text-[8px] text-slate-400">{board.name}</span>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
-        XML-feed boards update within 24–48h. API-push boards (WhatJobs) are instant.
-      </p>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Failed boards with error details */}
+      {failed.length > 0 && (
+        <div className="space-y-2 text-left">
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider text-center">
+            Failed · {failed.length} board{failed.length !== 1 ? "s" : ""}
+          </p>
+          {failed.map(r => {
+            const board = boards.find(b => b.id === r.boardId);
+            if (!board) return null;
+            return (
+              <div key={r.boardId}
+                className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl border border-red-200 bg-red-50">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center border border-red-200 bg-white flex-shrink-0 mt-0.5">
+                  <BoardLogo boardId={board.id} size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-red-700">{board.name}</p>
+                  <p className="text-[10px] text-red-500 leading-relaxed break-words mt-0.5">
+                    {r.message}
+                  </p>
+                </div>
+                <AlertCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!allFailed && (
+        <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
+          XML-feed boards update within 24–48h. WhatJobs is instant.
+        </p>
+      )}
+
       <button onClick={onClose}
         className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 shadow-sm"
-        style={{ background: "linear-gradient(135deg, #9333ea, #ec4899)" }}>
-        Done
+        style={{ background: allFailed
+          ? "linear-gradient(135deg, #ef4444, #dc2626)"
+          : "linear-gradient(135deg, #9333ea, #ec4899)" }}>
+        {allFailed ? "Close" : "Done"}
       </button>
     </div>
   );
@@ -406,20 +611,22 @@ interface JobBoardShareModalProps {
 export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
   job, isOpen, onClose, onPosted,
 }) => {
-  const [phase,       setPhase]       = useState<Phase>("select");
-  const [selected,    setSelected]    = useState<string[]>([]);
-  const [postingIdx,  setPostingIdx]  = useState(-1);
-  const [results,     setResults]     = useState<PostingResult[]>([]);
-  const [showPremium, setShowPremium] = useState(false);
-  const [prevPosts,   setPrevPosts]   = useState<PostHistory>({});
-  const [loading,     setLoading]     = useState(false);
-  const [orgProfile,  setOrgProfile]  = useState<any>(null);
-  const [reviewForms, setReviewForms] = useState<Record<string, ReviewFormData>>({});
+  const [phase,            setPhase]            = useState<Phase>("select");
+  const [selected,         setSelected]         = useState<string[]>([]);
+  const [postingIdx,       setPostingIdx]        = useState(-1);
+  const [results,          setResults]          = useState<PostingResult[]>([]);
+  const [showPremium,      setShowPremium]      = useState(false);
+  const [prevPosts,        setPrevPosts]        = useState<Record<string, ExtendedPostRecord>>({});
+  const [loading,          setLoading]          = useState(false);
+  const [orgProfile,       setOrgProfile]       = useState<any>(null);
+  const [reviewForms,      setReviewForms]      = useState<Record<string, ReviewFormData>>({});
+  const [configuredBoards, setConfiguredBoards] = useState<string[]>([]);
+  const [pausingBoard,     setPausingBoard]     = useState<string | null>(null);
 
   const user            = useSelector((state: any) => state.auth.user);
   const organization_id = useSelector((state: any) => state.auth.organization_id);
 
-  // ── Load post history + org profile on open ──────────────────────────────────
+  // ── Load on open ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || !job.id) return;
     setPhase("select");
@@ -431,7 +638,7 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
     Promise.all([
       supabase
         .from("hr_job_board_posts")
-        .select("board_id, posted_at, reach, is_active, override_title, override_company, override_city, override_state, override_country, override_salary_min, override_salary_max, override_description, override_job_type, override_is_remote")
+        .select("id, board_id, posted_at, reach, is_active, sync_status, external_job_id, external_job_url, override_title, override_company, override_city, override_state, override_country, override_salary_min, override_salary_max, override_description, override_job_type, override_is_remote")
         .eq("job_id", job.id)
         .eq("is_active", true),
       supabase
@@ -439,22 +646,42 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
         .select("company_name, logo_url, website, city, state, country")
         .eq("organization_id", organization_id)
         .single(),
-    ]).then(([postsRes, profileRes]) => {
+      supabase
+        .from("hr_job_board_configs")
+        .select("board_id")
+        .eq("organization_id", organization_id)
+        .eq("is_active", true),
+    ]).then(([postsRes, profileRes, configsRes]) => {
       if (!postsRes.error && postsRes.data) {
-        const history: PostHistory = {};
+        const history: Record<string, ExtendedPostRecord> = {};
         postsRes.data.forEach((row: any) => {
           history[row.board_id] = {
-            boardId:  row.board_id,
-            postedAt: row.posted_at,
-            reach:    row.reach,
-            isActive: row.is_active,
-            // store overrides for pre-fill on repost
-            ...(row as any),
+            boardId:              row.board_id,
+            postedAt:             row.posted_at,
+            reach:                row.reach,
+            isActive:             row.is_active,
+            postId:               row.id,
+            externalJobId:        row.external_job_id,
+            externalJobUrl:       row.external_job_url,
+            syncStatus:           row.sync_status,
+            override_title:       row.override_title,
+            override_company:     row.override_company,
+            override_city:        row.override_city,
+            override_state:       row.override_state,
+            override_country:     row.override_country,
+            override_salary_min:  row.override_salary_min,
+            override_salary_max:  row.override_salary_max,
+            override_description: row.override_description,
+            override_job_type:    row.override_job_type,
+            override_is_remote:   row.override_is_remote,
           };
         });
         setPrevPosts(history);
       }
       if (!profileRes.error && profileRes.data) setOrgProfile(profileRes.data);
+      if (!configsRes.error && configsRes.data) {
+        setConfiguredBoards(configsRes.data.map((r: any) => r.board_id));
+      }
       setLoading(false);
     });
   }, [isOpen, job.id, organization_id]);
@@ -469,9 +696,13 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }, []);
 
-  const canPost = (b: JobBoard) =>
-    b.status === "available" || b.status === "partial" ||
-    (b.status === "not_configured" && !!prevPosts[b.id]);
+  // ── Dynamic canPost ───────────────────────────────────────────────────────────
+  const canPost = useCallback((b: JobBoard): boolean => {
+    if (b.status === "coming_soon") return false;
+    if (b.integrationMode === "xml_feed") return b.status === "available" || b.status === "partial";
+    if (b.integrationMode === "api_push") return configuredBoards.includes(b.id) || !!prevPosts[b.id];
+    return b.status === "available" || b.status === "not_configured";
+  }, [configuredBoards, prevPosts]);
 
   const freeBoards    = JOB_BOARDS.filter(b => b.tier === "free" || b.tier === "freemium");
   const premiumBoards = JOB_BOARDS.filter(b => b.tier === "premium");
@@ -484,7 +715,32 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
       : [...new Set([...prev, ...ids])]);
   };
 
-  // Boards needing review = XML feed boards + API push boards (all need review step)
+  // ── Pause / Activate ──────────────────────────────────────────────────────────
+  const handleWhatJobsCommand = async (boardId: string, command: "pause" | "activate") => {
+    const prevPost = prevPosts[boardId];
+    if (!prevPost?.postId) return;
+    setPausingBoard(boardId);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatjobs-post", {
+        body: { job_board_post_id: prevPost.postId, command },
+      });
+      if (!error && data?.success) {
+        toast.success(`Job ${command === "pause" ? "paused on" : "activated on"} WhatJobs`);
+        setPrevPosts(prev => ({
+          ...prev,
+          [boardId]: { ...prev[boardId], syncStatus: command === "pause" ? "paused" : "success" },
+        }));
+      } else {
+        const errMsg = parseWjError(data?.message || data?.error || "Failed");
+        toast.error(errMsg);
+      }
+    } catch {
+      toast.error("Error calling WhatJobs API");
+    } finally {
+      setPausingBoard(null);
+    }
+  };
+
   const REVIEW_BOARDS = [...XML_FEED_BOARDS, ...API_PUSH_BOARDS];
 
   const handleBroadcastClick = () => {
@@ -492,18 +748,18 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
     if (reviewNeeded.length > 0) {
       const forms: Record<string, ReviewFormData> = {};
       reviewNeeded.forEach(boardId => {
-        const prevPost = prevPosts[boardId] as any;
+        const prevPost = prevPosts[boardId];
         forms[boardId] = buildReviewDefaults(job, orgProfile);
-        if (prevPost?.override_title)       forms[boardId].title       = prevPost.override_title;
-        if (prevPost?.override_company)     forms[boardId].company     = prevPost.override_company;
-        if (prevPost?.override_city)        forms[boardId].city        = prevPost.override_city;
-        if (prevPost?.override_state)       forms[boardId].state       = prevPost.override_state;
-        if (prevPost?.override_country)     forms[boardId].country     = prevPost.override_country;
+        if (prevPost?.override_title)       forms[boardId].title       = prevPost.override_title!;
+        if (prevPost?.override_company)     forms[boardId].company     = prevPost.override_company!;
+        if (prevPost?.override_city)        forms[boardId].city        = prevPost.override_city!;
+        if (prevPost?.override_state)       forms[boardId].state       = prevPost.override_state!;
+        if (prevPost?.override_country)     forms[boardId].country     = prevPost.override_country!;
         if (prevPost?.override_salary_min)  forms[boardId].salaryMin   = String(prevPost.override_salary_min);
         if (prevPost?.override_salary_max)  forms[boardId].salaryMax   = String(prevPost.override_salary_max);
-        if (prevPost?.override_description) forms[boardId].description = prevPost.override_description;
-        if (prevPost?.override_job_type)    forms[boardId].jobType     = prevPost.override_job_type;
-        if (prevPost?.override_is_remote != null) forms[boardId].isRemote = prevPost.override_is_remote;
+        if (prevPost?.override_description) forms[boardId].description = prevPost.override_description!;
+        if (prevPost?.override_job_type)    forms[boardId].jobType     = prevPost.override_job_type!;
+        if (prevPost?.override_is_remote != null) forms[boardId].isRemote = prevPost.override_is_remote!;
       });
       setReviewForms(forms);
       setPhase("review");
@@ -512,6 +768,52 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
     }
   };
 
+  // ── Build review defaults ─────────────────────────────────────────────────────
+  function buildReviewDefaults(job: JobData, orgProfile: any): ReviewFormData {
+    const locArr   = Array.isArray(job.location) ? job.location : [job.location || ""];
+    const loc      = locArr[0] || "";
+    const parts    = loc.split(",").map((s: string) => s.trim());
+    const isRemote = locArr.some(l => l.toLowerCase().includes("remote"));
+
+    let company = "";
+    try {
+      const cd = typeof job.client_details === "string"
+        ? JSON.parse(job.client_details) : (job.client_details || {});
+      company = cd?.clientName?.trim() || "";
+    } catch {}
+    if (!company && orgProfile?.company_name) company = orgProfile.company_name;
+
+    let salaryMin = "";
+    let salaryMax = "";
+    if (job.budget) {
+      const b = Number(job.budget);
+      if (!(job.budget_type === "LPA" && b > 500)) {
+        salaryMin = String(b);
+        salaryMax = String(b);
+      }
+    }
+
+    const jt = (job.job_type || "").toLowerCase();
+    const jobType = jt.includes("part") ? "Part time"
+      : jt.includes("contract") ? "Contract"
+      : jt.includes("internship") ? "Internship"
+      : "Full time";
+
+    return {
+      title:       job.title || "",
+      company,
+      city:        parts[0] || "",
+      state:       parts[1] || "",
+      country:     parts[2] || "India",
+      salaryMin,
+      salaryMax,
+      jobType,
+      isRemote,
+      description: job.description || "",
+    };
+  }
+
+  // ── Start posting ─────────────────────────────────────────────────────────────
   const startPosting = async (overrides: Record<string, ReviewFormData>) => {
     setPhase("posting");
     setPostingIdx(0);
@@ -522,12 +824,11 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
 
     for (let i = 0; i < boards.length; i++) {
       setPostingIdx(i);
-      const board  = boards[i];
-      const form   = overrides[board.id];
-      const isXml  = XML_FEED_BOARDS.includes(board.id);
-      const isApi  = API_PUSH_BOARDS.includes(board.id);
+      const board = boards[i];
+      const form  = overrides[board.id];
+      const isXml = XML_FEED_BOARDS.includes(board.id);
+      const isApi = API_PUSH_BOARDS.includes(board.id);
 
-      // ── Build upsert data ──────────────────────────────────────────────────
       const upsertData: any = {
         job_id:          job.id,
         organization_id: organization_id,
@@ -552,7 +853,6 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
         upsertData.override_is_remote   = form.isRemote;
       }
 
-      // ── Upsert the post record ─────────────────────────────────────────────
       const { data: upsertResult, error: upsertErr } = await supabase
         .from("hr_job_board_posts")
         .upsert(upsertData, { onConflict: "job_id,board_id" })
@@ -560,32 +860,34 @@ export const JobBoardShareModal: React.FC<JobBoardShareModalProps> = ({
         .single();
 
       if (upsertErr || !upsertResult) {
-        res.push({ boardId: board.id, success: false, message: "Failed to save", reach: board.estimatedReach });
+        res.push({ boardId: board.id, success: false, message: "Failed to save record", reach: board.estimatedReach });
         setResults([...res]);
         await new Promise(r => setTimeout(r, 300));
         continue;
       }
 
-      // ── For WhatJobs — call the push edge function ────────────────────────
       if (isApi && board.id === "whatjobs") {
-const isRepost = !!(prevPosts["whatjobs"] as any)?.external_job_id;
-const command  = isRepost ? "update" : "add";
+        const prevWjPost = prevPosts["whatjobs"] as ExtendedPostRecord | undefined;
+        // Only update if previous post was ACTUALLY successful on WhatJobs side
+        const isRepost = !!(prevWjPost?.externalJobId) && prevWjPost?.syncStatus === "success";
+        const command  = isRepost ? "update" : "add";
 
         const { data: wjData, error: wjErr } = await supabase.functions.invoke("whatjobs-post", {
           body: { job_board_post_id: upsertResult.id, command },
         });
 
         const wjSuccess = !wjErr && wjData?.success === true;
+        const wjMessage = wjSuccess
+          ? (wjData?.external_url ? "Live on WhatJobs" : "Posted to WhatJobs")
+          : parseWjError(wjData?.message || wjErr?.message || "WhatJobs API error");
+
         res.push({
           boardId: board.id,
           success: wjSuccess,
-          message: wjSuccess
-            ? (wjData?.external_url ? "Live on WhatJobs" : "Posted to WhatJobs")
-            : (wjData?.message || wjErr?.message || "WhatJobs API error"),
-          reach: board.estimatedReach,
+          message: wjMessage,
+          reach:   board.estimatedReach,
         });
       } else {
-        // XML feed boards and others — just upsert is enough
         res.push({
           boardId: board.id,
           success: true,
@@ -607,17 +909,25 @@ const command  = isRepost ? "update" : "add";
   const postingBoards     = JOB_BOARDS.filter(b => selected.includes(b.id));
   const totalReach        = postingBoards.reduce((s, b) => s + b.estimatedReach, 0);
   const location          = Array.isArray(job.location) ? job.location[0] : job.location;
-  const alreadyPosted     = Object.keys(prevPosts).length;
+  const alreadyPosted     = Object.keys(prevPosts).filter(k => prevPosts[k].syncStatus !== "failed").length;
   const selectedReviewIds = selected.filter(id => REVIEW_BOARDS.includes(id));
   const reviewBoardNames  = selectedReviewIds
     .map(id => JOB_BOARDS.find(b => b.id === id)?.name)
     .filter(Boolean)
     .join(", ");
 
+  const hasWhatJobsInReview = selectedReviewIds.includes("whatjobs");
+
+  const currentReviewForm = reviewForms[selectedReviewIds[0]];
+  const reviewWordCount   = (currentReviewForm?.description || "").trim().split(/\s+/).filter(Boolean).length;
+
   const reviewFormValid = selectedReviewIds.length === 0 || (
-    !!reviewForms[selectedReviewIds[0]]?.title &&
-    !!reviewForms[selectedReviewIds[0]]?.company &&
-    (reviewForms[selectedReviewIds[0]]?.description?.length || 0) >= 50
+    !!currentReviewForm?.title &&
+    /^[a-zA-Z]/.test(currentReviewForm?.title || "") &&
+    !!currentReviewForm?.company &&
+    (hasWhatJobsInReview
+      ? reviewWordCount >= 150
+      : (currentReviewForm?.description?.length || 0) >= 50)
   );
 
   if (!isOpen) return null;
@@ -631,7 +941,6 @@ const command  = isRepost ? "update" : "add";
             bg-white shadow-2xl overflow-hidden"
           onClick={e => e.stopPropagation()}
         >
-          {/* Gradient top bar */}
           <div className="h-0.5" style={{ background: "linear-gradient(90deg, #9333ea, #ec4899)" }} />
 
           {/* Header */}
@@ -679,9 +988,7 @@ const command  = isRepost ? "update" : "add";
                 {alreadyPosted > 0 && phase === "select" && (
                   <div className="flex items-center gap-1 text-blue-500">
                     <History size={11} />
-                    <span className="text-[10px] font-medium">
-                      {alreadyPosted} active
-                    </span>
+                    <span className="text-[10px] font-medium">{alreadyPosted} live</span>
                   </div>
                 )}
                 {selected.length > 0 && phase === "select" && (
@@ -699,7 +1006,6 @@ const command  = isRepost ? "update" : "add";
           {/* Body */}
           <div className="px-5 py-4 max-h-[65vh] overflow-y-auto">
 
-            {/* Loading */}
             {loading && phase === "select" && (
               <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
                 <Loader2 size={16} className="animate-spin" />
@@ -714,8 +1020,12 @@ const command  = isRepost ? "update" : "add";
                   <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-blue-100 bg-blue-50">
                     <History size={13} className="text-blue-500 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[11px] font-semibold text-blue-700">Active on {alreadyPosted} board{alreadyPosted !== 1 ? "s" : ""}</p>
-                      <p className="text-[10px] text-blue-600 mt-0.5">Reposting refreshes the listing and updates timestamps.</p>
+                      <p className="text-[11px] font-semibold text-blue-700">
+                        Live on {alreadyPosted} board{alreadyPosted !== 1 ? "s" : ""}
+                      </p>
+                      <p className="text-[10px] text-blue-600 mt-0.5">
+                        Reposting refreshes the listing. Use Pause to hide without removing.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -737,12 +1047,20 @@ const command  = isRepost ? "update" : "add";
                   </div>
                   <div className="space-y-1.5">
                     {freeBoards.map(board => (
-                      <ModalBoardRow key={board.id} board={board}
+                      <ModalBoardRow
+                        key={board.id}
+                        board={board}
                         selected={selected.includes(board.id)}
                         onToggle={() => toggleBoard(board.id)}
                         result={results.find(r => r.boardId === board.id)}
                         prevPost={prevPosts[board.id]}
-                        disabled={!canPost(board)} />
+                        disabled={!canPost(board)}
+                        onPause={board.integrationMode === "api_push"
+                          ? () => handleWhatJobsCommand(board.id, "pause") : undefined}
+                        onActivate={board.integrationMode === "api_push"
+                          ? () => handleWhatJobsCommand(board.id, "activate") : undefined}
+                        pausing={pausingBoard === board.id}
+                      />
                     ))}
                   </div>
                 </div>
@@ -763,12 +1081,15 @@ const command  = isRepost ? "update" : "add";
                   {showPremium && (
                     <div className="space-y-1.5">
                       {premiumBoards.map(board => (
-                        <ModalBoardRow key={board.id} board={board}
+                        <ModalBoardRow
+                          key={board.id}
+                          board={board}
                           selected={selected.includes(board.id)}
                           onToggle={() => toggleBoard(board.id)}
                           result={results.find(r => r.boardId === board.id)}
                           prevPost={prevPosts[board.id]}
-                          disabled={!canPost(board)} />
+                          disabled={!canPost(board)}
+                        />
                       ))}
                     </div>
                   )}
@@ -777,7 +1098,7 @@ const command  = isRepost ? "update" : "add";
                 <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-amber-100 bg-amber-50">
                   <Info size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[10px] text-amber-700">
-                    Boards showing <strong>Configure first</strong> need credentials saved in{" "}
+                    Boards showing <strong>Configure first</strong> need API credentials saved in{" "}
                     <strong>Job Boards → Configure</strong> before posting.
                   </p>
                 </div>
@@ -790,7 +1111,12 @@ const command  = isRepost ? "update" : "add";
                 <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl border border-purple-100 bg-purple-50">
                   <Info size={12} className="text-purple-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[10px] text-purple-700">
-                    Details for <strong>{reviewBoardNames}</strong>. Auto-filled from the job — edit anything before posting.
+                    Details for <strong>{reviewBoardNames}</strong>. Auto-filled — edit anything before posting.
+                    {hasWhatJobsInReview && (
+                      <span className="block mt-0.5 text-violet-600">
+                        WhatJobs requires job title starting with a letter and description ≥ 150 words.
+                      </span>
+                    )}
                   </p>
                 </div>
                 <ReviewForm
@@ -800,6 +1126,7 @@ const command  = isRepost ? "update" : "add";
                     selectedReviewIds.forEach(id => { updated[id] = f; });
                     setReviewForms(prev => ({ ...prev, ...updated }));
                   }}
+                  isWhatJobs={hasWhatJobsInReview}
                 />
               </div>
             )}
@@ -825,9 +1152,10 @@ const command  = isRepost ? "update" : "add";
 
             {/* ── DONE ── */}
             {phase === "done" && (
-              <SuccessScreen
-                results={results} boards={JOB_BOARDS} jobTitle={job.title}
-                totalReach={results.reduce((s, r) => s + r.reach, 0)}
+              <DoneScreen
+                results={results}
+                boards={JOB_BOARDS}
+                jobTitle={job.title}
                 onClose={onClose}
               />
             )}
