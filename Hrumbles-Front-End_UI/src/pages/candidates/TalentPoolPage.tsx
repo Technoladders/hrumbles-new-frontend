@@ -829,7 +829,7 @@ const TableTab: FC<{
       </div>
 
       {/* Batch Jobs Panel */}
-      <BatchJobsPanel organizationId={organizationId} />
+      {/* <BatchJobsPanel organizationId={organizationId} /> */}
 
       {/* Filter Bar */}
       <div style={{ background: '#FFFFFF', border: '0.5px solid #E5E7EB', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 8 }}>

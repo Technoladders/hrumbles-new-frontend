@@ -109,7 +109,11 @@ const analyzeResume = async () => {
         return normalized;
       };
 
-      const companyData = (parsedResult.companies || []).map(company => {
+      const rawCompanies = parsedResult.companies
+  || parsedResult.experience_analysis?.companies
+  || [];
+
+const companyData = rawCompanies.map(company => {
         const normalizedName = normalizeCompanyName(company.name);
         if (!normalizedName) return null;
         return {
@@ -132,12 +136,25 @@ const analyzeResume = async () => {
       
       setAnalysisResult({...parsedResult, companies: companiesToSave});
       setUpdatedSkills(parsedResult.matched_skills || []);
-      setCandidateName(parsedResult.candidate_name || 'Unknown');
-      setEmail(parsedResult.email || '');
-      setGithub(parsedResult.github || '');
-      setLinkedin(parsedResult.linkedin || '');
+const info = parsedResult.candidate_info || {};
+const candidateNameResolved = info.name || parsedResult.candidate_name || 'Unknown';
+const emailResolved         = info.email || parsedResult.email || '';
+const githubResolved        = info.github || parsedResult.github || '';
+const linkedinResolved      = info.linkedin || parsedResult.linkedin || '';
 
-      const saved = await saveData(resumeText, { ...parsedResult, companies: uniqueCompanies }, newCandidateId, true);
+setCandidateName(candidateNameResolved);
+setEmail(emailResolved);
+setGithub(githubResolved);
+setLinkedin(linkedinResolved);
+
+      const saved = await saveData(resumeText, {
+  ...parsedResult,
+  candidate_name: candidateNameResolved,
+  email: emailResolved,
+  github: githubResolved,
+  linkedin: linkedinResolved,
+  companies: uniqueCompanies,
+}, newCandidateId, true);
       if (saved) {
         onAnalysisComplete({
           job_id: jobId,

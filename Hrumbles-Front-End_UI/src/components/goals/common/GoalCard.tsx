@@ -162,7 +162,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onUpdate, className }) => {
                         <div className="flex items-center">Assigned Employees <span className="ml-2 text-violet-500 bg-violet-50 px-2 rounded-full text-[10px] tracking-normal">{activePeriodData.length}</span></div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <ScrollArea className="max-h-72 pr-3">
+                        <ScrollArea className="h-72 pr-3">
                           <div className="space-y-5 pt-2">
                             {activePeriodData.map(({ assignment, activeInstance }) => {
                               const emp = employeeMap.get(assignment.employee_id);

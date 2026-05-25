@@ -217,6 +217,16 @@ textReveal: {
             opacity: "0",
           },
         },
+        expGlow: {
+    "0%,100%": {
+      transform: "translateY(0)",
+      filter: "brightness(1)"
+    },
+    "50%": {
+      transform: "translateY(-2px)",
+      filter: "brightness(1.18)"
+    }
+  },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -243,6 +253,7 @@ textReveal: {
 
         pulseGlow: "pulseGlow 4s ease-in-out infinite",
         "flow-gradient": "flow-gradient 8s ease-in-out infinite",
+        expGlow: "expGlow 2.5s ease-in-out infinite",
       },
       backgroundImage: {
         "gradient-main": "linear-gradient(to bottom, #FFFFFF, #FFF9E7)",

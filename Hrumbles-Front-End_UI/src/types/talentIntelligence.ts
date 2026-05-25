@@ -155,11 +155,44 @@ export const TI_PAGE_SIZE = 25;
 
 // ── Utility ──────────────────────────────────────────────────
 
-export function calcYearsExperience(experience: TIExperience[] | null): number | null {
+export function calcYearsExperience(
+  experience: TIExperience[] | null
+): string | null {
   if (!experience?.length) return null;
-  const years = experience
-    .map(e => Number(e.start_date_year))
-    .filter(y => y > 1970 && y <= new Date().getFullYear());
-  if (!years.length) return null;
-  return new Date().getFullYear() - Math.min(...years);
+
+  const dates = experience
+    .map(exp => {
+      if (!exp.start_date_year) return null;
+
+      return new Date(
+        Number(exp.start_date_year),
+        Number(exp.start_date_month ?? 1) - 1,
+        1
+      );
+    })
+    .filter(Boolean) as Date[];
+
+  if (!dates.length) return null;
+
+  const start = new Date(
+    Math.min(...dates.map(d => d.getTime()))
+  );
+
+  const now = new Date();
+
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  if (years <= 0) {
+    return `${months}m`;
+  }
+
+  return months > 0
+    ? `${years}y ${months}m`
+    : `${years}y`;
 }

@@ -1,8 +1,8 @@
-// src/components/talent-intelligence/TIResultsTable.tsx  — v5
-// Fixes:
-//  1. Sticky header — position:sticky on each <th> (not thead) with solid bg
-//  2. Tooltip/popover via ReactDOM.createPortal — always above sticky header
-//  3. First-col sticky corner: z-index layering (header-first > header > body-first > body)
+// src/components/talent-intelligence/TIResultsTable.tsx  — v6
+// Changes vs v5:
+//   - RevealCell: only shows personal emails; if revealed but only professional → "No personal email"
+//   - Email reveal button: only shown when ca.personal_email (not work_email)
+//   - InvitePicker: personal emails only, multiple personal → user picks one
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReactDOM from "react-dom";
@@ -19,35 +19,32 @@ import {
   calcYearsExperience,
 } from "@/types/talentIntelligence";
 
-// ── CSS for sticky column solid backgrounds ───────────────────
 const STICKY_CSS = `
   .ti-table tbody tr td.ti-col-sticky { background: #ffffff; }
   .ti-table tbody tr:nth-child(even) td.ti-col-sticky { background: #f9f9fb; }
   .ti-table tbody tr:hover td.ti-col-sticky { background: #f5f3ff !important; }
 `;
 
-// ── Portal tooltip (renders at document.body — always on top) ─
+// ── Personal email helper ─────────────────────────────────────
+// Personal = not professional/work/role-based. Works for RR, Apollo, CO.
+const isPersonalEmail = (e: TIRevealedEmail): boolean =>
+  e.type === "personal" || e.type === "direct" || e.type === "personal_email";
+
+// ── Portal tooltip ────────────────────────────────────────────
 function PortalTip({ trigger, content }: { trigger: React.ReactNode; content: React.ReactNode }) {
-  const [visible, setVisible]   = useState(false);
-  const [style,   setStyle]     = useState<React.CSSProperties>({});
+  const [visible, setVisible] = useState(false);
+  const [style,   setStyle]   = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLDivElement>(null);
   const timer      = useRef<ReturnType<typeof setTimeout>>();
 
   const calcPos = useCallback(() => {
     if (!triggerRef.current) return;
-    const r   = triggerRef.current.getBoundingClientRect();
-    const tip = { w: 240, h: 200 }; // estimated popover size
-    const left = Math.min(r.left, window.innerWidth - tip.w - 8);
-    const spaceAbove = r.top;
-    const spaceBelow = window.innerHeight - r.bottom;
-    const goBelow = spaceAbove < tip.h && spaceBelow >= tip.h;
+    const r    = triggerRef.current.getBoundingClientRect();
+    const left = Math.min(r.left, window.innerWidth - 248);
+    const goBelow = r.top < 200 && window.innerHeight - r.bottom >= 200;
     setStyle({
-      position: "fixed",
-      left: Math.max(8, left),
-      zIndex: 99999,
-      ...(goBelow
-        ? { top:    r.bottom + 6 }
-        : { bottom: window.innerHeight - r.top + 6 }),
+      position: "fixed", left: Math.max(8, left), zIndex: 99999,
+      ...(goBelow ? { top: r.bottom + 6 } : { bottom: window.innerHeight - r.top + 6 }),
     });
   }, []);
 
@@ -71,7 +68,6 @@ function PortalTip({ trigger, content }: { trigger: React.ReactNode; content: Re
 }
 
 // ── Avatar ────────────────────────────────────────────────────
-
 function Avatar({ profile, size = 26 }: { profile: TIProfile; size?: number }) {
   const [err, setErr] = useState(false);
   const sz  = `${size}px`;
@@ -93,7 +89,6 @@ function Avatar({ profile, size = 26 }: { profile: TIProfile; size?: number }) {
 }
 
 // ── Company logo ──────────────────────────────────────────────
-
 function CompanyLogo({ profile }: { profile: TIProfile }) {
   const [err, setErr] = useState(false);
   const domain = profile.company_domain ?? (profile.company as any)?.domain;
@@ -107,100 +102,117 @@ function CompanyLogo({ profile }: { profile: TIProfile }) {
   );
 }
 
-// ── Inline reveal cell ────────────────────────────────────────
+// ── RevealCell ────────────────────────────────────────────────
+// Email: only shows personal emails. Button: only if ca.personal_email.
 
 interface RevealCellProps {
   profile:      TIProfile;
   onRevealDone: (emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
 }
-
+ 
 function RevealCell({ profile, onRevealDone }: RevealCellProps) {
   const auth           = getAuthDataFromLocalStorage();
   const organizationId = auth?.organization_id ?? null;
   const userId         = auth?.userId ?? null;
-
-  const [emails, setEmails] = useState<TIRevealedEmail[]>(profile.revealed_emails ?? []);
-  const [phones, setPhones] = useState<TIRevealedPhone[]>(profile.revealed_phones ?? []);
-  const [eLoad,  setELoad]  = useState(false);
-  const [pLoad,  setPLoad]  = useState(false);
-  const [eErr,   setEErr]   = useState<string|null>(null);
-  const [pErr,   setPErr]   = useState<string|null>(null);
-  const [copied, setCopied] = useState<string|null>(null);
-
-  const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(() => setCopied(null), 1500); };
-
-const reveal = async (type: "email"|"phone") => {
-  if (!organizationId) return;
-  const setLoad = type==="email" ? setELoad : setPLoad;
-  const setErr  = type==="email" ? setEErr  : setPErr;
-  setLoad(true); setErr(null);
-  try {
-    const { data, error } = await supabase.functions.invoke("ti-reveal-contact", {
-      body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
-    });
  
-    if (error || data?.error) {
-      setErr(data?.message ?? data?.error ?? error?.message ?? "Reveal failed");
-      return;
+  const [emails,       setEmails]       = useState<TIRevealedEmail[]>(profile.revealed_emails ?? []);
+  const [phones,       setPhones]       = useState<TIRevealedPhone[]>(profile.revealed_phones ?? []);
+  const [eLoad,        setELoad]        = useState(false);
+  const [pLoad,        setPLoad]        = useState(false);
+  const [eErr,         setEErr]         = useState<string|null>(null);
+  const [pErr,         setPErr]         = useState<string|null>(null);
+  const [copied,       setCopied]       = useState<string|null>(null);
+  const [phonePending, setPhonePending] = useState(false);
+ 
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+ 
+  // Stop polling on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+ 
+  // Sync when profile prop changes (after RPC refresh)
+  useEffect(() => { setEmails(profile.revealed_emails ?? []); setEErr(null); }, [profile.id, profile.revealed_emails?.length ?? 0]);
+  useEffect(() => {
+    const newPhones = profile.revealed_phones ?? [];
+    setPhones(newPhones);
+    // If phone arrived via webhook (polling resolved it), stop pending state
+    if (newPhones.length > 0 && phonePending) {
+      setPhonePending(false);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      onRevealDone(emails, newPhones);
     }
+    setPErr(null);
+  }, [profile.id, profile.revealed_phones?.length ?? 0]);
  
-    const ne: TIRevealedEmail[] = data.allEmails ?? [];
-    const np: TIRevealedPhone[] = data.allPhones ?? [];
-    const m = {
-      emails: type === "email" ? ne : emails,
-      phones: type === "phone" ? np : phones,
-    };
-    setEmails(m.emails);
-    setPhones(m.phones);
-    onRevealDone(m.emails, m.phones);
+  const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(() => setCopied(null), 1500); };
  
-    // NOTE: No frontend supabase.update() here.
-    // The edge function (ti-reveal-contact) persists to master_contactout_profiles
-    // using service role, which is guaranteed to succeed regardless of RLS.
-    // This ensures data is available on the next page load / RPC call.
+  // ── Poll master_contactout_profiles for phone (Apollo webhook delivery) ─────
+  const startPhonePolling = (linkedinUrl: string) => {
+    let count = 0;
+    const MAX  = 20;   // 20 polls × 3s = 60s max wait
+    pollRef.current = setInterval(async () => {
+      count++;
+      if (count > MAX) {
+        clearInterval(pollRef.current!); pollRef.current = null;
+        setPhonePending(false);
+        setPErr("Phone not returned yet — check back in a few minutes.");
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("master_contactout_profiles")
+          .select("revealed_phones")
+          .eq("linkedin_url", linkedinUrl)
+          .maybeSingle();
+        const newPhones: TIRevealedPhone[] = data?.revealed_phones ?? [];
+        if (newPhones.length > 0) {
+          clearInterval(pollRef.current!); pollRef.current = null;
+          setPhonePending(false);
+          setPhones(newPhones);
+          onRevealDone(emails, newPhones);
+        }
+      } catch { /* polling errors are non-fatal */ }
+    }, 3000);
+  };
  
-  } catch (e: any) {
-    setErr(e?.message ?? "Failed");
-  } finally {
-    setLoad(false);
-  }
-};
+  const reveal = async (type: "email"|"phone") => {
+    if (!organizationId) return;
+    const setLoad = type==="email" ? setELoad : setPLoad;
+    const setErr  = type==="email" ? setEErr  : setPErr;
+    setLoad(true); setErr(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("ti-reveal-contact", {
+        body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId },
+      });
+      if (error || (data?.error && !data?.phonePending)) {
+        setErr(data?.message ?? data?.error ?? error?.message ?? "Reveal failed");
+        return;
+      }
+      // ── Phone pending via Apollo webhook ──────────────────
+      if (data?.phonePending) {
+        setPhonePending(true);
+        startPhonePolling(profile.linkedin_url);
+        return;
+      }
+      // ── Normal success ────────────────────────────────────
+      const ne: TIRevealedEmail[] = data.allEmails ?? [];
+      const np: TIRevealedPhone[] = data.allPhones ?? [];
+      const m = { emails: type==="email" ? ne : emails, phones: type==="phone" ? np : phones };
+      setEmails(m.emails); setPhones(m.phones);
+      onRevealDone(m.emails, m.phones);
+    } catch(e: any) { setErr(e?.message ?? "Failed"); }
+    finally { setLoad(false); }
+  };
  
-// ── ADD these useEffect syncs (if not already present) ────────
-// They ensure that when the RPC returns updated profile data (after refresh),
-// the component re-renders with the correct revealed state.
+  const ca = profile.contact_availability;
+  const hasPersonalEmail = !!ca?.personal_email;
+  const hasPhone         = !!ca?.phone;
  
-useEffect(() => {
-  setEmails(profile.revealed_emails ?? []);
-  setEErr(null);
-}, [profile.id, profile.revealed_emails?.length ?? 0]);
+  const personalEmails   = emails.filter(isPersonalEmail);
+  const emailWasRevealed = emails.length > 0;
+  const hasPersonal      = personalEmails.length > 0;
+  const primaryPersonal  = personalEmails[0] ?? null;
+  const pp               = phones[0] ?? null;
  
-useEffect(() => {
-  setPhones(profile.revealed_phones ?? []);
-  setPErr(null);
-}, [profile.id, profile.revealed_phones?.length ?? 0]);
-
-  const ca       = profile.contact_availability;
-  const hasEmail = ca?.personal_email || ca?.work_email;
-  const hasPhone = ca?.phone;
-  const pe = emails[0];
-  const pp = phones[0];
-
-  const allEmailsContent = (
-    <div className="space-y-1.5">
-      <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Emails</p>
-      {emails.map((e, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-          <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{e.email}</span>
-          <button onClick={() => copy(e.email)} className="text-slate-300 hover:text-violet-500 flex-shrink-0 transition-colors">
-            {copied===e.email ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-
   const allPhonesContent = (
     <div className="space-y-1.5">
       <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Phones</p>
@@ -216,19 +228,36 @@ useEffect(() => {
       ))}
     </div>
   );
-
+ 
+  const allPersonalEmailsContent = (
+    <div className="space-y-1.5">
+      <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">Personal Emails</p>
+      {personalEmails.map((e, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+          <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{e.email}</span>
+          <button onClick={() => copy(e.email)} className="text-slate-300 hover:text-violet-500 flex-shrink-0 transition-colors">
+            {copied===e.email ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+ 
   return (
     <div className="flex flex-col gap-0.5" onClick={e => e.stopPropagation()}>
       {/* Email */}
-      {hasEmail && (
-        pe ? (
+      {hasPersonalEmail && (
+        hasPersonal ? (
           <PortalTip trigger={
-            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 cursor-default max-w-[130px] group/cell">
+            <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-100 rounded px-1.5 py-0.5 cursor-default max-w-[130px]">
               <Check size={8} className="text-emerald-500 flex-shrink-0" />
-              <span className="text-[9px] font-mono text-slate-700 truncate">{pe.email}</span>
-              {emails.length > 1 && <span className="text-[8px] text-slate-400 flex-shrink-0">+{emails.length-1}</span>}
+              <span className="text-[9px] font-mono text-slate-700 truncate">{primaryPersonal!.email}</span>
+              {personalEmails.length > 1 && <span className="text-[8px] text-slate-400 flex-shrink-0">+{personalEmails.length-1}</span>}
             </div>
-          } content={allEmailsContent} />
+          } content={allPersonalEmailsContent} />
+        ) : emailWasRevealed ? (
+          <span className="text-[9px] text-slate-400 italic">No personal email</span>
         ) : (
           <button disabled={eLoad} onClick={() => reveal("email")}
             className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
@@ -238,6 +267,7 @@ useEffect(() => {
           </button>
         )
       )}
+ 
       {/* Phone */}
       {hasPhone && (
         pp ? (
@@ -248,6 +278,22 @@ useEffect(() => {
               {phones.length > 1 && <span className="text-[8px] text-slate-400 flex-shrink-0">+{phones.length-1}</span>}
             </div>
           } content={allPhonesContent} />
+        ) : phonePending ? (
+          /* Apollo phone pending — polling for webhook delivery */
+          <PortalTip
+            trigger={
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-[9px] text-amber-600 font-medium max-w-[130px]">
+                <Loader2 size={8} className="animate-spin flex-shrink-0" />
+                <span className="truncate">Verifying…</span>
+              </div>
+            }
+            content={
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-slate-700">Phone pending</p>
+                <p className="text-[9px] text-slate-500 leading-snug">Verifying this number. It will appear here automatically within 1–2 minutes.</p>
+              </div>
+            }
+          />
         ) : (
           <button disabled={pLoad} onClick={() => reveal("phone")}
             className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
@@ -257,13 +303,12 @@ useEffect(() => {
           </button>
         )
       )}
-      {!hasEmail && !hasPhone && <span className="text-[9px] text-slate-300">—</span>}
+ 
+      {!hasPersonalEmail && !hasPhone && <span className="text-[9px] text-slate-300">—</span>}
     </div>
   );
 }
-
 // ── Skills cell ───────────────────────────────────────────────
-
 function SkillsCell({ skills, activeSkillLabels }: { skills: string[] | null; activeSkillLabels?: Set<string> }) {
   const all  = skills ?? [];
   const top  = all.slice(0, 2);
@@ -272,21 +317,17 @@ function SkillsCell({ skills, activeSkillLabels }: { skills: string[] | null; ac
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {top.map(sk => {
-        const isMatch = activeSkillLabels?.has(sk.toLowerCase());
+        const m = activeSkillLabels?.has(sk.toLowerCase());
         return (
           <span key={sk} className={cn("px-1.5 py-0.5 rounded text-[9px] font-medium border",
-            isMatch ? "bg-violet-100 text-violet-700 border-violet-300 ring-1 ring-violet-400" : "bg-slate-100 text-slate-500 border-slate-200")}>
+            m ? "bg-violet-100 text-violet-700 border-violet-300 ring-1 ring-violet-400" : "bg-slate-100 text-slate-500 border-slate-200")}>
             {sk}
           </span>
         );
       })}
       {rest.length > 0 && (
         <PortalTip
-          trigger={
-            <button className="text-[9px] text-violet-500 hover:text-violet-700 font-bold transition-colors px-0.5">
-              +{rest.length}
-            </button>
-          }
+          trigger={<button className="text-[9px] text-violet-500 hover:text-violet-700 font-bold px-0.5">+{rest.length}</button>}
           content={
             <div>
               <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Skills ({all.length})</p>
@@ -309,7 +350,7 @@ function SkillsCell({ skills, activeSkillLabels }: { skills: string[] | null; ac
   );
 }
 
-// ── Invite contact picker ─────────────────────────────────────
+// ── InvitePicker — personal emails only ───────────────────────
 
 interface InvitePickerProps {
   emails:    TIRevealedEmail[];
@@ -319,16 +360,19 @@ interface InvitePickerProps {
 }
 
 function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps) {
-  const ref            = useRef<HTMLDivElement>(null);
-  const personalEmails = emails.filter(e => e.type==="personal"||e.is_primary);
-  const displayEmails  = personalEmails.length > 0 ? personalEmails : emails.slice(0,1);
-  const [sel, setSel]  = useState<{ kind:"email"|"phone"; value:string }|null>(
-    displayEmails[0] ? { kind:"email", value:displayEmails[0].email }
-    : phones[0]      ? { kind:"phone", value:phones[0].number }
-    : null
-  );
+  const ref = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  // ── Personal emails ONLY ──────────────────────────────────
+  const personalEmails = emails.filter(isPersonalEmail);
+
+  const defaultSel = (): { kind: "email"|"phone"; value: string } | null => {
+    if (personalEmails[0]) return { kind: "email",  value: personalEmails[0].email };
+    if (phones[0])         return { kind: "phone",  value: phones[0].number };
+    return null;
+  };
+  const [sel, setSel] = useState(defaultSel);
+
+  useEffect(() => {
     const fn = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
     setTimeout(() => document.addEventListener("mousedown", fn), 100);
     return () => document.removeEventListener("mousedown", fn);
@@ -341,25 +385,38 @@ function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps)
         <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Invite via</p>
         <button onClick={onClose} className="text-slate-300 hover:text-slate-500 transition-colors"><X size={10} /></button>
       </div>
-      {displayEmails.length > 0 && (
+
+      {/* Personal emails only */}
+      {personalEmails.length > 0 && (
         <div className="space-y-0.5">
-          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Email</p>
-          {displayEmails.map((e, i) => (
+          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Personal Email</p>
+          {personalEmails.map((e, i) => (
             <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1 transition-colors">
-              <input type="radio" name="ti-invite-sel" checked={sel?.kind==="email"&&sel.value===e.email}
-                onChange={() => setSel({kind:"email",value:e.email})} className="accent-violet-600 flex-shrink-0" />
+              <input type="radio" name="ti-invite-sel"
+                checked={sel?.kind==="email" && sel.value===e.email}
+                onChange={() => setSel({kind:"email", value:e.email})}
+                className="accent-violet-600 flex-shrink-0" />
               <span className="text-[10px] font-mono text-slate-700 truncate">{e.email}</span>
             </label>
           ))}
         </div>
       )}
+
+      {/* No personal email notice */}
+      {personalEmails.length === 0 && emails.length > 0 && (
+        <p className="text-[10px] text-slate-400 italic px-1">No personal email available</p>
+      )}
+
+      {/* Phones */}
       {phones.length > 0 && (
         <div className="space-y-0.5">
           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Phone</p>
           {phones.slice(0,3).map((ph, i) => (
             <label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1 transition-colors">
-              <input type="radio" name="ti-invite-sel" checked={sel?.kind==="phone"&&sel.value===ph.number}
-                onChange={() => setSel({kind:"phone",value:ph.number})} className="accent-violet-600 flex-shrink-0" />
+              <input type="radio" name="ti-invite-sel"
+                checked={sel?.kind==="phone" && sel.value===ph.number}
+                onChange={() => setSel({kind:"phone", value:ph.number})}
+                className="accent-violet-600 flex-shrink-0" />
               <div className="flex items-center gap-1.5 flex-1">
                 <span className="text-[10px] font-mono text-slate-700">{ph.number}</span>
                 {ph.recommended && <span className="text-[8px] px-1 bg-green-100 text-green-700 rounded">✓</span>}
@@ -368,8 +425,13 @@ function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps)
           ))}
         </div>
       )}
+
+      {personalEmails.length === 0 && phones.length === 0 && (
+        <p className="text-[11px] text-slate-400 text-center py-1">No contact info available</p>
+      )}
+
       <button disabled={!sel}
-        onClick={() => sel && onConfirm(sel.kind==="email"?sel.value:null, sel.kind==="phone"?sel.value:null)}
+        onClick={() => sel && onConfirm(sel.kind==="email" ? sel.value : null, sel.kind==="phone" ? sel.value : null)}
         className="w-full py-1.5 rounded-lg text-[11px] font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90 text-white disabled:opacity-40 transition-all flex items-center justify-center gap-1.5">
         <Send size={10} /> Continue →
       </button>
@@ -378,7 +440,6 @@ function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps)
 }
 
 // ── Pagination ────────────────────────────────────────────────
-
 function Pagination({ page, total, onChange }: { page: number; total: number; onChange: (p: number) => void }) {
   const totalPages = Math.ceil(total / TI_PAGE_SIZE);
   if (totalPages <= 1) return null;
@@ -399,7 +460,7 @@ function Pagination({ page, total, onChange }: { page: number; total: number; on
         <button onClick={()=>onChange(page-1)} disabled={page===1} className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"><ChevronLeft size={13}/></button>
         {range.map((r,i) => r==="…"
           ? <span key={`e${i}`} className="px-1 text-slate-400 text-xs">…</span>
-          : <button key={r} onClick={()=>onChange(r as number)} className={cn("w-6 h-6 rounded text-xs font-medium transition-colors", r===page?"bg-violet-600 text-white":"text-slate-600 hover:bg-slate-100")}>{r}</button>
+          : <button key={r} onClick={()=>onChange(r as number)} className={cn("w-6 h-6 rounded text-xs font-medium transition-colors",r===page?"bg-violet-600 text-white":"text-slate-600 hover:bg-slate-100")}>{r}</button>
         )}
         <button onClick={()=>onChange(page+1)} disabled={page===Math.ceil(total/TI_PAGE_SIZE)} className="p-1.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 transition-colors"><ChevronRight size={13}/></button>
       </div>
@@ -407,7 +468,6 @@ function Pagination({ page, total, onChange }: { page: number; total: number; on
   );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────
 function SkeletonRow() {
   return (
     <tr className="animate-pulse border-b border-slate-50">
@@ -418,7 +478,6 @@ function SkeletonRow() {
   );
 }
 
-// ── Column config ─────────────────────────────────────────────
 const COLS = [
   { label:"Profile",  minW:160 },
   { label:"Contact",  minW:128 },
@@ -429,17 +488,11 @@ const COLS = [
   { label:"Actions",  minW:80  },
 ] as const;
 
-// ── Sticky th style helper ─────────────────────────────────────
-// z: header-first=31, header-rest=30, body-first=1, body-rest=auto
 const thStyle = (i: number): React.CSSProperties => ({
-  position:  "sticky",
-  top:        0,
-  background: "#f8fafc",
-  zIndex:     i === 0 ? 31 : 30,
+  position:  "sticky", top: 0, background: "#f8fafc",
+  zIndex:    i === 0 ? 31 : 30,
   ...(i === 0 ? { left: 0 } : {}),
 });
-
-// ── Main export ───────────────────────────────────────────────
 
 export interface TIResultsTableProps {
   profiles:        TIProfile[];
@@ -467,21 +520,13 @@ export function TIResultsTable({
       .map(c => c.label.toLowerCase())
   );
 
-  // ── Skeleton ─────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="flex-1 overflow-auto">
         <style>{STICKY_CSS}</style>
         <table className="w-full border-collapse ti-table" style={{ minWidth: 960 }}>
           <thead>
-            <tr>
-              {COLS.map((c,i) => (
-                <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }}
-                  className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide border-b border-slate-200">
-                  {c.label}
-                </th>
-              ))}
-            </tr>
+            <tr>{COLS.map((c,i) => <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }} className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide border-b border-slate-200">{c.label}</th>)}</tr>
           </thead>
           <tbody>{Array.from({length:10}).map((_,i)=><SkeletonRow key={i}/>)}</tbody>
         </table>
@@ -494,34 +539,25 @@ export function TIResultsTable({
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <style>{STICKY_CSS}</style>
-
-      {isSearching && (
-        <div className="h-0.5 bg-gradient-to-r from-violet-500 via-purple-400 to-pink-500 animate-pulse flex-shrink-0" />
-      )}
+      {isSearching && <div className="h-0.5 bg-gradient-to-r from-violet-500 via-purple-400 to-pink-500 animate-pulse flex-shrink-0" />}
 
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse ti-table" style={{ minWidth: 960 }}>
-          {/* ── Header — sticky via inline style on each th ── */}
           <thead>
-            <tr>
-              {COLS.map((c,i) => (
-                <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }}
-                  className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap border-b border-slate-200">
-                  {c.label}
-                </th>
-              ))}
-            </tr>
+            <tr>{COLS.map((c,i) => <th key={c.label} style={{ ...thStyle(i), minWidth: c.minW }} className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap border-b border-slate-200">{c.label}</th>)}</tr>
           </thead>
-
-          {/* ── Body ── */}
           <tbody>
             {profiles.map((profile, idx) => {
-              const isOTW     = profile.work_status === "open_to_work";
-              const yrs       = calcYearsExperience(profile.experience);
-              const domain    = profile.company_domain ?? (profile.company as any)?.domain;
-              const isSaved   = saved.has(profile.id);
-              const hasReveal = (profile.revealed_emails?.length??0)>0 || (profile.revealed_phones?.length??0)>0;
-              const showPick  = invitePickerId === profile.id;
+              const isOTW    = profile.work_status === "open_to_work";
+              const yrs      = calcYearsExperience(profile.experience);
+              const domain   = profile.company_domain ?? (profile.company as any)?.domain;
+              const isSaved  = saved.has(profile.id);
+              const showPick = invitePickerId === profile.id;
+
+              // Invite enabled only if personal email or phone is revealed
+              const hasRevealedPersonalEmail = (profile.revealed_emails ?? []).some(isPersonalEmail);
+              const hasRevealedPhone         = (profile.revealed_phones?.length ?? 0) > 0;
+              const canInvite                = hasRevealedPersonalEmail || hasRevealedPhone;
 
               const titleWords = [
                 ...(activeFilters.titles ?? []),
@@ -531,7 +567,7 @@ export function TIResultsTable({
               const highlightTitle = (text: string) => {
                 if (!titleWords.length) return <>{text}</>;
                 const parts = text.split(new RegExp(`(${titleWords.join("|")})`, "gi"));
-                return <>{parts.map((p,i) => titleWords.includes(p.toLowerCase()) ? <mark key={i} className="bg-yellow-100 text-yellow-900 rounded px-0.5 not-italic">{p}</mark> : <span key={i}>{p}</span>)}</>;
+                return <>{parts.map((p,i)=>titleWords.includes(p.toLowerCase())?<mark key={i} className="bg-yellow-100 text-yellow-900 rounded px-0.5 not-italic">{p}</mark>:<span key={i}>{p}</span>)}</>;
               };
 
               return (
@@ -539,7 +575,7 @@ export function TIResultsTable({
                   className="border-b border-slate-50 cursor-pointer group"
                   style={{ background: idx%2===0 ? undefined : "#f9f9fb" }}>
 
-                  {/* 1. Profile — sticky left */}
+                  {/* 1. Profile — sticky */}
                   <td className="px-3 py-2 ti-col-sticky" style={{ position:"sticky", left:0, zIndex:1 }}>
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="relative flex-shrink-0">
@@ -558,22 +594,62 @@ export function TIResultsTable({
                           {profile.linkedin_url && (
                             <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer"
                               onClick={e=>e.stopPropagation()}
-                              className="flex-shrink-0 text-slate-300 hover:text-[#0A66C2] transition-colors">
+                              className="flex-shrink-0 hover:text-blue-300 text-[#0A66C2] transition-colors">
                               <Linkedin size={9} />
                             </a>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          {profile.seniority && (
-                            <span className="text-[8px] px-1 py-px rounded bg-violet-100 text-violet-700 font-bold leading-none whitespace-nowrap">{profile.seniority}</span>
-                          )}
-                          {yrs !== null && (
-                            <span className="text-[8px] text-slate-400 leading-none">{yrs}y</span>
-                          )}
-                          {isOTW && (
-                            <span className="text-[7px] px-1 py-px rounded-full bg-green-100 text-green-700 font-bold leading-none">OTW</span>
-                          )}
-                        </div>
+<div className="relative z-10 flex items-center gap-1.5 mt-1 flex-nowrap overflow-visible">
+
+  {yrs && (
+    <span
+      className="
+        inline-flex
+        items-center
+        px-2
+        py-[3px]
+        rounded-full
+        text-[9px]
+        font-bold
+        whitespace-nowrap
+        bg-indigo-100
+        text-indigo-900
+        shadow-sm
+       
+      "
+    >
+     {yrs}
+    </span>
+  )}
+
+  {isOTW && (
+    <span
+      className="
+        inline-flex
+        items-center
+        gap-1
+        px-1.5
+        py-[2px]
+        rounded-full
+        text-[8px]
+        font-bold
+        whitespace-nowrap
+        bg-green-200
+        text-green-900
+        border
+        border-green-300
+
+        animate-bounce
+      "
+      style={{
+  animation: "bounce 0.9s infinite"
+}}
+    >
+   Open to Work
+    </span>
+  )}
+
+</div>
                       </div>
                     </div>
                   </td>
@@ -583,14 +659,12 @@ export function TIResultsTable({
                     <RevealCell profile={profile} onRevealDone={(em,ph)=>onRevealUpdate(profile.id,em,ph)} />
                   </td>
 
-                  {/* 3. Title — compact */}
+                  {/* 3. Title */}
                   <td className="px-3 py-2">
                     <p className="text-[10px] text-slate-700 leading-snug font-medium truncate max-w-[125px]" title={profile.title??""}>
                       {profile.title ? highlightTitle(profile.title) : <span className="text-slate-300">—</span>}
                     </p>
-                    {profile.job_function && (
-                      <p className="text-[9px] text-slate-400 truncate mt-0.5 max-w-[125px]">{profile.job_function}</p>
-                    )}
+                    {profile.job_function && <p className="text-[9px] text-slate-400 truncate mt-0.5 max-w-[125px]">{profile.job_function}</p>}
                   </td>
 
                   {/* 4. Skills */}
@@ -620,9 +694,7 @@ export function TIResultsTable({
                   {/* 6. Location */}
                   <td className="px-3 py-2">
                     <p className="text-[10px] text-slate-500 truncate max-w-[105px]">{profile.location ?? "—"}</p>
-                    {profile.country && profile.location!==profile.country && (
-                      <p className="text-[9px] text-slate-400 truncate mt-0.5">{profile.country}</p>
-                    )}
+                    {profile.country && profile.location!==profile.country && <p className="text-[9px] text-slate-400 truncate mt-0.5">{profile.country}</p>}
                   </td>
 
                   {/* 7. Actions */}
@@ -633,11 +705,11 @@ export function TIResultsTable({
                         <ExternalLink size={11}/>
                       </button>
                       <button
-                        onClick={()=>hasReveal && setInvitePickerId(showPick?null:profile.id)}
-                        title={hasReveal?"Send invite":"Reveal contact first to invite"}
-                        disabled={!hasReveal}
+                        onClick={()=>canInvite && setInvitePickerId(showPick?null:profile.id)}
+                        title={canInvite ? "Send invite" : "Reveal personal email or phone first"}
+                        disabled={!canInvite}
                         className={cn("w-6 h-6 flex items-center justify-center rounded transition-all",
-                          hasReveal ? "text-slate-400 hover:text-green-600 hover:bg-green-50" : "text-slate-200 cursor-not-allowed")}>
+                          canInvite ? "text-slate-400 hover:text-green-600 hover:bg-green-50" : "text-slate-200 cursor-not-allowed")}>
                         <Send size={11}/>
                       </button>
                       <button
@@ -663,7 +735,6 @@ export function TIResultsTable({
           </tbody>
         </table>
       </div>
-
       <Pagination page={page} total={total} onChange={onPageChange} />
     </div>
   );

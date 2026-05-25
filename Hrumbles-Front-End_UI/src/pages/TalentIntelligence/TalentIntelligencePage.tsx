@@ -1,8 +1,10 @@
-// src/pages/TalentIntelligence/TalentIntelligencePage.tsx  — v5
-// Fixes: floating sidebar toggle at boundary, themed violet header
+// src/pages/TalentIntelligence/TalentIntelligencePage.tsx
+// Change vs v5: onInvite for TIProfileModal now receives (p, email, phone)
+// because TIProfileModal v2 handles personal-email picker internally
+// and passes the selected contact up before opening CandidateInviteGate.
 
 import React, { useState, useCallback } from "react";
-import { Database, RefreshCw, AlertCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { Database, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
 import { useTISearch } from "@/hooks/useTISearch";
@@ -41,18 +43,19 @@ export function TalentIntelligencePage() {
     setSelectedProfile(prev => prev?.id === id ? { ...prev, revealed_emails: emails, revealed_phones: phones } : prev);
   }, [patchProfile]);
 
+  // Receives pre-selected personal email (or phone) from table InvitePicker
+  // or from modal's internal picker — no first-email guessing here
   const handleInvite = useCallback((profile: TIProfile, email: string|null, phone: string|null) => {
     setInviteTarget({ profile, email, phone });
   }, []);
 
   const activeFilters = { skillChips: filters.skillChips, titles: filters.titles, query: filters.query };
-
   const SIDEBAR_W = 266;
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 70px - 8px)", background: "#f8f9fc" }}>
 
-      {/* ── Header — violet themed ── */}
+      {/* ── Header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-0 bg-gradient-to-r from-violet-700 to-purple-700 border-b border-violet-800/30 shadow-sm" style={{ height: 44 }}>
         <div className="flex items-center gap-2.5">
           <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center">
@@ -70,7 +73,6 @@ export function TalentIntelligencePage() {
             </span>
           )}
         </div>
-
         <div className="flex items-center gap-1.5">
           {stats && (
             <div className="hidden sm:flex items-center gap-3 mr-2">
@@ -95,21 +97,15 @@ export function TalentIntelligencePage() {
       {/* ── Body ── */}
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
 
-        {/* Sidebar — smooth width transition */}
-        <div
-          className="flex-shrink-0 border-r border-slate-200 overflow-hidden transition-all duration-300 ease-in-out bg-white"
+        {/* Sidebar */}
+        <div className="flex-shrink-0 border-r border-slate-200 overflow-hidden transition-all duration-300 ease-in-out bg-white"
           style={{ width: sidebarOpen ? SIDEBAR_W : 0 }}>
           <div style={{ width: SIDEBAR_W, height: "100%" }}>
-            <TISearchSidebar
-              filters={filters}
-              onChange={setFilters}
-              onReset={resetFilters}
-              stats={stats}
-            />
+            <TISearchSidebar filters={filters} onChange={setFilters} onReset={resetFilters} stats={stats} />
           </div>
         </div>
 
-        {/* ── Floating sidebar toggle button — at boundary ── */}
+        {/* Floating sidebar toggle */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           title={sidebarOpen ? "Collapse filters" : "Expand filters"}
@@ -120,18 +116,13 @@ export function TalentIntelligencePage() {
             "text-slate-400 rounded-r-full",
           )}
           style={{ left: sidebarOpen ? SIDEBAR_W - 1 : -1, borderLeft: "none" }}>
-          {sidebarOpen
-            ? <ChevronLeft size={11} />
-            : <ChevronRight size={11} />}
+          {sidebarOpen ? <ChevronLeft size={11} /> : <ChevronRight size={11} />}
         </button>
 
         {/* Results panel */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-white">
-
-          {/* Active filter chips */}
           <TIFilterChips filters={filters} onChange={setFilters} onReset={resetFilters} />
 
-          {/* Error */}
           {error && (
             <div className="mx-4 mt-2 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex-shrink-0">
               <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
@@ -140,7 +131,6 @@ export function TalentIntelligencePage() {
             </div>
           )}
 
-          {/* Table or empty state */}
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {!isLoading && profiles.length === 0 ? (
               <div className="overflow-y-auto flex-1">
@@ -164,22 +154,21 @@ export function TalentIntelligencePage() {
         </div>
       </div>
 
-      {/* ── Profile modal (portal — above MainLayout) ── */}
+      {/* Profile modal */}
       <TIProfileModal
         profile={selectedProfile}
         onClose={() => setSelectedProfile(null)}
-        onInvite={p => {
+        // ── CHANGED: modal now handles personal-email picker internally
+        //    and passes the selected (email, phone) up here.
+        //    No more guessing with revealed_emails[0].
+        onInvite={(p, email, phone) => {
           setSelectedProfile(null);
-          setInviteTarget({
-            profile: p,
-            email:   p.revealed_emails?.[0]?.email ?? null,
-            phone:   p.revealed_phones?.[0]?.number ?? null,
-          });
+          setInviteTarget({ profile: p, email, phone });
         }}
         onProfileUpdate={handleProfileUpdate}
       />
 
-      {/* ── CandidateInviteGate — job picker → invite modal ── */}
+      {/* CandidateInviteGate — job picker → invite modal */}
       {inviteTarget && (
         <CandidateInviteGate
           candidateName={inviteTarget.profile.full_name ?? "Candidate"}

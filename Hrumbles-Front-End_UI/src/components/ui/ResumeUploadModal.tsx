@@ -138,7 +138,7 @@ const normalizeCompanyName = (name: string): string => {
   return normalized;
 };
 
-async function saveAnalysisToDB(profile: ParsedCandidateProfile, job_id: string, candidate_id: string, isInitial: boolean, user: any, organizationId: string, resumeText?: string): Promise<boolean> {
+async function saveAnalysisToDB(profile: ParsedCandidateProfile, job_id: string, candidate_id: string, isInitial: boolean, user: any, organizationId: string, resumeText?: string): Promise<boolean | 'already_exists'> {
   try {
     // Validate required fields
     if (!job_id || !candidate_id) {
@@ -186,14 +186,49 @@ const companies = experienceAnalysis.companies || profile.companies || [];
     console.log('Saving to Supabase - Resume Analysis Payload:', JSON.stringify(resumePayload, null, 2));
 
     // Step 2: Upsert resume_analysis
-    const { error: resumeError } = await supabase
-      .from('resume_analysis')
-      .upsert(resumePayload, { onConflict: ['job_id', 'candidate_id'] });
+if (isInitial && (resumePayload.email || resumePayload.phone_number)) {
+  const orConditions = [];
+  if (resumePayload.email) orConditions.push(`email.eq.${resumePayload.email}`);
+  if (resumePayload.phone_number) orConditions.push(`phone_number.eq.${resumePayload.phone_number}`);
+  
+  const { data: existing } = await supabase
+    .from('resume_analysis')
+    .select('candidate_id, candidate_name, job_id')
+    .eq('job_id', job_id)
+    .or(orConditions.join(','))
+    .maybeSingle();
 
-    if (resumeError) {
-      console.error('Supabase Resume Error:', JSON.stringify(resumeError, null, 2));
-      throw new Error(`Resume upsert failed: ${resumeError.message}`);
-    }
+  if (existing) {
+    toast.error(
+      `"${resumePayload.candidate_name || 'This candidate'}" has already been analysed for this job.`,
+      {
+        description: 'View their existing analysis in the job\'s candidate history.',
+        duration: 5000,
+      }
+    );
+    return 'already_exists';
+  }
+}
+
+const { error: resumeError } = await supabase
+  .from('resume_analysis')
+  .upsert(resumePayload, { onConflict: ['job_id', 'candidate_id'] });
+
+if (resumeError) {
+  // Phone unique constraint violation = duplicate candidate in system
+  if (resumeError.code === '23505' && resumeError.message.includes('phone_number')) {
+    toast.error(
+      `"${resumePayload.candidate_name || 'This candidate'}" is already in the history.`,
+      {
+        description: 'Their email matches an existing candidate record.',
+        duration: 5000,
+      }
+    );
+    return 'already_exists';
+  }
+  console.error('Supabase Resume Error:', JSON.stringify(resumeError, null, 2));
+  throw new Error(`Resume upsert failed: ${resumeError.message}`);
+}
 
     // Step 3: Company Association Logic
     if (profile.companies && Array.isArray(profile.companies)) {
@@ -601,11 +636,12 @@ const analysisResult = await runAnalysisViaEdge(textToAnalyze, job.description, 
       }
       
       // Save to resume_analysis immediately
-      const saved = await saveAnalysisToDB(finalProfile, job.id, candidate_id, true, user, organizationId, textToAnalyze);
-      if (!saved) throw new Error("Failed to save analysis.");
-      
-      setSingleAnalysisResult(finalProfile);
-      setView('detail');
+const saved = await saveAnalysisToDB(finalProfile, job.id, candidate_id, true, user, organizationId, textToAnalyze);
+if (saved === 'already_exists') return; // toast already shown inside saveAnalysisToDB
+if (!saved) throw new Error("Failed to save analysis.");
+
+setSingleAnalysisResult(finalProfile);
+setView('detail');
 
     } catch (error: any) {
       console.error("Single analysis failed:", error);
@@ -649,10 +685,14 @@ const analysisResult = await runAnalysisViaEdge(text, job.description, analysisC
         };
         
         // Save to resume_analysis immediately
-        const saved = await saveAnalysisToDB(finalProfile, job.id, candidate_id, true, user, organizationId, text);
-        if (!saved) {
-          throw new Error(`Failed to save analysis for ${file.name}`);
-        }
+const saved = await saveAnalysisToDB(finalProfile, job.id, candidate_id, true, user, organizationId, text);
+if (saved === 'already_exists') {
+  // Toast already shown, count as skipped not failed
+  return { status: 'rejected' as const, reason: new Error('already_exists') };
+}
+if (!saved) {
+  throw new Error(`Failed to save analysis for ${file.name}`);
+}
         
         setProgress(((index + 1) / files.length) * 100);
         return { status: 'fulfilled' as const, value: finalProfile };
