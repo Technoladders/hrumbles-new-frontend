@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 
 interface V2SkillsPanelProps {
   sortedGroupedSkills: Record<string, { name: string; description: string; relatedSkills?: string[] }[]>;
@@ -7,7 +7,44 @@ interface V2SkillsPanelProps {
   shareMode: boolean;
   sharedDataOptions?: any;
   expanded?: boolean;
+  highlightQuery?: string;
 }
+
+const Highlight: React.FC<{ text: string; query?: string }> = ({ text, query }) => {
+  if (!query || !query.trim()) return <>{text}</>;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+  return (
+    <>
+      {parts.map((part, i) => 
+        regex.test(part) ? (
+          <mark key={i} className="bg-purple-100 text-purple-700 rounded px-0.5">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+};
+
+const SCard = ({ icon, title, iconBg, children }: {
+  icon: React.ReactNode; 
+  title: string; 
+  iconBg: string; 
+  children: React.ReactNode;
+}) => (
+  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/40">
+      <div className={`flex h-5 w-5 items-center justify-center rounded-md ${iconBg}`}>{icon}</div>
+      <h3 className="text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+        {title}
+      </h3>
+    </div>
+    {children}
+  </div>
+);
 
 export const V2SkillsPanel: React.FC<V2SkillsPanelProps> = ({
   sortedGroupedSkills,
@@ -16,6 +53,7 @@ export const V2SkillsPanel: React.FC<V2SkillsPanelProps> = ({
   shareMode,
   sharedDataOptions,
   expanded = false,
+  highlightQuery = "",
 }) => {
   const [hoveredSkill, setHoveredSkill] = useState<string | null>(null);
 
@@ -24,14 +62,9 @@ export const V2SkillsPanel: React.FC<V2SkillsPanelProps> = ({
 
   if (isLoading) {
     return (
-      <div className="v2-card v2-animate-in" style={{ padding: 24, marginBottom: 20 }}>
-        <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{
-            width: 32, height: 32, border: "3px solid var(--v2-primary-200)",
-            borderTopColor: "var(--v2-primary)", borderRadius: "50%",
-            animation: "spin 0.8s linear infinite",
-          }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-2 mb-2">
+        <div className="h-8 flex items-center justify-center">
+          <div className="w-4 h-4 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin" />
         </div>
       </div>
     );
@@ -41,238 +74,139 @@ export const V2SkillsPanel: React.FC<V2SkillsPanelProps> = ({
   if (shareMode && !sharedDataOptions?.skillinfo && !sharedDataOptions?.personalInfo) return null;
 
   const groupedEntries = Object.entries(sortedGroupedSkills);
-
-  // Split into two columns if many categories
-  const shouldSplit = groupedEntries.length > 3;
-  const mid = Math.ceil(groupedEntries.length / 2);
-  const firstHalf = groupedEntries.slice(0, mid);
-  const secondHalf = groupedEntries.slice(mid);
+  const totalSkills = groupedEntries.reduce((acc, [, s]) => acc + s.length, 0);
+  const shouldSplit = totalSkills > 5 && groupedEntries.length > 2;
+  const half = Math.ceil(groupedEntries.length / 2);
+  const firstHalf = groupedEntries.slice(0, half);
+  const secondHalf = groupedEntries.slice(half);
 
   const getExpText = (skill: any) => {
     const y = skill.experienceYears || 0;
     const m = skill.experienceMonths || 0;
-    if (y > 0 && m > 0) return `${y}.${m} yrs`;
-    if (y > 0) return `${y} yr${y > 1 ? "s" : ""}`;
-    if (m > 0) return `${m} mo${m > 1 ? "s" : ""}`;
-    return "0 yrs";
+    if (y > 0 && m > 0) return `${y}.${m}y`;
+    if (y > 0) return `${y}y`;
+    if (m > 0) return `${m}m`;
+    return "0y";
   };
 
   const renderStars = (rating: number) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+    <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
-        <svg key={s} width="14" height="14" viewBox="0 0 24 24" fill={s <= rating ? "#7C3AED" : "#E2E8F0"} stroke="none">
+        <svg key={s} width="9" height="9" viewBox="0 0 24 24" fill={s <= rating ? "#7C3AED" : "#E2E8F0"} stroke="none">
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
       ))}
-      <span style={{ fontFamily: "var(--v2-mono)", fontSize: "0.72rem", fontWeight: 600, color: "var(--v2-text-secondary)", marginLeft: 4 }}>
+      <span className="font-mono text-[9px] font-semibold text-slate-500 ml-1">
         {rating}/5
       </span>
     </div>
   );
 
-  const renderSkillsTable = (data: [string, any[]][]) => (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+  const renderSkillsTable = (entries: [string, { name: string; description: string; relatedSkills?: string[] }[]][]) => (
+    <table className="w-full text-[10px] border-collapse">
       <thead>
-        <tr style={{ borderBottom: "2px solid var(--v2-border2)" }}>
-          <th style={{
-            padding: "8px 12px", textAlign: "left", fontSize: "0.65rem",
-            fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px",
-            color: "var(--v2-text-muted)", width: "30%",
-          }}>
+        <tr className="border-b border-slate-100">
+          <th className="w-1/3 text-left px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             Category
           </th>
-          <th style={{
-            padding: "8px 12px", textAlign: "left", fontSize: "0.65rem",
-            fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px",
-            color: "var(--v2-text-muted)",
-          }}>
+          <th className="text-left px-2 py-1.5 text-[8px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             Skills
           </th>
         </tr>
       </thead>
       <tbody>
-        {data.map(([category, items]) => (
-          <React.Fragment key={category}>
-            {items.map((item: any, idx: number) => (
-              <tr
-                key={`${category}-${idx}`}
-                style={{ borderBottom: "1px solid var(--v2-border2)", transition: "background 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--v2-primary-50)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {idx === 0 && (
-                  <td
-                    rowSpan={items.length}
-                    style={{
-                      padding: "12px 14px", verticalAlign: "top",
-                      borderRight: "1px solid var(--v2-border2)",
-                      background: "rgba(124,58,237,0.02)",
-                    }}
-                  >
-                    <span style={{ fontWeight: 700, fontSize: "0.78rem", color: "var(--v2-text)" }}>
-                      {category}
+        {entries.map(([groupKey, skills]) => (
+          <tr key={groupKey} className="border-b border-slate-50 hover:bg-violet-50/20 transition-colors">
+            <td className="px-2 py-1.5 align-top font-semibold text-[9px] text-slate-600 whitespace-normal leading-tight">
+              {groupKey}
+            </td>
+            <td className="px-2 py-1.5">
+              <div className="flex flex-wrap gap-1">
+                {skills.map((skill) => (
+                  <div key={skill.name} className="relative group/sk">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-white border border-purple-200 text-purple-700 cursor-default whitespace-normal leading-tight">
+                      <Highlight text={skill.name} query={highlightQuery} />
                     </span>
-                  </td>
-                )}
-                <td style={{ padding: "10px 14px" }}>
-                  <div style={{ position: "relative", display: "inline-block" }}>
-                    <span
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: 6,
-                        padding: "4px 12px", borderRadius: 8,
-                        background: "linear-gradient(135deg, var(--v2-primary-50), rgba(6,182,212,0.04))",
-                        border: "1px solid var(--v2-primary-100)",
-                        fontSize: "0.78rem", fontWeight: 600, color: "var(--v2-primary-dark)",
-                        cursor: "help", transition: "all 0.2s",
-                      }}
-                      onMouseEnter={() => setHoveredSkill(`${category}-${idx}`)}
-                      onMouseLeave={() => setHoveredSkill(null)}
-                    >
-                      {item.name}
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4">
-                        <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
-                      </svg>
-                    </span>
-
-                    {/* Tooltip */}
-                    {hoveredSkill === `${category}-${idx}` && (
-                      <div style={{
-                        position: "absolute", bottom: "calc(100% + 8px)",
-                        left: "50%", transform: "translateX(-50%)",
-                        width: 280, padding: 0, borderRadius: 12,
-                        background: "#1E1B4B", color: "#fff",
-                        boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
-                        zIndex: 100, pointerEvents: "none",
-                        animation: "v2ScaleIn 0.15s ease",
-                        overflow: "hidden",
-                      }}>
-                        <div style={{
-                          padding: "10px 14px",
-                          background: "rgba(255,255,255,0.08)",
-                          borderBottom: "1px solid rgba(255,255,255,0.1)",
-                          display: "flex", justifyContent: "space-between", alignItems: "center",
-                        }}>
-                          <span style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: "#A78BFA" }}>
-                            Skill Details
-                          </span>
-                        </div>
-                        <div style={{ padding: "12px 14px" }}>
-                          <p style={{ fontWeight: 700, fontSize: "0.82rem", marginBottom: 4 }}>{item.name}</p>
-                          <p style={{ fontSize: "0.72rem", color: "#CBD5E1", lineHeight: 1.5, marginBottom: 8 }}>
-                            {item.description || "Professional proficiency required."}
-                          </p>
-                          {item.relatedSkills && item.relatedSkills.length > 0 && (
-                            <div style={{ paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-                              <div style={{ fontSize: "0.58rem", fontWeight: 700, textTransform: "uppercase", color: "#64748B", marginBottom: 6 }}>
-                                Related Skills
-                              </div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                                {item.relatedSkills.slice(0, 3).map((rs: string, ri: number) => (
-                                  <span key={ri} style={{
-                                    fontSize: "0.65rem", padding: "2px 8px", borderRadius: 4,
-                                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)",
-                                    color: "#CBD5E1",
-                                  }}>
-                                    {rs}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {/* Arrow */}
-                        <div style={{
-                          position: "absolute", top: "100%", left: "50%",
-                          transform: "translateX(-50%)", width: 0, height: 0,
-                          borderLeft: "7px solid transparent", borderRight: "7px solid transparent",
-                          borderTop: "7px solid #1E1B4B",
-                        }} />
+                    {skill.description && skill.description !== "No description available." && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 w-max max-w-[200px] p-1.5 rounded-md bg-slate-800 text-white text-[9px] shadow-xl opacity-0 group-hover/sk:opacity-100 transition-opacity z-20 pointer-events-none">
+                        {skill.description}
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-[-3px] w-1.5 h-1.5 bg-slate-800 rotate-45" />
                       </div>
                     )}
                   </div>
-                </td>
-              </tr>
-            ))}
-          </React.Fragment>
+                ))}
+              </div>
+            </td>
+          </tr>
         ))}
       </tbody>
     </table>
   );
 
   return (
-    <div style={{ marginBottom: 20 }}>
-      {/* ─── Grouped Skills Table ─── */}
+    <div className="space-y-2">
+      {/* Grouped Skills Table */}
       {hasGroupedSkills && (
-        <div className="v2-card v2-animate-in" style={{ padding: 0, marginBottom: 20, overflow: "visible" }}>
-          <div style={{
-            padding: "18px 24px", borderBottom: "1px solid var(--v2-border2)",
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <div style={{
-              padding: "6px 8px", borderRadius: 8,
-              background: "linear-gradient(135deg, var(--v2-primary-100), rgba(6,182,212,0.1))",
-            }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--v2-primary)" strokeWidth="2">
-                <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
-              </svg>
-            </div>
-            <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.2px", color: "var(--v2-primary)" }}>
-              Candidate Skills
-            </span>
-            <span style={{
-              marginLeft: "auto", fontSize: "0.68rem", padding: "2px 8px",
-              borderRadius: 12, background: "var(--v2-primary-50)", color: "var(--v2-primary)",
-            }}>
-              {groupedEntries.reduce((t, [, items]) => t + items.length, 0)} skills
-            </span>
-          </div>
-
-          <div style={{ padding: shouldSplit ? "16px" : "16px 20px", overflow: "visible" }}>
-            {shouldSplit ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-                <div style={{ borderRight: "1px solid var(--v2-border2)", paddingRight: 12 }}>
-                  {renderSkillsTable(firstHalf)}
-                </div>
-                <div style={{ paddingLeft: 12 }}>
-                  {renderSkillsTable(secondHalf)}
-                </div>
+        <SCard 
+          icon={
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="url(#pg-grad)" strokeWidth="2">
+              <defs>
+                <linearGradient id="pg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#9333ea" />
+                  <stop offset="100%" stopColor="#ec4899" />
+                </linearGradient>
+              </defs>
+              <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+            </svg>
+          } 
+          title="Candidate Skills" 
+          iconBg="bg-violet-50"
+        >
+          <div className="p-2">
+            {groupedEntries.length === 0 ? (
+              <p className="text-[10px] text-slate-400">No skills available.</p>
+            ) : shouldSplit ? (
+              <div className="grid grid-cols-2 gap-2 divide-x divide-slate-100">
+                <div>{renderSkillsTable(firstHalf)}</div>
+                <div className="pl-2">{renderSkillsTable(secondHalf)}</div>
               </div>
             ) : (
               renderSkillsTable(groupedEntries)
             )}
           </div>
-        </div>
+        </SCard>
       )}
 
-      {/* ─── Skill Ratings (expanded view only) ─── */}
+      {/* Skill Ratings */}
       {expanded && hasRatings && (!shareMode || sharedDataOptions?.personalInfo) && (
-        <div className="v2-card v2-animate-in" style={{ padding: 24 }}>
-          <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--v2-text)", marginBottom: 16 }}>
-            Skill Ratings
-          </h3>
-          <div style={{ maxHeight: 600, overflowY: "auto" }}>
+        <SCard 
+          icon={
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="url(#pg-grad)" strokeWidth="2">
+              <defs>
+                <linearGradient id="pg-grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#9333ea" />
+                  <stop offset="100%" stopColor="#ec4899" />
+                </linearGradient>
+              </defs>
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+          }
+          title="Skill Ratings" 
+          iconBg="bg-amber-50"
+        >
+          <div className="p-2 max-h-[300px] overflow-y-auto">
             {[...skillRatings]
               .sort((a, b) => b.rating - a.rating)
               .map((skill, i) => (
                 <div
                   key={i}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "10px 14px", borderBottom: "1px solid var(--v2-border2)",
-                    transition: "background 0.2s", borderRadius: 8,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--v2-primary-50)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  className="flex items-center justify-between py-1.5 px-1 border-b border-slate-100 last:border-0"
                 >
-                  <span style={{ fontSize: "0.84rem", fontWeight: 500, color: "var(--v2-text)" }}>
+                  <span className="text-[10px] font-medium text-slate-700">
                     {skill.name}
                   </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <span style={{
-                      fontSize: "0.72rem", fontWeight: 600, padding: "3px 10px",
-                      borderRadius: 6, background: "var(--v2-primary-50)",
-                      color: "var(--v2-primary)", border: "1px solid var(--v2-primary-100)",
-                    }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-100">
                       {getExpText(skill)}
                     </span>
                     {renderStars(skill.rating)}
@@ -280,7 +214,7 @@ export const V2SkillsPanel: React.FC<V2SkillsPanelProps> = ({
                 </div>
               ))}
           </div>
-        </div>
+        </SCard>
       )}
     </div>
   );
