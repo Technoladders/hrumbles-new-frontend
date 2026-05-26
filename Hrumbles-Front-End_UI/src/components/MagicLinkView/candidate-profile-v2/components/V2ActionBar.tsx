@@ -122,3 +122,4 @@ export const V2ActionBar: React.FC<V2ActionBarProps> = ({
     </div>
   );
 };
+// compact
