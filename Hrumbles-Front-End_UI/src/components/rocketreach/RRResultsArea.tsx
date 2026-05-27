@@ -18,7 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, Copy, Check, MapPin, ChevronDown, ChevronUp,
-  Mail, Phone, Award, Send, Bookmark, BookmarkCheck, X,
+  Mail, Phone, Award, Send, Bookmark, BookmarkCheck, X, Clock,
 } from "lucide-react";
 import type { RRProfile, RREmailEntry, RRPhoneEntry, SkillChip } from "./types";
 import { useRRUpsertSaved } from "./hooks/useRRUpsertSaved";
@@ -316,20 +316,28 @@ const CertificationsRow: React.FC<{ certifications: any[]; loading: boolean }> =
 };
 
 // ─── Right action card ────────────────────────────────────────────────────────
+// ─── Right action card ────────────────────────────────────────────────────────
 interface RightCardProps {
-  profile:        RRProfile;
-  enriched:       boolean;
-  allEmailsRaw:   RREmailEntry[];
-  allPhones:      RRPhoneEntry[];
-  teaserEmails:   string[];
-  teaserPhones:   { number: string; is_premium: boolean }[];
-  emailAvailable: boolean | null;
-  phoneAvailable: boolean | null;
-  revealingEmail: boolean;
-  revealingPhone: boolean;
-  phoneIsPending: boolean;      // Apollo async phone — show amber "Verifying…" state
+  profile:          RRProfile;
+  enriched:         boolean;
+  allEmailsRaw:     RREmailEntry[];
+  allPhones:        RRPhoneEntry[];
+  teaserEmails:     string[];
+  teaserPhones:     { number: string; is_premium: boolean }[];
+  emailAvailable:   boolean | null;
+  phoneAvailable:   boolean | null;
+  revealingEmail:   boolean;
+  revealingPhone:   boolean;
+  phoneIsPending:   boolean;
+  emailNotFound:    boolean; 
+  phoneNotFound:    boolean; 
+  waterfallEnabled?: boolean;
+  waterfallChecking?: boolean; 
+  waterfallInQueue?: boolean;
+  waterfallDone?:    boolean;
   onRevealEmail:  () => void;
   onRevealPhone:  () => void;
+  onAddToWaterfall?: () => void;
   onInvite?:      () => void;
   canInvite:      boolean;
   provider:       string;
@@ -339,7 +347,10 @@ interface RightCardProps {
 const RightCard: React.FC<RightCardProps> = ({
   profile, enriched, allEmailsRaw, allPhones,
   teaserEmails, teaserPhones, emailAvailable, phoneAvailable,
-  revealingEmail, revealingPhone, phoneIsPending, onRevealEmail, onRevealPhone,
+  revealingEmail, revealingPhone, phoneIsPending,
+  emailNotFound, phoneNotFound,
+  waterfallEnabled, waterfallChecking, waterfallInQueue, waterfallDone,
+  onRevealEmail, onRevealPhone, onAddToWaterfall,
   onInvite, canInvite, provider, onViewCV,
 }) => {
   const [showEmailTeaser, setShowEmailTeaser] = useState(false);
@@ -349,10 +360,9 @@ const RightCard: React.FC<RightCardProps> = ({
   const isContactOut = provider === "contactout";
 
   const personalEmails = allEmailsRaw.filter(e => e.type === "personal");
-  const displayEmail   = personalEmails[0] ?? null;   // personal only — never show professional
+  const displayEmail   = personalEmails[0] ?? null;   
   const displayPhone   = allPhones[0] ?? null;
 
-  // Show CO emails only if personal ones are present — professional emails are never displayed
   const hasEmailsFromCO = isContactOut && personalEmails.length > 0;
   const personalTeaserDomains = profile.teaser?.personal_emails ?? teaserEmails.slice(0, 2);
 
@@ -374,21 +384,21 @@ const RightCard: React.FC<RightCardProps> = ({
     });
   };
 
-  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;  // displayEmail is personal-only
-  const emailDisabled = revealingEmail || emailAvailable === false;
+  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;  
+  const emailDisabled = revealingEmail || emailAvailable === false || emailNotFound;
   const emailClass = emailDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
-    : emailAvailable === false
+    : (emailAvailable === false || emailNotFound)
       ? "text-slate-400 border-slate-200 bg-slate-50"
       : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
   const phoneDone     = !!(enriched && displayPhone);
-  const phoneDisabled = revealingPhone || phoneIsPending || phoneAvailable === false;
+  const phoneDisabled = revealingPhone || phoneIsPending || phoneAvailable === false || phoneNotFound;
   const phoneClass = phoneDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
     : phoneIsPending
       ? "text-amber-600 border-amber-200 bg-amber-50"
-      : phoneAvailable === false
+      : (phoneAvailable === false || phoneNotFound)
         ? "text-slate-400 border-slate-200 bg-slate-50"
         : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
@@ -440,7 +450,7 @@ const RightCard: React.FC<RightCardProps> = ({
             )}>
             {revealingEmail ? <Loader2 size={9} className="animate-spin" /> : emailDone ? <Check size={9} /> : <Mail size={9} />}
             <span className="truncate">
-              {revealingEmail ? "…" : emailDone ? "Email ✓" : emailAvailable === false ? "No email" : "Email"}
+              {revealingEmail ? "…" : emailDone ? "Email ✓" : (emailAvailable === false || emailNotFound) ? "No email" : "Email"}
             </span>
           </button>
           {showEmailTeaser && personalTeaserDomains.length > 0 && (
@@ -469,7 +479,7 @@ const RightCard: React.FC<RightCardProps> = ({
               {revealingPhone ? "…"
                 : phoneIsPending ? "Verifying…"
                 : phoneDone ? "Phone ✓"
-                : phoneAvailable === false ? "No phone"
+                : (phoneAvailable === false || phoneNotFound) ? "No phone"
                 : isContactOut ? "Get Phone"
                 : "Phone"}
             </span>
@@ -485,6 +495,33 @@ const RightCard: React.FC<RightCardProps> = ({
           )}
         </div>
       </div>
+
+      {/* CHANGE: Added verification conditions to ensure display persistence across renders */}
+      {waterfallEnabled && (emailNotFound || waterfallInQueue || waterfallDone) && (
+        waterfallChecking ? (
+          <div className="flex items-center justify-center gap-1 text-[9px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 cursor-default">
+            <Loader2 size={8} className="animate-spin flex-shrink-0" />
+            <span className="truncate">Checking queue...</span>
+          </div>
+        ) : waterfallDone ? (
+          <div className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1.5">
+            <Check size={8} /> Email found — check again
+          </div>
+        ) : waterfallInQueue ? (
+          <div className="flex items-center gap-1 text-[9px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 cursor-default"
+            title="Our team is sourcing this email. Check back in 24–48 hours.">
+            <Loader2 size={8} className="animate-spin flex-shrink-0" />
+            <span className="truncate">In Queue (24–48h)</span>
+          </div>
+        ) : (
+          <button
+            onClick={e => { e.stopPropagation(); onAddToWaterfall?.(); }}
+            title="We'll source this personal email within 24–48 hours"
+            className="w-full text-[9px] font-semibold border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors">
+            <Clock size={9} /> Add to Waterfall
+          </button>
+        )
+      )}
 
       <div className="grid grid-cols-2 gap-1.5">
         <button onClick={e => { e.stopPropagation(); onInvite?.(); }}
@@ -513,6 +550,388 @@ const RightCard: React.FC<RightCardProps> = ({
           <span>View Full CV</span>
           <span className="text-xs">↗</span>
         </button>
+      )}
+    </div>
+  );
+};
+
+// ─── Single result row ────────────────────────────────────────────────────────
+export const RRResultRow: React.FC<RRResultRowProps> = ({
+  profile: p, revealed, checked, selected, activeSkillChips,
+  tiRevealProvider,  
+  waterfallEnabled, organizationId,
+  onCheck, onRowClick, onRevealComplete, onInvite,
+}) => {
+  const [revealingEmail, setRevealingEmail] = useState(false);
+  const [revealingPhone, setRevealingPhone] = useState(false);
+  const [revealError,    setRevealError]    = useState<string|null>(null);
+  const [showInvitePick, setShowInvitePick] = useState(false);
+  const [showCV,         setShowCV]         = useState(false);
+  const [cvUrl,          setCvUrl]          = useState<string>("");
+  const [phonePendingState, setPhonePendingState] = useState(false);
+  
+  const phonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (phonePollRef.current) clearInterval(phonePollRef.current); }, []);
+
+  const [emailNotFound,  setEmailNotFound]  = useState(false);
+  const [phoneNotFound,  setPhoneNotFound]  = useState(false);
+  
+  // Waterfall states
+  const [waterfallInQueue, setWaterfallInQueue] = useState(false);
+  const [waterfallDone,    setWaterfallDone]    = useState(false);
+  const [waterfallChecking, setWaterfallChecking] = useState(!!waterfallEnabled); 
+  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const provider     = (p as any)._provider ?? "rocketreach";
+  const isContactOut = provider === "contactout";
+  const enriched     = !!p._enriched || revealed;
+
+  // ─── MOUNT STATE RESTORATION & UNCONDITIONAL REALTIME CHANNELS ─────────
+  useEffect(() => {
+    if (!waterfallEnabled || !p.linkedin_url) {
+      setWaterfallChecking(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const checkWaterfallStatus = async () => {
+      try {
+        const auth = await resolveAuth();
+        const orgId = organizationId ?? auth?.organizationId;
+        if (!orgId) return;
+
+        const { data, error } = await supabase
+          .from("candidate_waterfall")
+          .select("status, found_email, found_phone")
+          .eq("linkedin_url", p.linkedin_url)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') throw error; 
+
+        if (isMounted && data) {
+          // CHANGE: Set emailNotFound to true so layout block displays on render
+          setEmailNotFound(true);
+          if (data.status === "pending") setWaterfallInQueue(true);
+          if (data.status === "found") {
+            setWaterfallDone(true);
+            if (data.found_email) {
+              onRevealComplete(p.id, {
+                success: true,
+                allEmails: [{ email: data.found_email, type: "personal", is_primary: true, smtp_valid: null, grade: null }],
+                allPhones: data.found_phone ? [{ number: data.found_phone, type: "unknown", validity: "unknown", recommended: true }] : [],
+                _provider: provider,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[waterfall] initial fetch status failed:", err);
+      } finally {
+        if (isMounted) setWaterfallChecking(false);
+      }
+    };
+
+    checkWaterfallStatus();
+
+    // Setup streaming listener unconditionally on mount
+    const safeUrl = p.linkedin_url.replace(/[^a-z0-9]/gi, "").slice(0, 20);
+    const channelName = `wf-${p.id}-${safeUrl}`;
+    
+    if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+
+    waterfallChannelRef.current = supabase
+      .channel(channelName)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "candidate_waterfall",
+        filter: `linkedin_url=eq.${p.linkedin_url}`,
+      }, (payload: any) => {
+        // CHANGE: Keep container open by setting emailNotFound upon state sync events
+        setEmailNotFound(true);
+        if (payload.new?.status === "found") {
+          setWaterfallDone(true);
+          setWaterfallInQueue(false);
+          if (payload.new.found_email) {
+            onRevealComplete(p.id, {
+              success:   true,
+              allEmails: [{ email: payload.new.found_email, type: "personal", is_primary: true, smtp_valid: null, grade: null }],
+              allPhones: payload.new.found_phone ? [{ number: payload.new.found_phone, type: "unknown", validity: "unknown", recommended: true }] : [],
+              _provider: provider,
+            });
+          }
+        } else if (payload.new?.status === "pending") {
+           setWaterfallInQueue(true);
+           setWaterfallDone(false);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+    };
+  }, [p.linkedin_url, waterfallEnabled, organizationId, p.id, provider, onRevealComplete]);
+
+  const allEmailsRaw = p._allEmails ?? [];
+  const allPhones    = p._allPhones ?? [];
+  const jobHist      = p._jobHistory ?? [];
+  const eduRaw       = p._education ?? [];
+  const skills       = (p._skills ?? (p as any).skills ?? []) as string[];
+  const certs        = (p as any)._coData?.certifications ?? [];
+
+  const teaserPersonal     = p.teaser?.personal_emails     ?? [];
+  const teaserProfessional = p.teaser?.professional_emails ?? [];
+  const teaserAll          = [...teaserPersonal, ...teaserProfessional, ...(p.teaser?.emails ?? [])].filter((v,i,a) => a.indexOf(v) === i);
+  const teaserPhones       = p.teaser?.phones ?? [];
+
+  const emailAvailable = teaserAll.length > 0 ? true : (p.teaser ? false : null);
+  const phoneAvailable = teaserPhones.length > 0 ? true : (p.teaser ? false : null);
+
+  const displayJobs = React.useMemo(() => {
+    if (jobHist.length > 0) return jobHist;
+    if (p.current_title) return [{ title: p.current_title, company_name: p.current_employer, is_current: true }];
+    return [];
+  }, [jobHist, p]);
+
+  const activeLabels = new Set((activeSkillChips ?? []).filter(c => c.mode !== "exclude").map(c => c.label.toLowerCase()));
+
+  const canInvite = isContactOut
+    ? (allEmailsRaw.length > 0 || (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0)))
+    : (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0));
+
+  const startPollingForPhone = useCallback((linkedinUrl: string) => {
+    let count = 0;
+    phonePollRef.current = setInterval(async () => {
+      if (++count > 20) {
+        clearInterval(phonePollRef.current!); phonePollRef.current = null;
+        setPhonePendingState(false);
+        setRevealError("Phone not returned yet — please try again later.");
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("ti_profile_reveals")
+          .select("phones")
+          .eq("linkedin_url", linkedinUrl)
+          .maybeSingle();
+        const phones: any[] = data?.phones ?? [];
+        if (phones.length > 0) {
+          clearInterval(phonePollRef.current!); phonePollRef.current = null;
+          setPhonePendingState(false);
+          onRevealComplete(p.id, { success: true, allPhones: phones, allEmails: [], _provider: provider });
+        }
+      } catch { /* retry */ }
+    }, 3000);
+  }, [p.id, provider, onRevealComplete]);
+
+  const doReveal = useCallback(async (revealType: "email"|"phone") => {
+    const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
+    setter(true); setRevealError(null);
+    const auth = await resolveAuth();
+    if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
+    try {
+      const data = await revealProfile(p, revealType, auth, tiRevealProvider);
+      
+      if (data?.phonePending) {
+        setter(false);
+        setPhonePendingState(true);
+        if (p.linkedin_url) startPollingForPhone(p.linkedin_url);
+        return;
+      }
+      if (!data?.success) {
+        if (data?.code === "INSUFFICIENT_CREDITS") {
+          setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
+          return;
+        }
+        if (revealType === "email") setEmailNotFound(true);
+        else setPhoneNotFound(true);
+        return;
+      }
+      onRevealComplete(p.id, { ...data, _provider: provider });
+
+      if (revealType === "email") {
+        const hasPersonal = (data.allEmails ?? []).some(
+          (e: any) => e.type === "personal" || e.type === "direct" || e.type === "personal_email"
+        );
+        if (!hasPersonal) setEmailNotFound(true);
+      }
+      if (revealType === "phone" && (data.allPhones ?? []).length === 0) {
+        setPhoneNotFound(true);
+      }
+    } catch (e: any) {
+      setRevealError(e.message ?? "Reveal failed");
+    } finally { setter(false); }
+  }, [p, provider, tiRevealProvider, onRevealComplete, startPollingForPhone]);
+
+  const handleAddToWaterfall = useCallback(async () => {
+    const auth = await resolveAuth();
+    if (!auth || !p.linkedin_url) return;
+    try {
+      setWaterfallInQueue(true); 
+      await supabase.from("candidate_waterfall").upsert({
+        organization_id:     organizationId ?? auth.organizationId,
+        requested_by:        auth.userId,
+        linkedin_url:        p.linkedin_url,
+        full_name:           p.name,
+        title:               p.current_title,
+        company_name:        p.current_employer,
+        profile_picture_url: p.profile_pic,
+        profile_snapshot:    { id: p.id, name: p.name, title: p.current_title, company: p.current_employer, location: p.location },
+        status:              "pending",
+      }, { onConflict: "linkedin_url,organization_id", ignoreDuplicates: true });
+    } catch (e: any) {
+      console.error("[waterfall] add failed:", e?.message);
+      setWaterfallInQueue(false); 
+    }
+  }, [p, organizationId]);
+
+  const handleRowClick = useCallback(() => {
+    if (showCV) return;
+    onRowClick();
+  }, [showCV, onRowClick]);
+
+  return (
+    <div
+      onClick={handleRowClick}
+      className={cn("border-b border-slate-100 px-3 py-3 cursor-pointer transition-colors",
+        selected ? "bg-violet-50/60 border-l-2 border-l-violet-500" : "hover:bg-slate-50/40")}>
+      <div className="flex items-start gap-2.5">
+        <div className="mt-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <Checkbox checked={checked} onCheckedChange={v => onCheck(!!v)} className="h-3.5 w-3.5" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[13px] font-semibold text-slate-800 leading-tight">{p.name ?? "—"}</span>
+            {p.linkedin_url && (
+              <a href={p.linkedin_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                className="text-slate-400 hover:text-blue-600 transition-colors">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/>
+                  <circle cx="4" cy="4" r="2"/>
+                </svg>
+              </a>
+            )}
+            {enriched && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200">✓</span>}
+            {isContactOut && (p as any)._coData?.workStatus === "open_to_work" && (
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Open to Work</span>
+            )}
+            {isContactOut && (p as any)._coData?.seniority && (
+              <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{(p as any)._coData.seniority}</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400">
+            <MapPin size={9} className="flex-shrink-0 text-slate-300" />
+            <span>{p.location ?? (p as any).city ?? "—"}</span>
+            {p.connections && <span className="ml-1">· {p.connections.toLocaleString()} connections</span>}
+          </div>
+
+          {(enriched || isContactOut) ? (
+            <>
+              <JobsSection jobs={displayJobs} loading={false} />
+              <EduSection education={eduRaw} loading={false} />
+              <SkillsRow skills={skills} loading={false} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
+              {certs.length > 0 && <CertificationsRow certifications={certs} loading={false} />}
+            </>
+          ) : (
+            <div className="relative mt-2">
+              {p.current_title && (
+                <div className="flex items-start text-sm">
+                  <span className={ROW_LABEL_CLASS}>Current</span>
+                  <span className="text-slate-700 flex-1 leading-tight">
+                    {p.current_title}{p.current_employer ? ` at ${p.current_employer}` : ""}
+                  </span>
+                </div>
+              )}
+
+              <div className="space-y-2 select-none pointer-events-none opacity-50 blur-[3px]">
+                {jobHist.length === 0 && (
+                  <div className="flex items-start">
+                    <span className={ROW_LABEL_CLASS}>Previous</span>
+                    <span className="text-slate-400 flex-1 leading-tight">Software Engineer at Example Corp (2021–2024)</span>
+                  </div>
+                )}
+                <div className="flex items-start">
+                  <span className={ROW_LABEL_CLASS}>Education</span>
+                  <span className="text-slate-400 flex-1 leading-tight">Bachelor's, Computer Science · University Name (2017–2021)</span>
+                </div>
+                <div className="flex items-start">
+                  <span className={ROW_LABEL_CLASS}>Key Skills</span>
+                  <div className="flex-1 flex flex-wrap gap-1">
+                    {["Project Management", "Agile", "Data Analysis", "Python", "Cloud"].map((s, i) => (
+                      <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full border font-medium bg-slate-100 text-slate-400 border-slate-200">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-violet-200 shadow-sm">
+                  <span className="text-[10px] font-medium text-violet-600 flex items-center gap-1.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Reveal contact to see full profile
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
+        </div>
+
+        <div className="flex-shrink-0 w-[175px]" onClick={e => e.stopPropagation()}>
+          <div className="relative">
+            <RightCard
+              profile={p}
+              enriched={enriched}
+              allEmailsRaw={allEmailsRaw}
+              allPhones={allPhones}
+              teaserEmails={teaserPersonal.length > 0 ? teaserPersonal : teaserAll.slice(0, 2)}
+              teaserPhones={teaserPhones as any}
+              emailAvailable={emailAvailable}
+              phoneAvailable={phoneAvailable}
+              revealingEmail={revealingEmail}
+              revealingPhone={revealingPhone}
+              phoneIsPending={phonePendingState}
+              emailNotFound={emailNotFound}
+              phoneNotFound={phoneNotFound}
+              waterfallEnabled={waterfallEnabled}
+              waterfallChecking={waterfallChecking}
+              waterfallInQueue={waterfallInQueue}
+              waterfallDone={waterfallDone}
+              onRevealEmail={() => doReveal("email")}
+              onRevealPhone={() => doReveal("phone")}
+              onAddToWaterfall={handleAddToWaterfall}
+              onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
+              canInvite={canInvite}
+              provider={provider}
+              onViewCV={isContactOut && p.linkedin_url ? (url) => { setCvUrl(url); setShowCV(true); } : undefined}
+            />
+            {showInvitePick && onInvite && (
+              <div className="absolute bottom-0 right-0 z-50">
+                <InvitePicker
+                  emails={allEmailsRaw}
+                  phones={allPhones}
+                  onConfirm={(email, phone) => { setShowInvitePick(false); onInvite(p, email, phone); }}
+                  onClose={() => setShowInvitePick(false)}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showCV && (
+        <div onClick={e => e.stopPropagation()}>
+          <MasterProfileCV linkedinUrl={cvUrl} onClose={() => setShowCV(false)} />
+        </div>
       )}
     </div>
   );
@@ -590,257 +1009,15 @@ export interface RRResultRowProps {
   activeSkillChips?: SkillChip[];
   // CHANGE 2: tiRevealProvider drives which API the reveal hits server-side
   tiRevealProvider:  string;
+  waterfallEnabled?: boolean;  // org config — show waterfall CTA when no email found
+  organizationId?:   string;   // needed for waterfall insert
   onCheck:           (v: boolean) => void;
   onRowClick:        () => void;
   onRevealComplete:  (id: number, data: any) => void;
   onInvite?:         (profile: RRProfile, email: string|null, phone: string|null) => void;
 }
 
-export const RRResultRow: React.FC<RRResultRowProps> = ({
-  profile: p, revealed, checked, selected, activeSkillChips,
-  tiRevealProvider,   // CHANGE 2
-  onCheck, onRowClick, onRevealComplete, onInvite,
-}) => {
-  const [revealingEmail, setRevealingEmail] = useState(false);
-  const [revealingPhone, setRevealingPhone] = useState(false);
-  const [revealError,    setRevealError]    = useState<string|null>(null);
-  const [showInvitePick, setShowInvitePick] = useState(false);
-  const [showCV,         setShowCV]         = useState(false);
-  const [cvUrl,          setCvUrl]          = useState<string>("");
-  // Apollo async phone: shows amber "Verifying…" while polling master_contactout_profiles
-  const [phonePendingState, setPhonePendingState] = useState(false);
-  const phonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => { if (phonePollRef.current) clearInterval(phonePollRef.current); }, []);
 
-  const provider     = (p as any)._provider ?? "rocketreach";
-  const isContactOut = provider === "contactout";
-  const enriched     = !!p._enriched || revealed;
-  const isEnriching  = false;
-
-  const allEmailsRaw = p._allEmails ?? [];
-  const allPhones    = p._allPhones ?? [];
-  const jobHist      = p._jobHistory ?? [];
-  const eduRaw       = p._education ?? [];
-  const skills       = (p._skills ?? (p as any).skills ?? []) as string[];
-  const certs        = (p as any)._coData?.certifications ?? [];
-
-  const teaserPersonal     = p.teaser?.personal_emails     ?? [];
-  const teaserProfessional = p.teaser?.professional_emails ?? [];
-  const teaserAll          = [...teaserPersonal, ...teaserProfessional, ...(p.teaser?.emails ?? [])].filter((v,i,a) => a.indexOf(v) === i);
-  const teaserPhones       = p.teaser?.phones ?? [];
-
-  const emailAvailable = teaserAll.length > 0 ? true : (p.teaser ? false : null);
-  const phoneAvailable = teaserPhones.length > 0 ? true : (p.teaser ? false : null);
-
-  const displayJobs = React.useMemo(() => {
-    if (jobHist.length > 0) return jobHist;
-    if (p.current_title) return [{ title: p.current_title, company_name: p.current_employer, is_current: true }];
-    return [];
-  }, [jobHist, p]);
-
-  const activeLabels = new Set((activeSkillChips ?? []).filter(c => c.mode !== "exclude").map(c => c.label.toLowerCase()));
-
-  const canInvite = isContactOut
-    ? (allEmailsRaw.length > 0 || (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0)))
-    : (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0));
-
-  // Poll ti_profile_reveals every 3s until phone arrives (mirrors TI table pattern)
-  const startPollingForPhone = useCallback((linkedinUrl: string) => {
-    let count = 0;
-    phonePollRef.current = setInterval(async () => {
-      if (++count > 20) {
-        clearInterval(phonePollRef.current!); phonePollRef.current = null;
-        setPhonePendingState(false);
-        setRevealError("Phone not returned yet — please try again later.");
-        return;
-      }
-      try {
-        const { data } = await supabase
-          .from("ti_profile_reveals")
-          .select("phones")
-          .eq("linkedin_url", linkedinUrl)
-          .maybeSingle();
-        const phones: any[] = data?.phones ?? [];
-        if (phones.length > 0) {
-          clearInterval(phonePollRef.current!); phonePollRef.current = null;
-          setPhonePendingState(false);
-          onRevealComplete(p.id, { success: true, allPhones: phones, allEmails: [], _provider: provider });
-        }
-      } catch { /* ignore — will retry */ }
-    }, 3000);
-  }, [p.id, provider, onRevealComplete]);
-
-  // CHANGE 2: pass tiRevealProvider to revealProfile
-  const doReveal = useCallback(async (revealType: "email"|"phone") => {
-    const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
-    setter(true); setRevealError(null);
-    const auth = await resolveAuth();
-    if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
-    try {
-      const data = await revealProfile(p, revealType, auth, tiRevealProvider);
-      // Apollo async phone — show amber pending state + poll for arrival
-      if (data?.phonePending) {
-        setter(false);
-        setPhonePendingState(true);
-        if (p.linkedin_url) startPollingForPhone(p.linkedin_url);
-        return;
-      }
-      if (!data?.success) {
-        if (data?.code === "INSUFFICIENT_CREDITS") {
-          setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
-          return;
-        }
-        throw new Error(data?.error ?? "Reveal failed");
-      }
-      onRevealComplete(p.id, { ...data, _provider: provider });
-    } catch (e: any) {
-      setRevealError(e.message ?? "Reveal failed");
-    } finally { setter(false); }
-  }, [p, provider, tiRevealProvider, onRevealComplete, startPollingForPhone]);
-
-  const handleRowClick = useCallback(() => {
-    if (showCV) return;
-    onRowClick();
-  }, [showCV, onRowClick]);
-
-  return (
-    <div
-      onClick={handleRowClick}
-      className={cn("border-b border-slate-100 px-3 py-3 cursor-pointer transition-colors",
-        selected ? "bg-violet-50/60 border-l-2 border-l-violet-500" : "hover:bg-slate-50/40")}>
-      <div className="flex items-start gap-2.5">
-        <div className="mt-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
-          <Checkbox checked={checked} onCheckedChange={v => onCheck(!!v)} className="h-3.5 w-3.5" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[13px] font-semibold text-slate-800 leading-tight">{p.name ?? "—"}</span>
-            {p.linkedin_url && (
-              <a href={p.linkedin_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                className="text-slate-400 hover:text-blue-600 transition-colors">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/>
-                  <circle cx="4" cy="4" r="2"/>
-                </svg>
-              </a>
-            )}
-            {enriched && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200">✓</span>}
-            {isContactOut && (p as any)._coData?.workStatus === "open_to_work" && (
-              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Open to Work</span>
-            )}
-            {isContactOut && (p as any)._coData?.seniority && (
-              <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{(p as any)._coData.seniority}</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400">
-            <MapPin size={9} className="flex-shrink-0 text-slate-300" />
-            <span>{p.location ?? (p as any).city ?? "—"}</span>
-            {p.connections && <span className="ml-1">· {p.connections.toLocaleString()} connections</span>}
-          </div>
-
-          {/* CHANGE 1: ContactOut profiles always show full profile (no blur).
-              RocketReach profiles still show the blur/lock until revealed. */}
-          {(enriched || isContactOut) ? (
-            <>
-              <JobsSection jobs={displayJobs} loading={false} />
-              <EduSection education={eduRaw} loading={false} />
-              <SkillsRow skills={skills} loading={false} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
-              {certs.length > 0 && <CertificationsRow certifications={certs} loading={false} />}
-            </>
-          ) : (
-            <div className="relative mt-2">
-              {p.current_title && (
-                <div className="flex items-start text-sm">
-                  <span className={ROW_LABEL_CLASS}>Current</span>
-                  <span className="text-slate-700 flex-1 leading-tight">
-                    {p.current_title}{p.current_employer ? ` at ${p.current_employer}` : ""}
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-2 select-none pointer-events-none opacity-50 blur-[3px]">
-                {jobHist.length === 0 && (
-                  <div className="flex items-start">
-                    <span className={ROW_LABEL_CLASS}>Previous</span>
-                    <span className="text-slate-400 flex-1 leading-tight">Software Engineer at Example Corp (2021–2024)</span>
-                  </div>
-                )}
-                <div className="flex items-start">
-                  <span className={ROW_LABEL_CLASS}>Education</span>
-                  <span className="text-slate-400 flex-1 leading-tight">Bachelor's, Computer Science · University Name (2017–2021)</span>
-                </div>
-                <div className="flex items-start">
-                  <span className={ROW_LABEL_CLASS}>Key Skills</span>
-                  <div className="flex-1 flex flex-wrap gap-1">
-                    {["Project Management", "Agile", "Data Analysis", "Python", "Cloud"].map((s, i) => (
-                      <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full border font-medium bg-slate-100 text-slate-400 border-slate-200">{s}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-violet-200 shadow-sm">
-                  <span className="text-[10px] font-medium text-violet-600 flex items-center gap-1.5">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    Reveal contact to see full profile
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
-        </div>
-
-        <div className="flex-shrink-0 w-[175px]" onClick={e => e.stopPropagation()}>
-          <div className="relative">
-            <RightCard
-              profile={p}
-              enriched={enriched}
-              allEmailsRaw={allEmailsRaw}
-              allPhones={allPhones}
-              teaserEmails={teaserPersonal.length > 0 ? teaserPersonal : teaserAll.slice(0, 2)}
-              teaserPhones={teaserPhones as any}
-              emailAvailable={emailAvailable}
-              phoneAvailable={phoneAvailable}
-              revealingEmail={revealingEmail}
-              revealingPhone={revealingPhone}
-              phoneIsPending={phonePendingState}
-              onRevealEmail={() => doReveal("email")}
-              onRevealPhone={() => doReveal("phone")}
-              onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
-              canInvite={canInvite}
-              provider={provider}
-              onViewCV={isContactOut && p.linkedin_url ? (url) => { setCvUrl(url); setShowCV(true); } : undefined}
-            />
-            {showInvitePick && onInvite && (
-              <div className="absolute bottom-0 right-0 z-50">
-                <InvitePicker
-                  emails={allEmailsRaw}
-                  phones={allPhones}
-                  onConfirm={(email, phone) => { setShowInvitePick(false); onInvite(p, email, phone); }}
-                  onClose={() => setShowInvitePick(false)}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {showCV && (
-        <div onClick={e => e.stopPropagation()}>
-          <MasterProfileCV linkedinUrl={cvUrl} onClose={() => setShowCV(false)} />
-        </div>
-      )}
-    </div>
-  );
-};
 
 // ─── Results area ─────────────────────────────────────────────────────────────
 interface RRResultsAreaProps {
@@ -858,6 +1035,8 @@ interface RRResultsAreaProps {
   enrichProgress?:   { total: number; done: number; active: boolean };
   // CHANGE 2: org's ti_reveal_provider, passed through to each row
   tiRevealProvider:  string;
+  waterfallEnabled?: boolean;  // org config — show waterfall CTA when no email found
+  organizationId?:   string;   // needed for waterfall table insert
   onSelectRow:       (p: RRProfile | null) => void;
   onCheckRow:        (id: number, v: boolean) => void;
   onCheckAll:        (v: boolean) => void;
@@ -870,10 +1049,12 @@ interface RRResultsAreaProps {
 export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
   profiles, loading, totalEntries, page, totalPages,
   selectedId, checkedIds, revealedIds, activeSkillChips, enrichProgress,
-  tiRevealProvider,   // CHANGE 2
+  tiRevealProvider, waterfallEnabled, organizationId,
   onSelectRow, onCheckRow, onCheckAll, onPrev, onNext, onRevealComplete, onInvite,
 }) => {
   const allChecked = profiles.length > 0 && profiles.every(p => checkedIds.has(p.id));
+
+  console.log("profiles", profiles);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -963,7 +1144,9 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
               selected={selectedId === p.id}
               scrapeLoading={false}
               activeSkillChips={activeSkillChips}
-              tiRevealProvider={tiRevealProvider}   // CHANGE 2
+              tiRevealProvider={tiRevealProvider}
+              waterfallEnabled={waterfallEnabled}
+              organizationId={organizationId}
               onCheck={v => onCheckRow(p.id, v)}
               onRowClick={() => onSelectRow(selectedId === p.id ? null : p)}
               onRevealComplete={onRevealComplete}

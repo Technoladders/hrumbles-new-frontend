@@ -325,6 +325,7 @@ export const menuItemsByRole = {
         },
         { icon: BsDatabaseSlash, label: "Migration", path: "/migration" },
         { icon: TbDatabaseImport, label: "Migration History", path: "/database/history" },
+        { icon: SiAwsorganizations, label: "Waterfall", path: "/waterfall" },
         { icon: FiSettings, label: "Settings", path: "/settings" },
     ],
     organization_superadmin: (organizationId, organization, isPurelyPermanentOrg, userPermissions) => {
