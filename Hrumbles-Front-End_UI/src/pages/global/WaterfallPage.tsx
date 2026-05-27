@@ -10,7 +10,7 @@ import {
   Loader2, RefreshCw, Clock, Check, X, AlertCircle,
   User, Building2, Linkedin, Search, Filter,
 } from "lucide-react";
-import { WaterfallEntryModal, WaterfallEntry } from "@/components/global/waterfallEntryModal";
+import { WaterfallEntryModal, WaterfallEntry } from "@/components/global/WaterfallEntryModal";
 
 type StatusFilter = "all" | "pending" | "found" | "not_found" | "expired";
 
