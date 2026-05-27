@@ -1,10 +1,16 @@
 /**
- * RocketReachSearchPage.tsx — v5.1
+ * RocketReachSearchPage.tsx — v5.2
  *
- * No structural changes from v5.
- * Only fix: countFilters() correctly references `department` (job_function) field
- * and removes the now-redundant `yearsExperience` double-count
- * (yearsExperience is counted in coreCnt inside sidebar, not needed here too).
+ * Changes from v5.1:
+ *   CHANGE 2 — orgProvider query replaced with orgConfig query that fetches
+ *              BOTH people_search_provider AND ti_reveal_provider from hr_organizations.
+ *              tiRevealProvider is passed down to RRResultsArea → RRResultRow → ti-reveal.
+ *
+ *   CHANGE 3 — Demo org DB toggle.
+ *              When orgId === DEMO_ORG_ID, an amber "Demo: DB / Demo: Live" toggle
+ *              appears in the top bar. When toggled ON, search hits search_org_profiles
+ *              RPC (master_contactout_profiles DB) instead of the live ContactOut/RR API.
+ *              No credit cost for DB searches. Toggle visible ONLY for the demo org.
  */
 
 import React, {
@@ -16,7 +22,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { cn }             from "@/lib/utils";
 import { supabase }       from "@/integrations/supabase/client";
 import {
-  ChevronLeft, ChevronRight, Bookmark, Loader2, AlertCircle, Coins, X 
+  ChevronLeft, ChevronRight, Bookmark, Loader2, AlertCircle, Coins, X, Database,
 } from "lucide-react";
 
 import { RRSearchSidebar, RRFilters, DEFAULT_RR_FILTERS } from "./RRSearchSidebar";
@@ -33,6 +39,10 @@ import { CandidateInviteGate }     from "@/components/CandidateSearch/components
 import { ManageVerificationPricingModal } from "@/components/global/OrganizationManagement/ManageVerificationPricingModal";
 
 import type { RRProfile } from "./types";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+// CHANGE 3: Demo org ID — toggle only visible for this org
+const DEMO_ORG_ID = "53989f03-bdc9-439a-901c-45b274eff506";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SearchProvider = "rocketreach" | "contactout";
@@ -166,33 +176,85 @@ function decodeState(p: URLSearchParams): PageState {
   };
 }
 
-// countFilters — matches all RRFilters fields
 function countFilters(f: RRFilters): number {
   return [
     f.keyword, f.name, f.companyRevenue, f.yearsExperience,
     f.emailGrade, f.jobChangeSignal, f.newsSignal, f.jobPostingSignal,
     f.yearsInCurrentRole,
   ].filter(v => v?.trim()).length
-    + f.titles.length
-    + f.locations.length
-    + f.managementLevels.length
-    + f.skillChips.length
-    + f.currentEmployer.length
-    + f.companySize.length
-    + f.companyIndustry.length
-    + f.companyTags.length
-    + f.department.length
-    + f.previousEmployer.length
-    + f.previousTitle.length
-    + f.school.length
-    + f.degree.length
-    + f.major.length
-    + f.contactMethod.length
+    + f.titles.length + f.locations.length + f.managementLevels.length
+    + f.skillChips.length + f.currentEmployer.length + f.companySize.length
+    + f.companyIndustry.length + f.companyTags.length + f.department.length
+    + f.previousEmployer.length + f.previousTitle.length
+    + f.school.length + f.degree.length + f.major.length + f.contactMethod.length
     + (f.companyPubliclyTraded  ? 1 : 0)
     + (f.companyFundingMin      ? 1 : 0)
     + (f.companyFundingMax      ? 1 : 0)
     + (f.openToWork             ? 1 : 0)
     + (f.recentlyChangedJobs    ? 1 : 0);
+}
+
+// ─── CHANGE 3: Normalize search_org_profiles row → RRProfile ─────────────────
+// Uses a stable fake numeric ID (9M + index) to avoid collision with real RR IDs.
+// The _provider flag ensures CO reveal path is used in RRResultRow.
+function normalizeTIToRR(row: any, idx: number): RRProfile {
+  const revealedEmails: any[] = (Array.isArray(row.revealed_emails) ? row.revealed_emails : [])
+    .map((e: any, i: number) => ({
+      email:      typeof e === "string" ? e : (e.email ?? ""),
+      type:       e.type ?? "personal",
+      smtp_valid: e.smtp_valid ?? null,
+      grade:      e.grade ?? null,
+      is_primary: i === 0,
+    })).filter((e: any) => e.email);
+
+  const revealedPhones: any[] = (Array.isArray(row.revealed_phones) ? row.revealed_phones : [])
+    .map((p: any, i: number) => ({
+      number:    typeof p === "string" ? p : (p.number ?? p.phone ?? ""),
+      type:      p.type ?? "unknown",
+      validity:  p.validity ?? "unknown",
+      recommended: i === 0,
+      is_primary: i === 0,
+    })).filter((p: any) => p.number);
+
+  const avail = row.contact_availability ?? {};
+  const hasEmail = !!(avail.personal_email || avail.work_email);
+  const hasPhone = !!avail.phone;
+
+  const skills: string[] = Array.isArray(row.skills)
+    ? row.skills.map((s: any) => (typeof s === "string" ? s : s?.name ?? "")).filter(Boolean)
+    : [];
+
+  return {
+    id:               9_000_000 + idx,   // stable fake numeric ID
+    name:             row.full_name ?? null,
+    current_title:    row.title ?? null,
+    current_employer: row.company_name ?? null,
+    location:         row.location ?? null,
+    profile_pic:      row.profile_picture_url ?? null,
+    linkedin_url:     row.linkedin_url ?? null,
+    connections:      row.followers ?? null,
+    teaser: {
+      personal_emails:     hasEmail ? ["available"] : [],
+      professional_emails: [],
+      emails:              [],
+      phones:              hasPhone ? [{ number: "available", is_premium: false }] : [],
+    },
+    // Internal fields
+    _provider:  "contactout",
+    _enriched:  revealedEmails.length > 0,
+    _allEmails: revealedEmails,
+    _allPhones: revealedPhones,
+    _jobHistory: Array.isArray(row.experience) ? row.experience : [],
+    _education:  Array.isArray(row.education)  ? row.education  : [],
+    _skills:    skills,
+    _coData: {
+      workStatus:     row.work_status,
+      seniority:      row.seniority,
+      certifications: Array.isArray(row.certifications) ? row.certifications : [],
+    },
+    _is_cached:      false,
+    _needs_rescrape: false,
+  } as any;
 }
 
 // ─── Provider config ──────────────────────────────────────────────────────────
@@ -222,30 +284,38 @@ export const RocketReachSearchPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  const orgId  = useSelector((s: any) => s.auth?.organization_id ?? s.auth?.user?.organization_id ?? null);
-  const userId = useSelector((s: any) => s.auth?.user?.id ?? s.auth?.id ?? null);
+  const orgId          = useSelector((s: any) => s.auth?.organization_id ?? s.auth?.user?.organization_id ?? null);
+  const userId         = useSelector((s: any) => s.auth?.user?.id ?? s.auth?.id ?? null);
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  // Fetch org's preferred search provider from hr_organizations
-const { data: orgProvider } = useQuery({
-  queryKey: ["organization-provider", organizationId],
-  queryFn: async (): Promise<SearchProvider> => {
-    if (!organizationId) return "rocketreach";
-    const { data, error } = await supabase
-      .from("hr_organizations")
-      .select("people_search_provider")
-      .eq("id", organizationId)
-      .single();
-    return (data as any)?.people_search_provider ?? "rocketreach";
-  },
-  enabled: !!organizationId,
-});
+  // CHANGE 2: Fetch BOTH people_search_provider AND ti_reveal_provider in one query
+  const { data: orgConfig } = useQuery({
+    queryKey: ["organization-config", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return null;
+      const { data } = await supabase
+        .from("hr_organizations")
+        .select("people_search_provider, ti_reveal_provider")
+        .eq("id", organizationId)
+        .single();
+      return data as { people_search_provider: string; ti_reveal_provider: string } | null;
+    },
+    enabled: !!organizationId,
+  });
+
+  // Derived from orgConfig — defaults safe for before config loads
+  const orgProvider      = (orgConfig?.people_search_provider ?? "rocketreach") as SearchProvider;
+  const tiRevealProvider = orgConfig?.ti_reveal_provider ?? "contactout";
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageState, setPageState] = useState<PageState>(() => decodeState(searchParams));
-
-  // credit
   const [showPricingModal, setShowPricingModal] = useState(false);
+
+  // CHANGE 3: Demo org state
+  const [demoMode,     setDemoMode]     = useState(true);
+  const [demoProfiles, setDemoProfiles] = useState<RRProfile[]>([]);
+  const [demoTotal,    setDemoTotal]    = useState(0);
+  const [demoLoading,  setDemoLoading]  = useState(false);
 
   const updateState = useCallback((patch: Partial<PageState>) => {
     setPageState(prev => {
@@ -269,23 +339,23 @@ const { data: orgProvider } = useQuery({
     setSearchParams(encodeState(next), { replace: true });
   }, [pageState, setSearchParams]);
 
-  // Sync provider from organization config when URL has no pv param
-useEffect(() => {
-  if (orgProvider && !searchParams.get("pv")) {
-    setPageState(prev => {
-      if (prev.provider === orgProvider) return prev;
-      const next = { ...prev, provider: orgProvider as SearchProvider };
-      setSearchParams(encodeState(next), { replace: true });
-      return next;
-    });
-  }
-}, [orgProvider]);
-  
+  // Sync provider from org config when URL has no pv param
+  useEffect(() => {
+    if (orgConfig?.people_search_provider && !searchParams.get("pv")) {
+      setPageState(prev => {
+        const newProvider = orgConfig.people_search_provider as SearchProvider;
+        if (prev.provider === newProvider) return prev;
+        const next = { ...prev, provider: newProvider };
+        setSearchParams(encodeState(next), { replace: true });
+        return next;
+      });
+    }
+  }, [orgConfig]);
 
   const { filters, pageSize, page, provider } = pageState;
-const effectivePageSize =
-  provider === "contactout" ? 25 : pageSize;
-  // ── Search ────────────────────────────────────────────────────────────────
+  const effectivePageSize = provider === "contactout" ? 25 : pageSize;
+
+  // ── Live search ───────────────────────────────────────────────────────────
   const { state, profiles, totalEntries, error, creditError, search } = useRRSearch({
     ...filters,
     pageSize,
@@ -302,65 +372,15 @@ const effectivePageSize =
   const pendingIds    = useRef<Set<number>>(new Set());
   const fallbackTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // ── When search results arrive ────────────────────────────────────────────
-  // ── When search results arrive ────────────────────────────────────────────
-useEffect(() => {
+  // ── When live search results arrive ──────────────────────────────────────
+  useEffect(() => {
     setEnrichedProfiles(profiles);
     setSelectedProfile(null);
     setCheckedIds(new Set());
     setEnrichProgress({ total: 0, done: 0, active: false });
     clearTimeout(fallbackTimer.current);
     pendingIds.current = new Set();
-
-    if (!profiles.length) return;
-
-    // ──────────────────────────────────────────────────────────────────────
-    // AUTOMATIC ENRICHMENT DISABLED — now relies on manual reveal buttons
-    // to trigger email/phone lookup and get full details.
-    // To re‑enable, uncomment the block below.
-    // ──────────────────────────────────────────────────────────────────────
-    /*
-    const toEnrich = profiles.filter(p => p._needs_rescrape);
-    if (!toEnrich.length) return;
-
-    setEnrichProgress({ total: toEnrich.length, done: 0, active: true });
-    pendingIds.current = new Set(toEnrich.map(p => p.id));
-
-    supabase.functions.invoke("rocketreach-enrich-batch", {
-      body: { profiles: toEnrich.map(p => ({ id: p.id, name: p.name ?? "" })), organizationId: orgId },
-    }).then(({ data, error: e }) => {
-      if (e) console.error("[enrich-batch] error:", e);
-      else   console.log("[enrich-batch] started:", data);
-    });
-
-    fallbackTimer.current = setTimeout(async () => {
-      const stillMissing = [...pendingIds.current];
-      if (!stillMissing.length) return;
-      console.log(`[enrich-batch] fallback poll ${stillMissing.length} profiles`);
-      const { data: cacheRows } = await supabase
-        .from("rr_profile_cache")
-        .select("rocketreach_id, profile_data")
-        .in("rocketreach_id", stillMissing);
-      if (cacheRows?.length) {
-        const m = new Map(cacheRows.map((r: any) => [r.rocketreach_id, r.profile_data]));
-        setEnrichedProfiles(prev => prev.map(p => {
-          const scraped = m.get(p.id);
-          if (!scraped) return p;
-          return {
-            ...p,
-            _jobHistory:     scraped.work_history?.length ? scraped.work_history : p._jobHistory,
-            _education:      scraped.education?.length    ? scraped.education    : p._education,
-            _skills:         scraped.skills?.length       ? scraped.skills       : p._skills,
-            profile_pic:     scraped.profile_pic || p.profile_pic,
-            _is_cached:      true,
-            _needs_rescrape: false,
-          };
-        }));
-      }
-      setEnrichProgress(prev => ({ ...prev, active: false }));
-    }, 45_000);
-    */
-}, [profiles, orgId]);
+  }, [profiles, orgId]);
 
   // ── Realtime subscription ─────────────────────────────────────────────────
   useEffect(() => {
@@ -369,8 +389,7 @@ useEffect(() => {
       .on("broadcast", { event: "profile-scraped" }, ({ payload }) => {
         if (!payload?.profileId) return;
         const id = typeof payload.profileId === "string"
-          ? parseInt(payload.profileId, 10)
-          : payload.profileId;
+          ? parseInt(payload.profileId, 10) : payload.profileId;
 
         pendingIds.current.delete(id);
         setEnrichProgress(prev => {
@@ -401,46 +420,97 @@ useEffect(() => {
     return () => { supabase.removeChannel(channel); clearTimeout(fallbackTimer.current); };
   }, []);
 
-  // ── Manual search ─────────────────────────────────────────────────────────
+  // CHANGE 3: Demo mode search via search_org_profiles RPC ──────────────────
+  const runDemoSearch = useCallback(async (pg: number) => {
+    if (!orgId) return;
+    setDemoLoading(true);
+    setDemoProfiles([]);
+
+    const mustSkills    = filters.skillChips.filter(c => c.mode === "must").map(c => c.label);
+    const excludeSkills = filters.skillChips.filter(c => c.mode === "exclude").map(c => c.label);
+
+    try {
+      const { data, error: rpcErr } = await supabase.rpc("search_org_profiles", {
+        p_org_id:            DEMO_ORG_ID,
+        p_query:             filters.keyword || filters.name || null,
+        p_location:          filters.locations[0] || null,
+        p_seniority:         filters.managementLevels.length ? filters.managementLevels : null,
+        p_job_function:      filters.department.length       ? filters.department       : null,
+        p_company:           null,
+        p_industry:          filters.companyIndustry.length  ? filters.companyIndustry  : null,
+        p_skills:            mustSkills.length    ? mustSkills    : null,
+        p_open_to_work:      filters.openToWork,
+        p_has_email:         filters.contactMethod.includes("personal email") || filters.contactMethod.includes("work email"),
+        p_has_phone:         filters.contactMethod.includes("phone"),
+        p_revealed_status:   "all",
+        p_titles:            filters.titles.length           ? filters.titles           : null,
+        p_current_employer:  filters.currentEmployer.length  ? filters.currentEmployer  : null,
+        p_previous_employer: filters.previousEmployer.length ? filters.previousEmployer : null,
+        p_previous_title:    filters.previousTitle.length    ? filters.previousTitle    : null,
+        p_exclude_skills:    excludeSkills.length  ? excludeSkills  : null,
+        p_school:            filters.school.length ? filters.school : null,
+        p_degree:            filters.degree.length ? filters.degree : null,
+        p_years_experience:  filters.yearsExperience || null,
+        p_limit:             effectivePageSize,
+        p_offset:            (pg - 1) * effectivePageSize,
+      });
+      if (rpcErr) throw rpcErr;
+      const rows = (data ?? []) as any[];
+      setDemoProfiles(rows.map(normalizeTIToRR));
+      setDemoTotal(rows[0]?.total_count ? Number(rows[0].total_count) : 0);
+    } catch (e: any) {
+      console.error("[demo-search] RPC error:", e);
+      setDemoProfiles([]);
+      setDemoTotal(0);
+    } finally {
+      setDemoLoading(false);
+    }
+  }, [filters, orgId, effectivePageSize]);
+
+  // ── Search handlers ───────────────────────────────────────────────────────
   const handleRunSearch = useCallback(() => {
-    search(1);
-    updateState({ page: 1 });
-  }, [search, updateState]);
+    if (demoMode) {
+      runDemoSearch(1);
+      updateState({ page: 1 });
+    } else {
+      search(1);
+      updateState({ page: 1 });
+    }
+  }, [demoMode, runDemoSearch, search, updateState]);
 
   const goPage = useCallback((p: number) => {
     updateState({ page: p });
-    search(p);
-  }, [updateState, search]);
+    if (demoMode) runDemoSearch(p);
+    else search(p);
+  }, [demoMode, updateState, runDemoSearch, search]);
 
   // ── Reveal complete ───────────────────────────────────────────────────────
- const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
+  const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
     const upd = (p: RRProfile): RRProfile => {
       if (p.id !== rrProfileId) return p;
- 
       const incomingEmails: any[] = data.allEmails ?? [];
       const incomingPhones: any[] = data.allPhones ?? [];
- 
       return {
         ...p,
         _enriched:           true,
-        // ── Merge: only overwrite if new data came back ──────────────────
         _allEmails:          incomingEmails.length > 0 ? incomingEmails : (p._allEmails ?? []),
         _allPhones:          incomingPhones.length > 0 ? incomingPhones : (p._allPhones ?? []),
-        // ── Only update enrichment fields if response included them ──────
-        _jobHistory:         data.jobHistory?.length       ? data.jobHistory  : (p._jobHistory  ?? []),
-        _education:          data.education?.length        ? data.education   : (p._education   ?? []),
-        _skills:             data.skills?.length           ? data.skills      : (p._skills      ?? []),
-        _contactId:          data.contactId                ?? (p as any)._contactId         ?? null,
-        _candidateProfileId: data.candidateProfileId       ?? (p as any)._candidateProfileId ?? null,
-        name:                data.name                     ?? p.name,
-        current_title:       data.title                    ?? p.current_title,
-        current_employer:    data.company                  ?? p.current_employer,
-        profile_pic:         data.profilePic               ?? p.profile_pic,
-        linkedin_url:        data.linkedinUrl              ?? p.linkedin_url,
+        _jobHistory:         data.jobHistory?.length ? data.jobHistory : (p._jobHistory ?? []),
+        _education:          data.education?.length  ? data.education  : (p._education  ?? []),
+        _skills:             data.skills?.length     ? data.skills     : (p._skills     ?? []),
+        _contactId:          data.contactId          ?? (p as any)._contactId         ?? null,
+        _candidateProfileId: data.candidateProfileId ?? (p as any)._candidateProfileId ?? null,
+        name:                data.name      ?? p.name,
+        current_title:       data.title     ?? p.current_title,
+        current_employer:    data.company   ?? p.current_employer,
+        profile_pic:         data.profilePic ?? p.profile_pic,
+        linkedin_url:        data.linkedinUrl ?? p.linkedin_url,
       };
     };
- 
+
     setEnrichedProfiles(prev => prev.map(upd));
+    // CHANGE 3: Also update demo profiles when revealed in demo mode
+    setDemoProfiles(prev => prev.map(upd));
     setSelectedProfile(prev => prev ? upd(prev) : null);
     queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
   }, [queryClient]);
@@ -456,6 +526,15 @@ useEffect(() => {
   const isLoading   = state === "loading";
   const totalPages  = Math.ceil(totalEntries / pageSize) || 0;
 
+  // CHANGE 3: Display layer — switches between live and demo data
+  const displayProfiles   = demoMode ? demoProfiles   : enrichedProfiles;
+  const displayTotal      = demoMode ? demoTotal      : totalEntries;
+  const displayLoading    = demoMode ? demoLoading    : isLoading;
+  const displayTotalPages = Math.ceil(displayTotal / effectivePageSize) || 0;
+  const displayState      = demoMode
+    ? (demoLoading ? "loading" : demoProfiles.length > 0 ? "results" : hasFilters ? "empty" : "idle")
+    : state;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen overflow-hidden bg-white">
@@ -468,8 +547,8 @@ useEffect(() => {
           onChange={updateFilters}
           onClearAll={clearAll}
           onSearch={handleRunSearch}
-          isLoading={isLoading}
-          totalEntries={totalEntries}
+          isLoading={displayLoading}
+          totalEntries={displayTotal}
           filterCount={filterCount}
           hasFilters={hasFilters}
         />
@@ -485,23 +564,24 @@ useEffect(() => {
               <p className="text-[11px] font-bold text-slate-700 leading-tight">People Search</p>
               <p className="text-[9px] text-slate-400">{PROVIDER_CFG[provider].totalLabel}</p>
             </div>
-            {isLoading && <Loader2 size={12} className="animate-spin text-slate-400" />}
+            {displayLoading && <Loader2 size={12} className="animate-spin text-slate-400" />}
           </div>
 
           <div className="flex items-center gap-2">
-            {totalEntries > 0 && !isLoading && (
+            {displayTotal > 0 && !displayLoading && (
               <span className="text-[10px] text-slate-500">
-                {/* <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles */}
-                {totalPages > 1 && <span className="ml-1.5 text-slate-400">· Page {page}/{totalPages}</span>}
+                {displayTotalPages > 1 && (
+                  <span className="ml-1.5 text-slate-400">· Page {page}/{displayTotalPages}</span>
+                )}
               </span>
             )}
-            {totalPages > 1 && (
+            {displayTotalPages > 1 && (
               <div className="flex items-center gap-1">
                 <button disabled={page <= 1} onClick={() => goPage(page - 1)}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                   <ChevronLeft size={11} />
                 </button>
-                <button disabled={page >= totalPages} onClick={() => goPage(page + 1)}
+                <button disabled={page >= displayTotalPages} onClick={() => goPage(page + 1)}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                   <ChevronRight size={11} />
                 </button>
@@ -513,16 +593,42 @@ useEffect(() => {
             {hasFilters && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-slate-400 hidden sm:block">Per page</span>
-                <select value={provider === "contactout" ? 25 : pageSize}
-  disabled={provider === "contactout"}
+                <select
+                  value={provider === "contactout" ? 25 : pageSize}
+                  disabled={provider === "contactout"}
                   onChange={e => { updateState({ pageSize: Number(e.target.value), page: 1 }); setTimeout(() => search(1), 0); }}
                   className="h-6 px-1.5 rounded border border-slate-200 text-[11px] text-slate-600 bg-white focus:outline-none focus:border-violet-400 cursor-pointer">
-{provider !== "contactout" && <option value={10}>10</option>}
-<option value={25}>25</option>
-<option value={50}>50</option>
+                  {provider !== "contactout" && <option value={10}>10</option>}
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
                 </select>
               </div>
             )}
+
+            {/* CHANGE 3: Demo org toggle — amber, only for DEMO_ORG_ID */}
+            {orgId === DEMO_ORG_ID && (
+              <button
+                onClick={() => {
+                  const next = !demoMode;
+                  setDemoMode(next);
+                  // Auto-run demo search when switching to DB mode if filters are active
+                  if (next && hasFilters) {
+                    runDemoSearch(page);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all",
+                  demoMode
+                    ? "bg-amber-100 text-amber-700 border-amber-300 shadow-sm"
+                    : "bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-600"
+                )}
+                title={demoMode ? "Currently searching DB — click to switch to live API" : "Click to search from local DB instead of live API"}
+              >
+                <Database size={10} />
+                {demoMode ? "Demo: DB" : "Demo: Live"}
+              </button>
+            )}
+
             <div className="h-4 w-px bg-slate-200" />
             <SavedBadge orgId={orgId} />
           </div>
@@ -530,51 +636,54 @@ useEffect(() => {
 
         {/* Body */}
         <div className="flex-1 overflow-hidden flex flex-col">
-           {creditError && (
-     <InsufficientCreditsBanner
-       creditError={creditError}
-       onDismiss={() => clearAll()}
-       onOpenPricingModal={() => setShowPricingModal(true)}
-     />
-   )}
-   {showPricingModal && (
-     <ManageVerificationPricingModal
-       organizationId={orgId ?? ""}
-       isOpen={showPricingModal}
-       onClose={() => setShowPricingModal(false)}
-     />
-   )}
-          {state === "idle" && (
+          {creditError && !demoMode && (
+            <InsufficientCreditsBanner
+              creditError={creditError}
+              onDismiss={() => clearAll()}
+              onOpenPricingModal={() => setShowPricingModal(true)}
+            />
+          )}
+          {showPricingModal && (
+            <ManageVerificationPricingModal
+              organizationId={orgId ?? ""}
+              isOpen={showPricingModal}
+              onClose={() => setShowPricingModal(false)}
+            />
+          )}
+
+          {displayState === "idle" && (
             <div className="flex-1 overflow-y-auto">
               <IdleState recentSearches={[]} onApplyRecent={() => {}} onRemoveRecent={() => {}}
                 onQuickSearch={titles => { updateFilters({ titles }); setTimeout(handleRunSearch, 0); }} />
             </div>
           )}
-          {state === "empty" && (
+          {displayState === "empty" && (
             <div className="flex-1 overflow-y-auto"><EmptyState onClearAll={clearAll} /></div>
           )}
-          {state === "error" && error && (
+          {displayState === "error" && error && !demoMode && (
             <div className="flex-1 overflow-y-auto">
               <ErrorState error={error as any} onRetry={handleRunSearch} onClearAll={clearAll} />
             </div>
           )}
-          {(state === "loading" || state === "results") && (
+          {(displayState === "loading" || displayState === "results") && (
             <RRResultsArea
-              profiles={enrichedProfiles}
-              loading={isLoading}
-              totalEntries={totalEntries}
+              profiles={displayProfiles}
+              loading={displayLoading}
+              totalEntries={displayTotal}
               page={page}
-              pageSize={pageSize}
-              totalPages={totalPages}
+              pageSize={effectivePageSize}
+              totalPages={displayTotalPages}
               selectedId={selectedProfile?.id ?? null}
               checkedIds={checkedIds}
               revealedIds={revealedIds}
               scrapingIds={new Set()}
               activeSkillChips={filters.skillChips}
               enrichProgress={enrichProgress}
+              // CHANGE 2: pass tiRevealProvider so each row's reveal hits the right API
+              tiRevealProvider={tiRevealProvider}
               onSelectRow={p => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
               onCheckRow={(id, v) => setCheckedIds(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s; })}
-              onCheckAll={v => setCheckedIds(v ? new Set(enrichedProfiles.map(p => p.id)) : new Set())}
+              onCheckAll={v => setCheckedIds(v ? new Set(displayProfiles.map(p => p.id)) : new Set())}
               onPrev={() => goPage(Math.max(1, page - 1))}
               onNext={() => goPage(page + 1)}
               onRevealComplete={handleRevealComplete}
@@ -591,7 +700,7 @@ useEffect(() => {
           onClose={() => setSelectedProfile(null)}
           onRevealComplete={handleRevealComplete}
           onInvite={(rrProfileId, email, phone) => {
-            const p = enrichedProfiles.find(x => String(x.id) === rrProfileId);
+            const p = displayProfiles.find(x => String(x.id) === rrProfileId);
             if (p) setRrInviteTarget({ profile: p, email, phone });
           }}
         />

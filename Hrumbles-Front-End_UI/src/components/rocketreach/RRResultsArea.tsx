@@ -1,15 +1,15 @@
 /**
- * RRResultsArea.tsx — v8
+ * RRResultsArea.tsx — v9
  *
- * Fixes from v7:
- *   1. BUG FIX: After email/phone reveal, both buttons remain visible.
- *      Root cause: hasEmailsFromCO hid the main grid after enrichment.
- *      Solution: Separate the "CO emails shown at search time" display from
- *      the reveal button logic. Buttons now always render in a unified grid
- *      and reflect their current state correctly.
- *   2. Phone button now matches email button color (violet-bordered) when
- *      phone is available (phoneAvailable !== false), not slate/gray.
- *   3. View CV button stopPropagation prevents row opening detail panel.
+ * Changes from v8:
+ *   CHANGE 1 — ContactOut profiles no longer show the "Reveal contact to see full profile"
+ *              blur/lock overlay. Only RocketReach profiles get that restriction.
+ *              Condition: {(enriched || isContactOut) ? fullProfile : blurredPlaceholder}
+ *
+ *   CHANGE 2 — revealProfile() now calls the new unified `ti-reveal` edge function instead
+ *              of routing between `contactout-enrich` / `rocketreach-lookup` by p._provider.
+ *              The reveal API is now driven by the org's `ti_reveal_provider` setting.
+ *              New prop `tiRevealProvider: string` flows through RRResultsArea → RRResultRow.
  */
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
@@ -40,29 +40,27 @@ async function resolveAuth(): Promise<{ organizationId: string; userId: string }
   return emp?.organization_id ? { organizationId: emp.organization_id, userId } : null;
 }
 
+// ─── CHANGE 2: revealProfile now calls unified ti-reveal edge function ─────────
+// The provider routing (CO vs RR) is determined server-side by tiRevealProvider
+// (from org's ti_reveal_provider column), not by the search profile's _provider field.
 async function revealProfile(
-  profile: RRProfile,
-  revealType: "email" | "phone",
-  auth: { organizationId: string; userId: string }
+  profile:          RRProfile,
+  revealType:       "email" | "phone",
+  auth:             { organizationId: string; userId: string },
+  tiRevealProvider: string
 ): Promise<any> {
-  const provider = (profile as any)._provider ?? "rocketreach";
-  if (provider === "contactout") {
-    const { data, error } = await supabase.functions.invoke("contactout-enrich", {
-      body: {
-        linkedinUrl:     profile.linkedin_url,
-        organizationId:  auth.organizationId,
-        userId:          auth.userId,
-        revealType,
-        snapshotName:    profile.name,
-        snapshotTitle:   profile.current_title,
-        snapshotCompany: profile.current_employer,
-      },
-    });
-    if (error) throw new Error(error.message);
-    return data;
-  }
-  const { data, error } = await supabase.functions.invoke("rocketreach-lookup", {
-    body: { rrProfileId: profile.id, organizationId: auth.organizationId, userId: auth.userId, revealType },
+  const { data, error } = await supabase.functions.invoke("ti-reveal", {
+    body: {
+      linkedinUrl:      profile.linkedin_url ?? null,
+      rrProfileId:      String(profile.id),
+      organizationId:   auth.organizationId,
+      userId:           auth.userId,
+      revealType,
+      tiRevealProvider,
+      snapshotName:     profile.name,
+      snapshotTitle:    profile.current_title,
+      snapshotCompany:  profile.current_employer,
+    },
   });
   if (error) throw new Error(error.message);
   return data;
@@ -353,7 +351,6 @@ const RightCard: React.FC<RightCardProps> = ({
   const displayEmail   = personalEmails[0] ?? allEmailsRaw[0] ?? null;
   const displayPhone   = allPhones[0] ?? null;
 
-  // CO emails present at search time (before any reveal)
   const hasEmailsFromCO = isContactOut && allEmailsRaw.length > 0;
   const personalTeaserDomains = profile.teaser?.personal_emails ?? teaserEmails.slice(0, 2);
 
@@ -375,8 +372,7 @@ const RightCard: React.FC<RightCardProps> = ({
     });
   };
 
-  // ── Email button state ────────────────────────────────────────────────────
-  const emailDone    = !!(enriched && displayEmail) || hasEmailsFromCO;
+  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;
   const emailDisabled = revealingEmail || emailAvailable === false;
   const emailClass = emailDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
@@ -384,10 +380,8 @@ const RightCard: React.FC<RightCardProps> = ({
       ? "text-slate-400 border-slate-200 bg-slate-50"
       : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
-  // ── Phone button state ────────────────────────────────────────────────────
-  const phoneDone    = !!(enriched && displayPhone);
+  const phoneDone     = !!(enriched && displayPhone);
   const phoneDisabled = revealingPhone || phoneAvailable === false;
-  // Match email: violet-bordered when available, emerald when revealed
   const phoneClass = phoneDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
     : phoneAvailable === false
@@ -396,12 +390,10 @@ const RightCard: React.FC<RightCardProps> = ({
 
   return (
     <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-2.5 space-y-2">
-      {/* Photo */}
       <div className="flex justify-center py-1">
         <Avatar src={profile.profile_pic} name={profile.name} size={70} />
       </div>
 
-      {/* ContactOut: show emails from search time */}
       {hasEmailsFromCO && (
         <div className="space-y-1">
           {allEmailsRaw.slice(0, 2).map((em, i) => (
@@ -414,7 +406,6 @@ const RightCard: React.FC<RightCardProps> = ({
         </div>
       )}
 
-      {/* Revealed email (RR or CO post-enrich when not already shown) */}
       {enriched && displayEmail && !hasEmailsFromCO && (
         <div className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
           <span className={cn("w-[4px] h-[4px] rounded-full flex-shrink-0",
@@ -424,7 +415,6 @@ const RightCard: React.FC<RightCardProps> = ({
         </div>
       )}
 
-      {/* Revealed phone — always shown when present */}
       {enriched && displayPhone && (
         <div className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
           <Phone size={9} className="text-emerald-500 flex-shrink-0" />
@@ -433,10 +423,7 @@ const RightCard: React.FC<RightCardProps> = ({
         </div>
       )}
 
-      {/* ── Unified Email + Phone buttons ── */}
-      {/* Always show both buttons; state reflects current situation */}
       <div className="grid grid-cols-2 gap-1.5">
-        {/* Email button */}
         <div className="relative">
           <button
             onClick={e => { e.stopPropagation(); if (!emailDone) onRevealEmail(); }}
@@ -447,9 +434,7 @@ const RightCard: React.FC<RightCardProps> = ({
               "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
               emailClass
             )}>
-            {revealingEmail
-              ? <Loader2 size={9} className="animate-spin" />
-              : emailDone ? <Check size={9} /> : <Mail size={9} />}
+            {revealingEmail ? <Loader2 size={9} className="animate-spin" /> : emailDone ? <Check size={9} /> : <Mail size={9} />}
             <span className="truncate">
               {revealingEmail ? "…" : emailDone ? "Email ✓" : emailAvailable === false ? "No email" : "Email"}
             </span>
@@ -459,7 +444,6 @@ const RightCard: React.FC<RightCardProps> = ({
           )}
         </div>
 
-        {/* Phone button */}
         <div className="relative">
           <button
             onClick={e => { e.stopPropagation(); if (!phoneDone) onRevealPhone(); }}
@@ -470,15 +454,9 @@ const RightCard: React.FC<RightCardProps> = ({
               "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
               phoneClass
             )}>
-            {revealingPhone
-              ? <Loader2 size={9} className="animate-spin" />
-              : phoneDone ? <Check size={9} /> : <Phone size={9} />}
+            {revealingPhone ? <Loader2 size={9} className="animate-spin" /> : phoneDone ? <Check size={9} /> : <Phone size={9} />}
             <span className="truncate">
-              {revealingPhone ? "…"
-                : phoneDone ? "Phone ✓"
-                : phoneAvailable === false ? "No phone"
-                : isContactOut ? "Get Phone"
-                : "Phone"}
+              {revealingPhone ? "…" : phoneDone ? "Phone ✓" : phoneAvailable === false ? "No phone" : isContactOut ? "Get Phone" : "Phone"}
             </span>
           </button>
           {showPhoneTeaser && teaserPhones.length > 0 && (
@@ -487,7 +465,6 @@ const RightCard: React.FC<RightCardProps> = ({
         </div>
       </div>
 
-      {/* Invite + Save */}
       <div className="grid grid-cols-2 gap-1.5">
         <button onClick={e => { e.stopPropagation(); onInvite?.(); }}
           disabled={!canInvite}
@@ -507,7 +484,6 @@ const RightCard: React.FC<RightCardProps> = ({
         </button>
       </div>
 
-      {/* View Full CV */}
       {onViewCV && (
         <button
           onClick={e => { e.stopPropagation(); e.preventDefault(); onViewCV(profile.linkedin_url ?? ""); }}
@@ -591,6 +567,8 @@ export interface RRResultRowProps {
   selected:          boolean;
   scrapeLoading:     boolean;
   activeSkillChips?: SkillChip[];
+  // CHANGE 2: tiRevealProvider drives which API the reveal hits server-side
+  tiRevealProvider:  string;
   onCheck:           (v: boolean) => void;
   onRowClick:        () => void;
   onRevealComplete:  (id: number, data: any) => void;
@@ -599,6 +577,7 @@ export interface RRResultRowProps {
 
 export const RRResultRow: React.FC<RRResultRowProps> = ({
   profile: p, revealed, checked, selected, activeSkillChips,
+  tiRevealProvider,   // CHANGE 2
   onCheck, onRowClick, onRevealComplete, onInvite,
 }) => {
   const [revealingEmail, setRevealingEmail] = useState(false);
@@ -611,8 +590,6 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const provider     = (p as any)._provider ?? "rocketreach";
   const isContactOut = provider === "contactout";
   const enriched     = !!p._enriched || revealed;
-  const coData       = (p as any)._coData;
-  // const isEnriching  = p._needs_rescrape && !p._is_cached && !p._enriched;
   const isEnriching  = false;
 
   const allEmailsRaw = p._allEmails ?? [];
@@ -620,7 +597,7 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const jobHist      = p._jobHistory ?? [];
   const eduRaw       = p._education ?? [];
   const skills       = (p._skills ?? (p as any).skills ?? []) as string[];
-  const certs        = coData?.certifications ?? [];
+  const certs        = (p as any)._coData?.certifications ?? [];
 
   const teaserPersonal     = p.teaser?.personal_emails     ?? [];
   const teaserProfessional = p.teaser?.professional_emails ?? [];
@@ -642,13 +619,14 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     ? (allEmailsRaw.length > 0 || (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0)))
     : (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0));
 
+  // CHANGE 2: pass tiRevealProvider to revealProfile
   const doReveal = useCallback(async (revealType: "email"|"phone") => {
     const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
     setter(true); setRevealError(null);
     const auth = await resolveAuth();
     if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
     try {
-      const data = await revealProfile(p, revealType, auth);
+      const data = await revealProfile(p, revealType, auth, tiRevealProvider);
       if (!data?.success) {
         if (data?.code === "INSUFFICIENT_CREDITS") {
           setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
@@ -660,20 +638,12 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     } catch (e: any) {
       setRevealError(e.message ?? "Reveal failed");
     } finally { setter(false); }
-  }, [p, provider, onRevealComplete]);
+  }, [p, provider, tiRevealProvider, onRevealComplete]);
 
   const handleRowClick = useCallback(() => {
-    // Don't open panel if CV modal is open
     if (showCV) return;
     onRowClick();
   }, [showCV, onRowClick]);
-
-  // ─── Blurred field – shown when profile isn't enriched ────────────────────────
-const BlurredField: React.FC<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1 text-slate-300 select-none blur-[3px]">
-    {label}
-  </span>
-);
 
   return (
     <div
@@ -681,14 +651,11 @@ const BlurredField: React.FC<{ label: string }> = ({ label }) => (
       className={cn("border-b border-slate-100 px-3 py-3 cursor-pointer transition-colors",
         selected ? "bg-violet-50/60 border-l-2 border-l-violet-500" : "hover:bg-slate-50/40")}>
       <div className="flex items-start gap-2.5">
-        {/* Checkbox */}
         <div className="mt-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
           <Checkbox checked={checked} onCheckedChange={v => onCheck(!!v)} className="h-3.5 w-3.5" />
         </div>
 
-        {/* Left */}
         <div className="flex-1 min-w-0">
-          {/* Name row */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[13px] font-semibold text-slate-800 leading-tight">{p.name ?? "—"}</span>
             {p.linkedin_url && (
@@ -701,97 +668,78 @@ const BlurredField: React.FC<{ label: string }> = ({ label }) => (
               </a>
             )}
             {enriched && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 border border-violet-200">✓</span>}
-            {isContactOut && coData?.workStatus === "open_to_work" && (
+            {isContactOut && (p as any)._coData?.workStatus === "open_to_work" && (
               <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Open to Work</span>
             )}
-            {isContactOut && coData?.seniority && (
-              <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{coData.seniority}</span>
+            {isContactOut && (p as any)._coData?.seniority && (
+              <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 capitalize">{(p as any)._coData.seniority}</span>
             )}
-            {/* {isEnriching && !enriched && (
-              <span className="flex items-center gap-1 text-[8px] text-slate-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />Loading…
-              </span>
-            )} */}
           </div>
 
-          {/* Location */}
           <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400">
             <MapPin size={9} className="flex-shrink-0 text-slate-300" />
             <span>{p.location ?? (p as any).city ?? "—"}</span>
             {p.connections && <span className="ml-1">· {p.connections.toLocaleString()} connections</span>}
           </div>
 
-{enriched ? (
-  <>
-    <JobsSection jobs={displayJobs} loading={false} />
-    <EduSection education={eduRaw} loading={false} />
-    <SkillsRow skills={skills} loading={false} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
-    {certs.length > 0 && <CertificationsRow certifications={certs} loading={false} />}
-  </>
-) : (
-  <div className="relative mt-2">
-    {/* Real Current (always available from search) */}
-    {p.current_title && (
-      <div className="flex items-start text-sm">
-        <span className={ROW_LABEL_CLASS}>Current</span>
-        <span className="text-slate-700 flex-1 leading-tight">
-          {p.current_title}{p.current_employer ? ` at ${p.current_employer}` : ""}
-        </span>
-      </div>
-    )}
+          {/* CHANGE 1: ContactOut profiles always show full profile (no blur).
+              RocketReach profiles still show the blur/lock until revealed. */}
+          {(enriched || isContactOut) ? (
+            <>
+              <JobsSection jobs={displayJobs} loading={false} />
+              <EduSection education={eduRaw} loading={false} />
+              <SkillsRow skills={skills} loading={false} activeLabels={activeLabels.size > 0 ? activeLabels : undefined} />
+              {certs.length > 0 && <CertificationsRow certifications={certs} loading={false} />}
+            </>
+          ) : (
+            <div className="relative mt-2">
+              {p.current_title && (
+                <div className="flex items-start text-sm">
+                  <span className={ROW_LABEL_CLASS}>Current</span>
+                  <span className="text-slate-700 flex-1 leading-tight">
+                    {p.current_title}{p.current_employer ? ` at ${p.current_employer}` : ""}
+                  </span>
+                </div>
+              )}
 
-    {/* Blurred placeholder sections for the rest */}
-    <div className="space-y-2 select-none pointer-events-none opacity-50 blur-[3px]">
-      {/* Previous — only if not already showing real data */}
-      {jobHist.length === 0 && (
-        <div className="flex items-start">
-          <span className={ROW_LABEL_CLASS}>Previous</span>
-          <span className="text-slate-400 flex-1 leading-tight">
-            Software Engineer at Example Corp (2021–2024)
-          </span>
-        </div>
-      )}
+              <div className="space-y-2 select-none pointer-events-none opacity-50 blur-[3px]">
+                {jobHist.length === 0 && (
+                  <div className="flex items-start">
+                    <span className={ROW_LABEL_CLASS}>Previous</span>
+                    <span className="text-slate-400 flex-1 leading-tight">Software Engineer at Example Corp (2021–2024)</span>
+                  </div>
+                )}
+                <div className="flex items-start">
+                  <span className={ROW_LABEL_CLASS}>Education</span>
+                  <span className="text-slate-400 flex-1 leading-tight">Bachelor's, Computer Science · University Name (2017–2021)</span>
+                </div>
+                <div className="flex items-start">
+                  <span className={ROW_LABEL_CLASS}>Key Skills</span>
+                  <div className="flex-1 flex flex-wrap gap-1">
+                    {["Project Management", "Agile", "Data Analysis", "Python", "Cloud"].map((s, i) => (
+                      <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full border font-medium bg-slate-100 text-slate-400 border-slate-200">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-      {/* Education */}
-      <div className="flex items-start">
-        <span className={ROW_LABEL_CLASS}>Education</span>
-        <span className="text-slate-400 flex-1 leading-tight">
-          Bachelor's, Computer Science · University Name (2017–2021)
-        </span>
-      </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-violet-200 shadow-sm">
+                  <span className="text-[10px] font-medium text-violet-600 flex items-center gap-1.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Reveal contact to see full profile
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
-      {/* Key Skills */}
-      <div className="flex items-start">
-        <span className={ROW_LABEL_CLASS}>Key Skills</span>
-        <div className="flex-1 flex flex-wrap gap-1">
-          {["Project Management", "Agile", "Data Analysis", "Python", "Cloud"].map((s, i) => (
-            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full border font-medium bg-slate-100 text-slate-400 border-slate-200">
-              {s}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-
-    {/* Reveal prompt overlay */}
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-violet-200 shadow-sm">
-        <span className="text-[10px] font-medium text-violet-600 flex items-center gap-1.5">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          Reveal contact to see full profile
-        </span>
-      </div>
-    </div>
-  </div>
-)}
-
-{revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
+          {revealError && <p className="mt-1 text-[9px] text-red-500">{revealError}</p>}
         </div>
 
-        {/* Right card */}
         <div className="flex-shrink-0 w-[175px]" onClick={e => e.stopPropagation()}>
           <div className="relative">
             <RightCard
@@ -810,10 +758,7 @@ const BlurredField: React.FC<{ label: string }> = ({ label }) => (
               onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
               canInvite={canInvite}
               provider={provider}
-              onViewCV={isContactOut && p.linkedin_url ? (url) => {
-                setCvUrl(url);
-                setShowCV(true);
-              } : undefined}
+              onViewCV={isContactOut && p.linkedin_url ? (url) => { setCvUrl(url); setShowCV(true); } : undefined}
             />
             {showInvitePick && onInvite && (
               <div className="absolute bottom-0 right-0 z-50">
@@ -829,13 +774,9 @@ const BlurredField: React.FC<{ label: string }> = ({ label }) => (
         </div>
       </div>
 
-      {/* CV Modal — rendered inside row but click-isolated */}
       {showCV && (
         <div onClick={e => e.stopPropagation()}>
-          <MasterProfileCV
-            linkedinUrl={cvUrl}
-            onClose={() => setShowCV(false)}
-          />
+          <MasterProfileCV linkedinUrl={cvUrl} onClose={() => setShowCV(false)} />
         </div>
       )}
     </div>
@@ -856,6 +797,8 @@ interface RRResultsAreaProps {
   scrapingIds?:      Set<number>;
   activeSkillChips?: SkillChip[];
   enrichProgress?:   { total: number; done: number; active: boolean };
+  // CHANGE 2: org's ti_reveal_provider, passed through to each row
+  tiRevealProvider:  string;
   onSelectRow:       (p: RRProfile | null) => void;
   onCheckRow:        (id: number, v: boolean) => void;
   onCheckAll:        (v: boolean) => void;
@@ -868,13 +811,13 @@ interface RRResultsAreaProps {
 export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
   profiles, loading, totalEntries, page, totalPages,
   selectedId, checkedIds, revealedIds, activeSkillChips, enrichProgress,
+  tiRevealProvider,   // CHANGE 2
   onSelectRow, onCheckRow, onCheckAll, onPrev, onNext, onRevealComplete, onInvite,
 }) => {
   const allChecked = profiles.length > 0 && profiles.every(p => checkedIds.has(p.id));
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Top bar */}
       <div className="flex-shrink-0 px-3 py-2 border-b border-slate-100 bg-white flex items-center gap-3">
         <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
           <Checkbox checked={allChecked} onCheckedChange={v => onCheckAll(!!v)} className="h-3.5 w-3.5" />
@@ -883,7 +826,6 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
 
         {totalEntries > 0 && (
           <span className="text-[10px] text-slate-500">
-            {/* <span className="font-semibold text-slate-700">{totalEntries.toLocaleString()}</span> profiles */}
             {totalPages > 1 && <span className="ml-1.5 text-slate-400">· Page {page}/{totalPages}</span>}
           </span>
         )}
@@ -918,7 +860,6 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
         )}
       </div>
 
-      {/* List */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-3 space-y-2">
@@ -963,6 +904,7 @@ export const RRResultsArea: React.FC<RRResultsAreaProps> = ({
               selected={selectedId === p.id}
               scrapeLoading={false}
               activeSkillChips={activeSkillChips}
+              tiRevealProvider={tiRevealProvider}   // CHANGE 2
               onCheck={v => onCheckRow(p.id, v)}
               onRowClick={() => onSelectRow(selectedId === p.id ? null : p)}
               onRevealComplete={onRevealComplete}

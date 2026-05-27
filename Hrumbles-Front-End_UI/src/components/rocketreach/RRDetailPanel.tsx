@@ -1,12 +1,13 @@
 /**
- * RRDetailPanel.tsx — v4
+ * RRDetailPanel.tsx — v5
  *
- * Fixes from v3:
- *   1. BUG FIX: doReveal now routes to contactout-enrich for ContactOut profiles
- *      instead of always calling rocketreach-lookup.
- *      Mirrors the same revealProfile() logic used in RRResultsArea.
- *   2. Reveal buttons in Overview tab also correctly route for CO profiles.
- *   3. Phone button styled violet (matches email) when phoneAvailable.
+ * Changes from v4:
+ *   - revealContact() now calls the unified `ti-reveal` edge function
+ *     (same as RRResultsArea v9). Provider routing is done server-side
+ *     by the org's ti_reveal_provider setting.
+ *   - New required prop: tiRevealProvider: string — passed in from
+ *     RocketReachSearchPage where the org config is fetched.
+ *   - Removed the old provider-switch logic (contactout-enrich / rocketreach-lookup).
  */
 
 import React, { useState, useEffect, useRef } from "react";
@@ -38,37 +39,26 @@ async function resolveAuth(): Promise<{ organizationId: string; userId: string }
   return emp?.organization_id ? { organizationId: emp.organization_id, userId } : null;
 }
 
-// ─── Provider-aware reveal ────────────────────────────────────────────────────
+// ─── Unified reveal via ti-reveal edge function ───────────────────────────────
+// Provider routing (CO vs RR) is determined server-side by tiRevealProvider.
+// Fallback logic (e.g. RR 404 → CO) is also handled server-side.
 async function revealContact(
-  profile: RRProfile,
-  revealType: "email" | "phone",
-  auth: { organizationId: string; userId: string }
+  profile:          RRProfile,
+  revealType:       "email" | "phone",
+  auth:             { organizationId: string; userId: string },
+  tiRevealProvider: string
 ): Promise<any> {
-  const provider = (profile as any)._provider ?? "rocketreach";
-
-  if (provider === "contactout") {
-    const { data, error } = await supabase.functions.invoke("contactout-enrich", {
-      body: {
-        linkedinUrl:     profile.linkedin_url,
-        organizationId:  auth.organizationId,
-        userId:          auth.userId,
-        revealType,
-        snapshotName:    profile.name,
-        snapshotTitle:   profile.current_title,
-        snapshotCompany: profile.current_employer,
-      },
-    });
-    if (error) throw new Error(error.message);
-    return data;
-  }
-
-  // RocketReach
-  const { data, error } = await supabase.functions.invoke("rocketreach-lookup", {
+  const { data, error } = await supabase.functions.invoke("ti-reveal", {
     body: {
-      rrProfileId:    profile.id,
-      organizationId: auth.organizationId,
-      userId:         auth.userId,
+      linkedinUrl:      profile.linkedin_url ?? null,
+      rrProfileId:      String(profile.id),
+      organizationId:   auth.organizationId,
+      userId:           auth.userId,
       revealType,
+      tiRevealProvider,
+      snapshotName:     profile.name,
+      snapshotTitle:    profile.current_title,
+      snapshotCompany:  profile.current_employer,
     },
   });
   if (error) throw new Error(error.message);
@@ -457,10 +447,12 @@ interface RRDetailPanelProps {
   onInvite?:         (rrProfileId: string, email: string|null, phone: string|null) => void;
   folders?:          FolderItem[];
   onCreateFolder?:   (name: string) => Promise<string|null>;
+  // New in v5: org's ti_reveal_provider — drives which API is called for reveal
+  tiRevealProvider:  string;
 }
 
 export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
-  profile, onClose, onRevealComplete, onInvite,
+  profile, onClose, onRevealComplete, onInvite, tiRevealProvider,
 }) => {
   const provider     = (profile as any)._provider ?? "rocketreach";
   const isContactOut = provider === "contactout";
@@ -508,23 +500,23 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     queryClient.invalidateQueries({ queryKey: ["saved-candidates-count"] });
   };
 
-  // ── Provider-aware reveal ─────────────────────────────────────────────────
-const doReveal = async (revealType: "email" | "phone") => {
+  // ── Unified reveal via ti-reveal ──────────────────────────────────────────
+  const doReveal = async (revealType: "email" | "phone") => {
     const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
     setter(true);
     setRevealErrors(prev => ({ ...prev, [revealType]: undefined }));
- 
+
     const auth = await resolveAuth();
     if (!auth) {
       setter(false);
       setRevealErrors(prev => ({ ...prev, [revealType]: "Authentication failed" }));
       return;
     }
- 
+
     try {
-      const data = await revealContact(profile, revealType, auth);
+      const data = await revealContact(profile, revealType, auth, tiRevealProvider);
       setter(false);
- 
+
       if (!data?.success) {
         if (data?.code === "INSUFFICIENT_CREDITS") {
           setRevealErrors(prev => ({
@@ -536,28 +528,18 @@ const doReveal = async (revealType: "email" | "phone") => {
         setRevealErrors(prev => ({ ...prev, [revealType]: data?.error ?? "Reveal failed" }));
         return;
       }
- 
-      // ── Merge: only update if new data came back ─────────────────────
+
+      // Merge: only update fields where new data came back
       const incomingEmails: any[] = data.allEmails ?? [];
       const incomingPhones: any[] = data.allPhones ?? [];
- 
-      if (incomingEmails.length > 0) {
-        setAllEmails(incomingEmails);
-        setEmailRevealed(true);
-      }
-      // else: keep existing allEmails (phone reveal returns allEmails:[])
- 
-      if (incomingPhones.length > 0) {
-        setAllPhones(incomingPhones);
-        setPhoneRevealed(true);
-      }
-      // else: keep existing allPhones (email reveal returns allPhones:[])
- 
-      // Update enrichment fields only when response includes them
+
+      if (incomingEmails.length > 0) { setAllEmails(incomingEmails); setEmailRevealed(true); }
+      if (incomingPhones.length > 0) { setAllPhones(incomingPhones); setPhoneRevealed(true); }
+
       if (data.jobHistory?.length) setJobHistory(data.jobHistory);
       if (data.education?.length)  setEducation(data.education);
       if (data.skills?.length)     setSkills(data.skills);
- 
+
       onRevealComplete?.(profile.id, data);
       queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
       queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
@@ -663,7 +645,7 @@ const doReveal = async (revealType: "email" | "phone") => {
                     <div className="flex items-start gap-4 mt-3">
                       <div className="flex-shrink-0">
                         {(() => {
-                          const logoUrl = coData?.currentCompanyLogo || jobHistory.find(j => j.is_current)?.logo_url || jobHistory[0]?.logo_url;
+                          const logoUrl = coData?.currentCompanyLogo || jobHistory.find((j: any) => j.is_current)?.logo_url || jobHistory[0]?.logo_url;
                           return logoUrl ? (
                             <img src={logoUrl} alt={displayCo} className="w-11 h-11 rounded-2xl border border-violet-200 bg-white object-contain p-1.5 shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                           ) : (
@@ -687,7 +669,7 @@ const doReveal = async (revealType: "email" | "phone") => {
                   </div>
                 )}
 
-                {/* CO: show emails already in profile */}
+                {/* CO: show emails already in profile (from search) */}
                 {isContactOut && allEmails.length > 0 && (
                   <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-1.5">
                     <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Available Emails</p>
@@ -720,7 +702,7 @@ const doReveal = async (revealType: "email" | "phone") => {
                 )}
 
                 {skills.length > 0 && (<><Divider /><div><SectionHead>Top Skills ({skills.length})</SectionHead><div className="flex flex-wrap gap-1.5">{skills.slice(0,10).map((s,i) => <span key={i} className="px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 ring-1 ring-violet-200 text-[9px] font-semibold">{s}</span>)}{skills.length > 10 && <button type="button" onClick={() => setTab("career")} className="px-2 py-0.5 text-[9px] text-violet-500 hover:underline">+{skills.length-10} more →</button>}</div></div></>)}
-                {jobHistory.length > 0 && (<><Divider /><div><SectionHead>Recent Experience</SectionHead><CareerTimeline jobs={jobHistory.slice(0,2)} />{jobHistory.length > 2 && <button type="button" onClick={() => setTab("career")} className="text-[10px] text-violet-500 hover:underline mt-1">View full career →</button>}</div></>)}
+                {jobHistory.length > 0 && (<><Divider /><div><SectionHead>Recent Experience</SectionHead><CareerTimeline jobs={jobHistory.slice(0,2) as RRJobHistoryEntry[]} />{jobHistory.length > 2 && <button type="button" onClick={() => setTab("career")} className="text-[10px] text-violet-500 hover:underline mt-1">View full career →</button>}</div></>)}
                 {profile.linkedin_url && (<><Divider /><a href={profile.linkedin_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-2 text-[11px] text-blue-600 hover:text-blue-700 font-semibold transition-colors"><Linkedin size={12} /> View LinkedIn Profile ↗</a></>)}
               </>
             )}
@@ -759,7 +741,7 @@ const doReveal = async (revealType: "email" | "phone") => {
             {tab === "career" && (
               <>
                 {skills.length > 0 && (<div><SectionHead>Skills ({skills.length})</SectionHead><SkillsSection skills={skills} /></div>)}
-                {jobHistory.length > 0 && (<>{skills.length > 0 && <Divider />}<div><SectionHead>Career History ({jobHistory.length} roles)</SectionHead><CareerTimeline jobs={jobHistory} /></div></>)}
+                {jobHistory.length > 0 && (<>{skills.length > 0 && <Divider />}<div><SectionHead>Career History ({jobHistory.length} roles)</SectionHead><CareerTimeline jobs={jobHistory as RRJobHistoryEntry[]} /></div></>)}
                 {profile.current_employer && (
                   <><Divider />
                     <div>
@@ -767,7 +749,7 @@ const doReveal = async (revealType: "email" | "phone") => {
                       <div className="flex items-start gap-4 bg-white border border-slate-100 rounded-2xl p-4">
                         <div className="flex-shrink-0">
                           {(() => {
-                            const logoUrl = coData?.currentCompanyLogo || jobHistory.find(j => j.is_current)?.logo_url || jobHistory[0]?.logo_url;
+                            const logoUrl = coData?.currentCompanyLogo || (jobHistory as any[]).find(j => j.is_current)?.logo_url || (jobHistory as any[])[0]?.logo_url;
                             return logoUrl ? (
                               <img src={logoUrl} alt={profile.current_employer} className="w-12 h-12 rounded-2xl border border-slate-200 bg-white object-contain p-1.5 shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                             ) : (
