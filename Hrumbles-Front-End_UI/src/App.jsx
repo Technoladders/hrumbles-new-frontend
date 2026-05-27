@@ -36,6 +36,7 @@ import OrganizationVerificationReportPage from "./pages/verifications/Organizati
 import DetailedResourceView from './components/global/DetailedResourceView';
 import OrganizationTalentTrendsReport from "./components/global/OrganizationManagement/OrganizationTalentTrendsReport";
 import GlobalInvoicesPage from "./components/global/invoices/GlobalInvoicesPage";
+import { WaterfallPage } from "./pages/global/WaterfallPage";
 
 import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
@@ -491,6 +492,7 @@ function AppContent() {
               <Route path="/reports/credit-usage" element={<CreditUsageReport />} />
               <Route path="/reports/openai-usage" element={<OpenAIUsageReport />} />
               <Route path="/reports/apollo-usage" element={<ApolloUsageReport />} />
+              <Route path="/waterfall" element={<WaterfallPage />} />
               <Route path="/projects" element={<ProjectManagement />} />
               <Route path="/client/:id" element={<ClientDashboard />} />
               <Route path="/projects/:id" element={<ProjectDashboard />} />

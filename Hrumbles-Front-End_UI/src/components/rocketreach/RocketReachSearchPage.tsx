@@ -295,10 +295,10 @@ export const RocketReachSearchPage: React.FC = () => {
       if (!organizationId) return null;
       const { data } = await supabase
         .from("hr_organizations")
-        .select("people_search_provider, ti_reveal_provider")
+        .select("people_search_provider, ti_reveal_provider, waterfall_enabled")
         .eq("id", organizationId)
         .single();
-      return data as { people_search_provider: string; ti_reveal_provider: string } | null;
+      return data as { people_search_provider: string; ti_reveal_provider: string; waterfall_enabled: boolean } | null;
     },
     enabled: !!organizationId,
   });
@@ -306,6 +306,7 @@ export const RocketReachSearchPage: React.FC = () => {
   // Derived from orgConfig — defaults safe for before config loads
   const orgProvider      = (orgConfig?.people_search_provider ?? "rocketreach") as SearchProvider;
   const tiRevealProvider = orgConfig?.ti_reveal_provider ?? "contactout";
+  const waterfallEnabled = orgConfig?.waterfall_enabled ?? false;
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageState, setPageState] = useState<PageState>(() => decodeState(searchParams));
@@ -681,6 +682,8 @@ export const RocketReachSearchPage: React.FC = () => {
               enrichProgress={enrichProgress}
               // CHANGE 2: pass tiRevealProvider so each row's reveal hits the right API
               tiRevealProvider={tiRevealProvider}
+              waterfallEnabled={waterfallEnabled}
+              organizationId={orgId ?? undefined}
               onSelectRow={p => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
               onCheckRow={(id, v) => setCheckedIds(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s; })}
               onCheckAll={v => setCheckedIds(v ? new Set(displayProfiles.map(p => p.id)) : new Set())}
