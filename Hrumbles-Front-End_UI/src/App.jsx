@@ -172,6 +172,7 @@ import ResumeProcessingPage from '@/pages/talent-pool/ResumeProcessingPage';
 import { UploadFloatProvider } from '@/components/candidates/talent-pool/DraggableUploadFloat';
 import { TalentIntelligencePage } from "./pages/TalentIntelligence";
 import { TIProfilePage } from "./pages/TalentIntelligence/TIProfilePage";
+import { EmailTemplatesPage } from "./pages/settings/EmailTemplatesPage.tsx";
 
 
 import VendorDashboard from "./pages/VendorDashboard";
@@ -590,6 +591,7 @@ function AppContent() {
               <Route path="/whatsapp-conversations" element={<WhatsAppInbox />} />
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
               <Route path="/settings/organization-profile" element={<OrganizationProfilePage />} />
+              <Route path="/settings/email-templates" element={<EmailTemplatesPage />} />
             </Route>
           </Route>
         </Route>

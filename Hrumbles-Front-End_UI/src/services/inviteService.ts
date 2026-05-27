@@ -1,4 +1,8 @@
 // src/services/inviteService.ts
+// Changes vs previous:
+//   - InviteSource: added 'profile_search'
+//   - SendInviteParams: added emailBodyHtml, emailSubject, emailTemplateId
+
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 
@@ -18,6 +22,7 @@ export interface CandidateInvite {
   invite_source: InviteSource;
   candidate_id: string | null;
   candidate_owner_id: string | null;
+  email_template_id: string | null;
   expires_at: string;
   sent_at: string;
   opened_at: string | null;
@@ -26,14 +31,14 @@ export interface CandidateInvite {
   candidate_invite_responses?: CandidateInviteResponse | null;
 }
 
-// ── Invite source — extended with candidate_search ───────────────────────────
-// candidate_search: invite sent directly from the global candidate search page
-//   after revealing contact info. Stored in candidate_invites.invite_source.
+// ── Invite source ─────────────────────────────────────────────────────────────
+// Added 'profile_search' — for TI / People Search reveals
 export type InviteSource =
   | 'pipeline'
   | 'zivex'
   | 'talentpool'
-  | 'candidate_search';  // ← NEW
+  | 'candidate_search'
+  | 'profile_search';   // ← NEW
 
 export interface CandidateInviteResponse {
   id: string;
@@ -97,15 +102,23 @@ export interface SendInviteParams {
   candidatePhone?: string;
   channel: 'email' | 'whatsapp' | 'both';
   expiryDays?: number;
-  customMessage?: string;
+  // ── Email customisation (NEW) ─────────────────────────────
+  // If provided, the edge function uses these instead of the default emailTpl().
+  // emailBodyHtml should have variables already substituted, with {{INVITE_LINK}}
+  // left as a placeholder — the edge function will substitute the actual link.
+  emailBodyHtml?:    string;
+  emailSubject?:     string;
+  emailTemplateId?:  string;   // tracked in candidate_invites.email_template_id
+  // ─────────────────────────────────────────────────────────
+  customMessage?: string;      // legacy fallback if no emailBodyHtml
   // Pipeline-invite specific
   candidateId?: string;
   candidateOwnerId?: string;
-  inviteSource?: InviteSource;  // ← now uses the union type properly
+  inviteSource?: InviteSource;
   // WhatsApp
   whatsappTemplateName?: string;
   whatsappTemplateLanguage?: string;
-  whatsappBodyVars?: string[];   // Variable values for {{N}} in template
+  whatsappBodyVars?: string[];
 }
 
 // ── Send invite ───────────────────────────────────────────────────────────────
@@ -128,6 +141,10 @@ export const sendCandidateInvite = async (
       candidateId:       params.candidateId       || null,
       candidateOwnerId:  params.candidateOwnerId  || null,
       inviteSource:      params.inviteSource       || 'zivex',
+      // New email template fields
+      emailBodyHtml:     params.emailBodyHtml     || null,
+      emailSubject:      params.emailSubject       || null,
+      emailTemplateId:   params.emailTemplateId    || null,
     },
   });
 
@@ -211,6 +228,52 @@ export const getInviteStatsForJob = async (jobId: string): Promise<InviteStats> 
   return (data as InviteStats) || { total: 0, sent: 0, opened: 0, applied: 0, expired: 0 };
 };
 
+// ── Check existing active invites for a candidate ─────────────────────────────
+// Used by CandidateInviteGate to show "already invited" indicators per job.
+
+export interface ExistingInvite {
+  id:      string;
+  job_id:  string;
+  status:  string;
+  sent_at: string;
+  title:   string | null;   // from hr_jobs
+}
+
+export const getExistingInvites = async (
+  organizationId: string,
+  candidateEmail?: string,
+  candidatePhone?: string,
+): Promise<ExistingInvite[]> => {
+  if (!candidateEmail && !candidatePhone) return [];
+
+  // Build OR filter: match by email OR phone (whichever is provided)
+  const filters: string[] = [];
+  if (candidateEmail) filters.push(`candidate_email.eq.${candidateEmail}`);
+  if (candidatePhone) filters.push(`candidate_phone.eq.${candidatePhone}`);
+
+  const { data, error } = await supabase
+    .from("candidate_invites")
+    .select("id, job_id, status, sent_at, hr_jobs!candidate_invites_job_id_fkey(title)")
+    .eq("organization_id", organizationId)
+    .or(filters.join(","))
+    .not("status", "in", '("expired","declined","applied")')
+    .order("sent_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.warn("[getExistingInvites]", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row: any) => ({
+    id:      row.id,
+    job_id:  row.job_id,
+    status:  row.status,
+    sent_at: row.sent_at,
+    title:   row.hr_jobs?.title ?? null,
+  }));
+};
+
 // ── Add Zive-X response to job pipeline ───────────────────────────────────────
 
 export const addInviteResponseToJob = async (
@@ -224,8 +287,6 @@ export const addInviteResponseToJob = async (
 ): Promise<void> => {
   const { createCandidate } = await import('./candidateService');
 
-  // ── Background: upsert hr_talent_pool so the profile stays current ──────
-  // Non-fatal — never blocks the main add-to-job flow.
   if (organizationId && response.email) {
     supabase
       .from('hr_talent_pool')
@@ -296,8 +357,6 @@ export const addInviteResponseToJob = async (
   if (error) throw error;
 };
 
-// ── Reject invite response ────────────────────────────────────────────────────
-
 export const rejectInviteResponse = async (
   responseId: string,
   notes?: string
@@ -316,14 +375,8 @@ export const applyProfileUpdate = async (
   candidateOwnerId?: string,
   organizationId?: string
 ): Promise<void> => {
-  // ── Background: silently update hr_talent_pool ────────────────────────────
-  // Runs fire-and-forget. Never surfaces errors to the recruiter.
-  // Does NOT affect hr_job_candidates — that's handled below.
   if (organizationId && response.email) {
-    const talentUpdate: Record<string, any> = {
-      updated_at: new Date().toISOString(),
-      source_platform: 'invite',
-    };
+    const talentUpdate: Record<string, any> = { updated_at: new Date().toISOString(), source_platform: 'invite' };
     if (response.candidate_name)       talentUpdate.candidate_name       = response.candidate_name;
     if (response.email)                talentUpdate.email                = response.email;
     if (response.phone)                talentUpdate.phone                = response.phone;
@@ -339,25 +392,14 @@ export const applyProfileUpdate = async (
     if (response.expected_salary)      talentUpdate.expected_salary      = response.expected_salary;
     if (response.parsed_current_ctc  != null) talentUpdate.parsed_current_ctc  = response.parsed_current_ctc;
     if (response.parsed_expected_ctc != null) talentUpdate.parsed_expected_ctc = response.parsed_expected_ctc;
-    if (response.top_skills?.length) {
-      talentUpdate.top_skills = response.top_skills.map(s => typeof s === 'string' ? s : s.name);
-    }
+    if (response.top_skills?.length) talentUpdate.top_skills = response.top_skills.map(s => typeof s === 'string' ? s : s.name);
 
-    supabase
-      .from('hr_talent_pool')
-      .upsert({ ...talentUpdate, organization_id: organizationId },
-        { onConflict: 'email,organization_id', ignoreDuplicates: false })
-      .then(({ error }) => {
-        if (error) console.warn('[inviteService] pipeline talent pool sync non-fatal:', error.message);
-        else console.log('[inviteService] talent pool silently updated for', response.email);
-      });
+    supabase.from('hr_talent_pool')
+      .upsert({ ...talentUpdate, organization_id: organizationId }, { onConflict: 'email,organization_id', ignoreDuplicates: false })
+      .then(({ error }) => { if (error) console.warn('[inviteService] pipeline talent pool sync non-fatal:', error.message); });
   }
 
-  // ── hr_job_candidates update (existing flow — unchanged) ──────────────────
-  const updatePayload: Record<string, any> = {
-    updated_at: new Date().toISOString(),
-  };
-
+  const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() };
   if (candidateOwnerId) updatePayload.updated_by = candidateOwnerId;
   if (response.candidate_name)  updatePayload.name         = response.candidate_name;
   if (response.email)           updatePayload.email        = response.email;
@@ -370,40 +412,28 @@ export const applyProfileUpdate = async (
   if (response.resume_url)          updatePayload.resume_url      = response.resume_url;
 
   const { data: existing, error: fetchErr } = await supabase
-    .from('hr_job_candidates')
-    .select('metadata')
-    .eq('id', candidateId)
-    .single();
-
+    .from('hr_job_candidates').select('metadata').eq('id', candidateId).single();
   if (fetchErr) throw fetchErr;
 
   const submittedData = response.metadata?.submittedData || {};
-
   updatePayload.metadata = {
     ...(existing?.metadata || {}),
-    ...(submittedData.currentLocation   ? { currentLocation:     submittedData.currentLocation   } : {}),
-    ...(submittedData.noticePeriod      ? { noticePeriod:        submittedData.noticePeriod      } : {}),
-    ...(submittedData.linkedInId        ? { linkedInId:          submittedData.linkedInId         } : {}),
-    ...(response.linkedin_url           ? { linkedInId:          response.linkedin_url            } : {}),
-    ...(response.current_company        ? { currentCompany:      response.current_company         } : {}),
-    ...(response.current_designation    ? { currentDesignation:  response.current_designation     } : {}),
-    ...(response.resume_url             ? { resume_url:          response.resume_url              } : {}),
-    ...(response.parsed_current_ctc     ? { currentSalary:       response.parsed_current_ctc      } : {}),
-    ...(response.parsed_expected_ctc    ? { expectedSalary:      response.parsed_expected_ctc     } : {}),
-    profileUpdatedAt:          new Date().toISOString(),
-    profileUpdatedViaInvite:   true,
+    ...(submittedData.currentLocation   ? { currentLocation:    submittedData.currentLocation   } : {}),
+    ...(submittedData.noticePeriod      ? { noticePeriod:       submittedData.noticePeriod      } : {}),
+    ...(submittedData.linkedInId        ? { linkedInId:         submittedData.linkedInId         } : {}),
+    ...(response.linkedin_url           ? { linkedInId:         response.linkedin_url            } : {}),
+    ...(response.current_company        ? { currentCompany:     response.current_company         } : {}),
+    ...(response.current_designation    ? { currentDesignation: response.current_designation     } : {}),
+    ...(response.resume_url             ? { resume_url:         response.resume_url              } : {}),
+    ...(response.parsed_current_ctc     ? { currentSalary:      response.parsed_current_ctc      } : {}),
+    ...(response.parsed_expected_ctc    ? { expectedSalary:     response.parsed_expected_ctc     } : {}),
+    profileUpdatedAt:        new Date().toISOString(),
+    profileUpdatedViaInvite: true,
   };
 
-  const { error: updateErr } = await supabase
-    .from('hr_job_candidates')
-    .update(updatePayload)
-    .eq('id', candidateId);
+  const { error: updateErr } = await supabase.from('hr_job_candidates').update(updatePayload).eq('id', candidateId);
   if (updateErr) throw updateErr;
 
-  const { error: responseErr } = await supabase
-    .from('candidate_invite_responses')
-    .update({ status: 'auto_updated' })
-    .eq('id', responseId);
+  const { error: responseErr } = await supabase.from('candidate_invite_responses').update({ status: 'auto_updated' }).eq('id', responseId);
   if (responseErr) throw responseErr;
 };
-// all templates accept
