@@ -579,9 +579,7 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
               <h2 className="text-[15px] font-bold text-white leading-tight truncate">{displayName}</h2>
               <p className="text-[11px] text-white/80 truncate mt-0.5">{displayTitle}</p>
               <p className="text-[10px] text-white/60 truncate">{displayCo}</p>
-              {isContactOut && (
-                <span className="mt-1 inline-flex items-center text-[8px] text-white/60 bg-white/10 px-1.5 py-0.5 rounded-full">ContactOut</span>
-              )}
+              
             </div>
             <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
               <button onClick={onClose} className="w-6 h-6 rounded-md bg-white/15 hover:bg-white/25 flex items-center justify-center"><X size={12} className="text-white/80" /></button>

@@ -699,6 +699,7 @@ export const RocketReachSearchPage: React.FC = () => {
           profile={selectedProfile}
           onClose={() => setSelectedProfile(null)}
           onRevealComplete={handleRevealComplete}
+          tiRevealProvider={tiRevealProvider}
           onInvite={(rrProfileId, email, phone) => {
             const p = displayProfiles.find(x => String(x.id) === rrProfileId);
             if (p) setRrInviteTarget({ profile: p, email, phone });

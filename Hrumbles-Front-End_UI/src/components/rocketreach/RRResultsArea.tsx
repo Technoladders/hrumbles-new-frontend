@@ -327,6 +327,7 @@ interface RightCardProps {
   phoneAvailable: boolean | null;
   revealingEmail: boolean;
   revealingPhone: boolean;
+  phoneIsPending: boolean;      // Apollo async phone — show amber "Verifying…" state
   onRevealEmail:  () => void;
   onRevealPhone:  () => void;
   onInvite?:      () => void;
@@ -338,7 +339,7 @@ interface RightCardProps {
 const RightCard: React.FC<RightCardProps> = ({
   profile, enriched, allEmailsRaw, allPhones,
   teaserEmails, teaserPhones, emailAvailable, phoneAvailable,
-  revealingEmail, revealingPhone, onRevealEmail, onRevealPhone,
+  revealingEmail, revealingPhone, phoneIsPending, onRevealEmail, onRevealPhone,
   onInvite, canInvite, provider, onViewCV,
 }) => {
   const [showEmailTeaser, setShowEmailTeaser] = useState(false);
@@ -348,10 +349,11 @@ const RightCard: React.FC<RightCardProps> = ({
   const isContactOut = provider === "contactout";
 
   const personalEmails = allEmailsRaw.filter(e => e.type === "personal");
-  const displayEmail   = personalEmails[0] ?? allEmailsRaw[0] ?? null;
+  const displayEmail   = personalEmails[0] ?? null;   // personal only — never show professional
   const displayPhone   = allPhones[0] ?? null;
 
-  const hasEmailsFromCO = isContactOut && allEmailsRaw.length > 0;
+  // Show CO emails only if personal ones are present — professional emails are never displayed
+  const hasEmailsFromCO = isContactOut && personalEmails.length > 0;
   const personalTeaserDomains = profile.teaser?.personal_emails ?? teaserEmails.slice(0, 2);
 
   const handleSave = async (e: React.MouseEvent) => {
@@ -372,7 +374,7 @@ const RightCard: React.FC<RightCardProps> = ({
     });
   };
 
-  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;
+  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;  // displayEmail is personal-only
   const emailDisabled = revealingEmail || emailAvailable === false;
   const emailClass = emailDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
@@ -381,12 +383,14 @@ const RightCard: React.FC<RightCardProps> = ({
       : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
   const phoneDone     = !!(enriched && displayPhone);
-  const phoneDisabled = revealingPhone || phoneAvailable === false;
+  const phoneDisabled = revealingPhone || phoneIsPending || phoneAvailable === false;
   const phoneClass = phoneDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
-    : phoneAvailable === false
-      ? "text-slate-400 border-slate-200 bg-slate-50"
-      : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
+    : phoneIsPending
+      ? "text-amber-600 border-amber-200 bg-amber-50"
+      : phoneAvailable === false
+        ? "text-slate-400 border-slate-200 bg-slate-50"
+        : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
   return (
     <div className="rounded-xl border border-slate-100 bg-white shadow-sm p-2.5 space-y-2">
@@ -396,7 +400,7 @@ const RightCard: React.FC<RightCardProps> = ({
 
       {hasEmailsFromCO && (
         <div className="space-y-1">
-          {allEmailsRaw.slice(0, 2).map((em, i) => (
+          {personalEmails.slice(0, 2).map((em, i) => (
             <div key={i} className="flex items-center gap-1 bg-emerald-50/60 rounded-md px-2 py-1">
               <span className="w-[4px] h-[4px] rounded-full flex-shrink-0 bg-emerald-400" />
               <span className="text-[10px] font-mono text-slate-700 truncate flex-1 min-w-0">{em.email}</span>
@@ -446,20 +450,37 @@ const RightCard: React.FC<RightCardProps> = ({
 
         <div className="relative">
           <button
-            onClick={e => { e.stopPropagation(); if (!phoneDone) onRevealPhone(); }}
-            onMouseEnter={() => { if (!phoneDone && teaserPhones.length > 0) setShowPhoneTeaser(true); }}
+            onClick={e => { e.stopPropagation(); if (!phoneDone && !phoneIsPending) onRevealPhone(); }}
+            onMouseEnter={() => { if (!phoneDone && !phoneIsPending && teaserPhones.length > 0) setShowPhoneTeaser(true); }}
             onMouseLeave={() => setShowPhoneTeaser(false)}
             disabled={phoneDisabled || phoneDone}
             className={cn(
-              "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+              "w-full text-[10px] font-semibold border rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors disabled:opacity-60 disabled:cursor-not-allowed",
               phoneClass
             )}>
-            {revealingPhone ? <Loader2 size={9} className="animate-spin" /> : phoneDone ? <Check size={9} /> : <Phone size={9} />}
+            {revealingPhone
+              ? <Loader2 size={9} className="animate-spin" />
+              : phoneIsPending
+                ? <Loader2 size={9} className="animate-spin" />
+                : phoneDone
+                  ? <Check size={9} />
+                  : <Phone size={9} />}
             <span className="truncate">
-              {revealingPhone ? "…" : phoneDone ? "Phone ✓" : phoneAvailable === false ? "No phone" : isContactOut ? "Get Phone" : "Phone"}
+              {revealingPhone ? "…"
+                : phoneIsPending ? "Verifying…"
+                : phoneDone ? "Phone ✓"
+                : phoneAvailable === false ? "No phone"
+                : isContactOut ? "Get Phone"
+                : "Phone"}
             </span>
           </button>
-          {showPhoneTeaser && teaserPhones.length > 0 && (
+          {phoneIsPending && (
+            <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-amber-200 rounded-lg shadow-lg z-50 p-2 min-w-[160px]">
+              <p className="text-[9px] font-semibold text-amber-700">Phone pending</p>
+              <p className="text-[8px] text-slate-500 mt-0.5 leading-snug">Will appear automatically within 1–2 minutes.</p>
+            </div>
+          )}
+          {showPhoneTeaser && !phoneIsPending && teaserPhones.length > 0 && (
             <TeaserPopover items={teaserPhones.map(ph => ph.number)} type="phone" onClose={() => setShowPhoneTeaser(false)} />
           )}
         </div>
@@ -586,6 +607,10 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
   const [showInvitePick, setShowInvitePick] = useState(false);
   const [showCV,         setShowCV]         = useState(false);
   const [cvUrl,          setCvUrl]          = useState<string>("");
+  // Apollo async phone: shows amber "Verifying…" while polling master_contactout_profiles
+  const [phonePendingState, setPhonePendingState] = useState(false);
+  const phonePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (phonePollRef.current) clearInterval(phonePollRef.current); }, []);
 
   const provider     = (p as any)._provider ?? "rocketreach";
   const isContactOut = provider === "contactout";
@@ -619,6 +644,32 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     ? (allEmailsRaw.length > 0 || (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0)))
     : (enriched && (allEmailsRaw.length > 0 || allPhones.length > 0));
 
+  // Poll ti_profile_reveals every 3s until phone arrives (mirrors TI table pattern)
+  const startPollingForPhone = useCallback((linkedinUrl: string) => {
+    let count = 0;
+    phonePollRef.current = setInterval(async () => {
+      if (++count > 20) {
+        clearInterval(phonePollRef.current!); phonePollRef.current = null;
+        setPhonePendingState(false);
+        setRevealError("Phone not returned yet — please try again later.");
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("ti_profile_reveals")
+          .select("phones")
+          .eq("linkedin_url", linkedinUrl)
+          .maybeSingle();
+        const phones: any[] = data?.phones ?? [];
+        if (phones.length > 0) {
+          clearInterval(phonePollRef.current!); phonePollRef.current = null;
+          setPhonePendingState(false);
+          onRevealComplete(p.id, { success: true, allPhones: phones, allEmails: [], _provider: provider });
+        }
+      } catch { /* ignore — will retry */ }
+    }, 3000);
+  }, [p.id, provider, onRevealComplete]);
+
   // CHANGE 2: pass tiRevealProvider to revealProfile
   const doReveal = useCallback(async (revealType: "email"|"phone") => {
     const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
@@ -627,6 +678,13 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
     try {
       const data = await revealProfile(p, revealType, auth, tiRevealProvider);
+      // Apollo async phone — show amber pending state + poll for arrival
+      if (data?.phonePending) {
+        setter(false);
+        setPhonePendingState(true);
+        if (p.linkedin_url) startPollingForPhone(p.linkedin_url);
+        return;
+      }
       if (!data?.success) {
         if (data?.code === "INSUFFICIENT_CREDITS") {
           setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
@@ -638,7 +696,7 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     } catch (e: any) {
       setRevealError(e.message ?? "Reveal failed");
     } finally { setter(false); }
-  }, [p, provider, tiRevealProvider, onRevealComplete]);
+  }, [p, provider, tiRevealProvider, onRevealComplete, startPollingForPhone]);
 
   const handleRowClick = useCallback(() => {
     if (showCV) return;
@@ -753,6 +811,7 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
               phoneAvailable={phoneAvailable}
               revealingEmail={revealingEmail}
               revealingPhone={revealingPhone}
+              phoneIsPending={phonePendingState}
               onRevealEmail={() => doReveal("email")}
               onRevealPhone={() => doReveal("phone")}
               onInvite={canInvite ? () => setShowInvitePick(v => !v) : undefined}
