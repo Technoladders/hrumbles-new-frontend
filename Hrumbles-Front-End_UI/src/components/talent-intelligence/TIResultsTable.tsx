@@ -1,10 +1,10 @@
-// src/components/talent-intelligence/TIResultsTable.tsx  — v7
-// Changes vs v6:
-//   - Row click → expand/collapse inline (no longer opens modal)
-//   - Profile name click → navigate to /talent-intelligence/profile/:id
-//   - "View profile" button → navigate to /talent-intelligence/profile/:id
-//   - ExpandedRow component — shows experience, all skills, education, summary
-//   - onSelectProfile made optional (table handles navigation internally)
+// src/components/talent-intelligence/TIResultsTable.tsx  — v8
+// Changes vs v7:
+//   - waterfallEnabled prop added (org config)
+//   - RevealCell: waterfall state + handleAddToWaterfall + realtime subscription
+//   - SquareX "No personal email" replaced with waterfall button when waterfallEnabled
+//   - Post-reveal personal-check: success:true but professional-only → emailWasRevealed sets,
+//     waterfall button shown instead of re-triggerable button
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import ReactDOM from "react-dom";
@@ -12,7 +12,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Mail, Phone, Linkedin, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Loader2, Check, Copy, Send, ExternalLink, Zap,
-  Bookmark, BookmarkCheck, Globe, X, GraduationCap, Briefcase, Languages, SquareX
+  Bookmark, BookmarkCheck, Globe, X, GraduationCap, Briefcase, Languages, SquareX, Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,7 +33,6 @@ const STICKY_CSS = `
 const isPersonalEmail = (e: TIRevealedEmail): boolean =>
   e.type === "personal" || e.type === "direct" || e.type === "personal_email";
 
-// ── Date formatter for experience ──────────────────────────────
 function fmtExpDate(year?: number | null, month?: number | null): string {
   if (!year) return "";
   if (!month) return String(year);
@@ -45,7 +44,6 @@ function expRange(exp: any): string {
   return [start, end].filter(Boolean).join(" – ");
 }
 
-// ── Portal tooltip ────────────────────────────────────────────
 function PortalTip({ trigger, content }: { trigger: React.ReactNode; content: React.ReactNode }) {
   const [visible, setVisible] = useState(false);
   const [style,   setStyle]   = useState<React.CSSProperties>({});
@@ -99,11 +97,16 @@ function CompanyLogo({ profile }: { profile: TIProfile }) {
 }
 
 // ── RevealCell ────────────────────────────────────────────────
-interface RevealCellProps { profile: TIProfile; onRevealDone: (e: TIRevealedEmail[], p: TIRevealedPhone[]) => void; }
-function RevealCell({ profile, onRevealDone }: RevealCellProps) {
+interface RevealCellProps {
+  profile:         TIProfile;
+  waterfallEnabled?: boolean;
+  onRevealDone:    (e: TIRevealedEmail[], p: TIRevealedPhone[]) => void;
+}
+function RevealCell({ profile, onRevealDone, waterfallEnabled }: RevealCellProps) {
   const auth           = getAuthDataFromLocalStorage();
   const organizationId = auth?.organization_id ?? null;
   const userId         = auth?.userId ?? null;
+
   const [emails,       setEmails]       = useState<TIRevealedEmail[]>(profile.revealed_emails ?? []);
   const [phones,       setPhones]       = useState<TIRevealedPhone[]>(profile.revealed_phones ?? []);
   const [eLoad,  setELoad]  = useState(false);
@@ -113,44 +116,119 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
   const [copied, setCopied] = useState<string|null>(null);
   const [phonePending, setPhonePending] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval>|null>(null);
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // Waterfall states
+  const [waterfallInQueue, setWaterfallInQueue] = useState(false);
+  const [waterfallDone,    setWaterfallDone]    = useState(false);
+  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+  }, []);
+
   useEffect(() => { setEmails(profile.revealed_emails ?? []); setEErr(null); }, [profile.id, profile.revealed_emails?.length ?? 0]);
   useEffect(() => {
     const np = profile.revealed_phones ?? [];
     setPhones(np);
-    if (np.length > 0 && phonePending) { setPhonePending(false); if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;} onRevealDone(emails,np); }
+    if (np.length > 0 && phonePending) {
+      setPhonePending(false);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      onRevealDone(emails, np);
+    }
     setPErr(null);
   }, [profile.id, profile.revealed_phones?.length ?? 0]);
+
   const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(()=>setCopied(null),1500); };
+
   const startPhonePolling = (url: string) => {
-    let c=0;
+    let c = 0;
     pollRef.current = setInterval(async () => {
-      if(++c>20){ clearInterval(pollRef.current!);pollRef.current=null;setPhonePending(false);setPErr("Phone not returned yet — check back later."); return; }
+      if (++c > 20) {
+        clearInterval(pollRef.current!); pollRef.current = null;
+        setPhonePending(false);
+        setPErr("Phone not returned yet — check back later.");
+        return;
+      }
       try {
-        const {data} = await supabase.from("master_contactout_profiles").select("revealed_phones").eq("linkedin_url",url).maybeSingle();
-        const np: TIRevealedPhone[] = data?.revealed_phones??[];
-        if(np.length>0){ clearInterval(pollRef.current!);pollRef.current=null;setPhonePending(false);setPhones(np);onRevealDone(emails,np); }
+        const {data} = await supabase.from("master_contactout_profiles").select("revealed_phones").eq("linkedin_url", url).maybeSingle();
+        const np: TIRevealedPhone[] = data?.revealed_phones ?? [];
+        if (np.length > 0) {
+          clearInterval(pollRef.current!); pollRef.current = null;
+          setPhonePending(false); setPhones(np); onRevealDone(emails, np);
+        }
       } catch {}
     }, 3000);
   };
+
+  // Add to waterfall queue + subscribe to superadmin resolution
+  const handleAddToWaterfall = async () => {
+    if (!organizationId || !profile.linkedin_url) return;
+    try {
+      await supabase.from("candidate_waterfall").upsert({
+        organization_id:     organizationId,
+        requested_by:        userId,
+        linkedin_url:        profile.linkedin_url,
+        full_name:           profile.full_name,
+        title:               profile.title,
+        company_name:        profile.company_name,
+        profile_picture_url: profile.profile_picture_url,
+        status:              "pending",
+      }, { onConflict: "linkedin_url,organization_id", ignoreDuplicates: true });
+      setWaterfallInQueue(true);
+
+      if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+      waterfallChannelRef.current = supabase
+        .channel(`wf-ti-${profile.id}`)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "candidate_waterfall",
+          filter: `linkedin_url=eq.${profile.linkedin_url}`,
+        }, (payload: any) => {
+          if (payload.new?.status === "found" && payload.new.found_email) {
+            const newEmail = { email: payload.new.found_email, type: "personal", is_primary: true } as TIRevealedEmail;
+            const newPhones = payload.new.found_phone
+              ? [{ number: payload.new.found_phone, type: "mobile", recommended: true } as TIRevealedPhone]
+              : phones;
+            setEmails([newEmail]);
+            setPhones(newPhones);
+            setWaterfallDone(true);
+            setWaterfallInQueue(false);
+            onRevealDone([newEmail], newPhones);
+            if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+          }
+        })
+        .subscribe();
+    } catch (e: any) { console.error("[waterfall-ti]", e?.message); }
+  };
+
   const reveal = async (type: "email"|"phone") => {
     if (!organizationId) return;
     const setL = type==="email"?setELoad:setPLoad, setE = type==="email"?setEErr:setPErr;
     setL(true); setE(null);
     try {
-      const {data,error} = await supabase.functions.invoke("ti-reveal-contact", { body:{linkedinUrl:profile.linkedin_url,revealType:type,organizationId,userId} });
-      if(error||(data?.error&&!data?.phonePending)){ setE(data?.message??data?.error??error?.message??"Reveal failed"); return; }
-      if(data?.phonePending){ setPhonePending(true); startPhonePolling(profile.linkedin_url); return; }
-      const ne: TIRevealedEmail[]=data.allEmails??[], np: TIRevealedPhone[]=data.allPhones??[];
-      const m={emails:type==="email"?ne:emails, phones:type==="phone"?np:phones};
-      setEmails(m.emails); setPhones(m.phones); onRevealDone(m.emails,m.phones);
+      const {data,error} = await supabase.functions.invoke("ti-reveal-contact", {
+        body: { linkedinUrl: profile.linkedin_url, revealType: type, organizationId, userId }
+      });
+      if (error || (data?.error && !data?.phonePending)) {
+        setE(data?.message ?? data?.error ?? error?.message ?? "Reveal failed");
+        return;
+      }
+      if (data?.phonePending) { setPhonePending(true); startPhonePolling(profile.linkedin_url); return; }
+      const ne: TIRevealedEmail[] = data.allEmails ?? [], np: TIRevealedPhone[] = data.allPhones ?? [];
+      const m = { emails: type==="email"?ne:emails, phones: type==="phone"?np:phones };
+      setEmails(m.emails); setPhones(m.phones); onRevealDone(m.emails, m.phones);
     } catch(e:any){ setE(e?.message??"Failed"); }
     finally { setL(false); }
   };
-  const ca=profile.contact_availability;
-  const hasPersonalEmail=!!ca?.personal_email, hasPhone=!!ca?.phone;
-  const personalEmails=emails.filter(isPersonalEmail), emailWasRevealed=emails.length>0;
-  const hasPersonal=personalEmails.length>0, primaryPersonal=personalEmails[0]??null, pp=phones[0]??null;
+
+  const ca = profile.contact_availability;
+  const hasPersonalEmail = !!ca?.personal_email, hasPhone = !!ca?.phone;
+  const personalEmails   = emails.filter(isPersonalEmail);
+  const emailWasRevealed = emails.length > 0;
+  const hasPersonal      = personalEmails.length > 0;
+  const primaryPersonal  = personalEmails[0] ?? null;
+  const pp               = phones[0] ?? null;
+
   const allPhonesContent = (
     <div className="space-y-1.5">
       <p className="text-[8px] font-bold uppercase text-slate-400 mb-1.5">All Phones</p>
@@ -176,8 +254,11 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
       ))}
     </div>
   );
+
   return (
     <div className="flex flex-col gap-0.5" onClick={e=>e.stopPropagation()}>
+
+      {/* ── Email ── */}
       {hasPersonalEmail && (
         hasPersonal ? (
           <PortalTip trigger={
@@ -188,18 +269,46 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
             </div>
           } content={allEmailsContent}/>
         ) : emailWasRevealed ? (
-          <div className="flex items-center gap-1  border border-purple-200 rounded px-1.5 py-0.5 cursor-default max-w-[130px]">
-          <SquareX size={12} className="text-red-400"/>
-          <span className="text-[9px] text-slate-400 italic ">No personal email</span>
-          </div>
+          // Revealed but no personal email found
+          waterfallEnabled ? (
+            waterfallDone ? (
+              <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 max-w-[130px]">
+                <Check size={8} className="text-emerald-500"/><span className="text-[9px] text-emerald-700 font-medium truncate">Found</span>
+              </div>
+            ) : waterfallInQueue ? (
+              <PortalTip
+                trigger={
+                  <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 cursor-default max-w-[130px]">
+                    <Loader2 size={8} className="animate-spin text-amber-500 flex-shrink-0"/>
+                    <span className="text-[9px] text-amber-600 font-medium truncate">In Queue…</span>
+                  </div>
+                }
+                content={<div className="space-y-1"><p className="text-[10px] font-semibold text-slate-700">Waterfall queued</p><p className="text-[9px] text-slate-500 leading-snug">Our team is sourcing this email. Check back in 24–48 hours.</p></div>}
+              />
+            ) : (
+              <button onClick={handleAddToWaterfall}
+                title="We'll source this personal email within 24–48 hours"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-all max-w-[130px]">
+                <Clock size={8}/> Waterfall
+              </button>
+            )
+          ) : (
+            <div className="flex items-center gap-1 border border-purple-200 rounded px-1.5 py-0.5 cursor-default max-w-[130px]">
+              <SquareX size={12} className="text-red-400"/>
+              <span className="text-[9px] text-slate-400 italic">No email</span>
+            </div>
+          )
         ) : (
           <button disabled={eLoad} onClick={()=>reveal("email")}
-            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",eErr?"border-red-200 text-red-400":"border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
+            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
+              eErr?"border-red-200 text-red-400":"border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
             {eLoad?<Loader2 size={8} className="animate-spin"/>:<Mail size={8}/>}
             {eLoad?"…":"Email"}
           </button>
         )
       )}
+
+      {/* ── Phone ── */}
       {hasPhone && (
         pp ? (
           <PortalTip trigger={
@@ -217,12 +326,14 @@ function RevealCell({ profile, onRevealDone }: RevealCellProps) {
           } content={<div className="space-y-1"><p className="text-[10px] font-semibold text-slate-700">Phone pending</p><p className="text-[9px] text-slate-500 leading-snug">Will appear automatically within 1–2 minutes.</p></div>}/>
         ) : (
           <button disabled={pLoad} onClick={()=>reveal("phone")}
-            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",pErr?"border-red-200 text-red-400":"border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
+            className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-all",
+              pErr?"border-red-200 text-red-400":"border-violet-200 text-violet-600 hover:bg-violet-50 hover:border-violet-400 disabled:opacity-50")}>
             {pLoad?<Loader2 size={8} className="animate-spin"/>:<Phone size={8}/>}
             {pLoad?"…":"Phone"}
           </button>
         )
       )}
+
       {!hasPersonalEmail&&!hasPhone&&<span className="text-[9px] text-slate-300">—</span>}
     </div>
   );
@@ -241,7 +352,7 @@ function SkillsCell({ skills, activeSkillLabels }: { skills: string[]|null; acti
   );
 }
 
-// ── InvitePicker — personal emails only ──────────────────────
+// ── InvitePicker ──────────────────────────────────────────────
 interface InvitePickerProps { emails:TIRevealedEmail[]; phones:TIRevealedPhone[]; onConfirm:(e:string|null,p:string|null)=>void; onClose:()=>void; }
 function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps) {
   const ref=useRef<HTMLDivElement>(null);
@@ -252,7 +363,6 @@ function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps)
     <div ref={ref} className="absolute right-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl z-[9999] p-3 space-y-2 animate-in fade-in zoom-in-95 duration-150">
       <div className="flex items-center justify-between"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Invite via</p><button onClick={onClose} className="text-slate-300 hover:text-slate-500"><X size={10}/></button></div>
       {personalEmails.length>0&&<div className="space-y-0.5"><p className="text-[8px] text-slate-400 font-bold uppercase mb-0.5">Personal Email</p>{personalEmails.map((e,i)=><label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1"><input type="radio" name="ti-invite-sel" checked={sel?.kind==="email"&&sel.value===e.email} onChange={()=>setSel({kind:"email",value:e.email})} className="accent-violet-600 flex-shrink-0"/><span className="text-[10px] font-mono text-slate-700 truncate">{e.email}</span></label>)}</div>}
-      {personalEmails.length===0&&emails.length>0&&<p className="text-[10px] text-slate-400 italic px-1">No personal email available</p>}
       {phones.length>0&&<div className="space-y-0.5"><p className="text-[8px] text-slate-400 font-bold uppercase mb-0.5">Phone</p>{phones.slice(0,3).map((ph,i)=><label key={i} className="flex items-center gap-2 cursor-pointer py-0.5 hover:bg-slate-50 rounded px-1"><input type="radio" name="ti-invite-sel" checked={sel?.kind==="phone"&&sel.value===ph.number} onChange={()=>setSel({kind:"phone",value:ph.number})} className="accent-violet-600 flex-shrink-0"/><div className="flex items-center gap-1.5 flex-1"><span className="text-[10px] font-mono text-slate-700">{ph.number}</span>{ph.recommended&&<span className="text-[8px] px-1 bg-green-100 text-green-700 rounded">✓</span>}</div></label>)}</div>}
       {personalEmails.length===0&&phones.length===0&&<p className="text-[11px] text-slate-400 text-center py-1">No contact info available</p>}
       <button disabled={!sel} onClick={()=>sel&&onConfirm(sel.kind==="email"?sel.value:null,sel.kind==="phone"?sel.value:null)}
@@ -263,11 +373,8 @@ function InvitePicker({ emails, phones, onConfirm, onClose }: InvitePickerProps)
   );
 }
 
-// ── ExpandedRow — inline details when row is clicked ─────────
-interface ExpandedRowProps {
-  profile:  TIProfile;
-  navigate: ReturnType<typeof useNavigate>;
-}
+// ── ExpandedRow ───────────────────────────────────────────────
+interface ExpandedRowProps { profile: TIProfile; navigate: ReturnType<typeof useNavigate>; }
 function ExpandedRow({ profile, navigate }: ExpandedRowProps) {
   const experience = (profile.experience ?? []).slice(0, 4);
   const skills     = profile.skills ?? [];
@@ -280,22 +387,17 @@ function ExpandedRow({ profile, navigate }: ExpandedRowProps) {
       {!hasData ? (
         <div className="flex items-center justify-between py-3 px-1 text-xs text-slate-400">
           <span>No additional details available for this profile.</span>
-          <button
-            onClick={e => { e.stopPropagation(); navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } }); }}
+          <button onClick={e => { e.stopPropagation(); navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } }); }}
             className="flex items-center gap-1 text-violet-600 hover:text-violet-800 font-medium text-xs transition-colors">
             <ExternalLink size={11}/> Open full profile
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-5 py-3 px-1">
-
-          {/* ── Col 1: Experience ── */}
           <div>
             {experience.length > 0 ? (
               <>
-                <p className="text-[8px] font-bold uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-1">
-                  <Briefcase size={8}/> Experience
-                </p>
+                <p className="text-[8px] font-bold uppercase text-slate-400 tracking-wider mb-2 flex items-center gap-1"><Briefcase size={8}/> Experience</p>
                 <div className="space-y-2.5">
                   {experience.map((exp, i) => (
                     <div key={i} className="flex gap-2 min-w-0">
@@ -308,25 +410,17 @@ function ExpandedRow({ profile, navigate }: ExpandedRowProps) {
                       </div>
                     </div>
                   ))}
-                  {(profile.experience ?? []).length > 4 && (
-                    <p className="text-[9px] text-slate-400">+{(profile.experience ?? []).length - 4} more positions</p>
-                  )}
+                  {(profile.experience ?? []).length > 4 && <p className="text-[9px] text-slate-400">+{(profile.experience ?? []).length - 4} more positions</p>}
                 </div>
               </>
-            ) : (
-              <p className="text-[9px] text-slate-400 italic">No experience data</p>
-            )}
+            ) : <p className="text-[9px] text-slate-400 italic">No experience data</p>}
           </div>
-
-          {/* ── Col 2: Skills + Education ── */}
           <div className="space-y-3">
             {skills.length > 0 && (
               <div>
                 <p className="text-[8px] font-bold uppercase text-slate-400 tracking-wider mb-2">Skills ({skills.length})</p>
                 <div className="flex flex-wrap gap-1">
-                  {skills.slice(0, 16).map(sk => (
-                    <span key={sk} className="px-1.5 py-0.5 bg-violet-50 border border-violet-100 text-violet-600 text-[9px] rounded-full font-medium">{sk}</span>
-                  ))}
+                  {skills.slice(0, 16).map(sk => <span key={sk} className="px-1.5 py-0.5 bg-violet-50 border border-violet-100 text-violet-600 text-[9px] rounded-full font-medium">{sk}</span>)}
                   {skills.length > 16 && <span className="text-[9px] text-slate-400 self-center">+{skills.length - 16}</span>}
                 </div>
               </div>
@@ -339,17 +433,13 @@ function ExpandedRow({ profile, navigate }: ExpandedRowProps) {
                     <div key={i} className="min-w-0">
                       <p className="text-[10px] font-semibold text-slate-700 truncate leading-snug">{e.school_name}</p>
                       {e.degree && <p className="text-[9px] text-slate-500 truncate">{e.degree}{e.field_of_study ? ` · ${e.field_of_study}` : ""}</p>}
-                      {(e.start_date_year || e.end_date_year) && (
-                        <p className="text-[8px] text-slate-400">{e.start_date_year}{e.end_date_year ? ` – ${e.end_date_year}` : ""}</p>
-                      )}
+                      {(e.start_date_year || e.end_date_year) && <p className="text-[8px] text-slate-400">{e.start_date_year}{e.end_date_year ? ` – ${e.end_date_year}` : ""}</p>}
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-
-          {/* ── Col 3: Summary + Languages + Open Profile ── */}
           <div className="space-y-3">
             {profile.summary && (
               <div>
@@ -365,12 +455,9 @@ function ExpandedRow({ profile, navigate }: ExpandedRowProps) {
                 </div>
               </div>
             )}
-            {/* Open full profile link */}
-            <button
-              onClick={e => { e.stopPropagation(); navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } }); }}
+            <button onClick={e => { e.stopPropagation(); navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } }); }}
               className="flex items-center gap-1.5 text-[10px] text-violet-600 hover:text-violet-800 font-semibold transition-colors group/link mt-auto pt-1">
-              <ExternalLink size={10} className="group-hover/link:translate-x-0.5 transition-transform"/>
-              Open full profile
+              <ExternalLink size={10} className="group-hover/link:translate-x-0.5 transition-transform"/> Open full profile
             </button>
           </div>
         </div>
@@ -411,24 +498,24 @@ const thStyle = (i: number): React.CSSProperties => ({ position:"sticky", top:0,
 
 // ── Main export ───────────────────────────────────────────────
 export interface TIResultsTableProps {
-  profiles:        TIProfile[];
-  total:           number;
-  page:            number;
-  isLoading:       boolean;
-  isSearching:     boolean;
-  activeFilters:   { skillChips?:{label:string;mode:string}[]; titles?:string[]; query?:string };
-  onSelectProfile?: (p: TIProfile) => void;  // optional — table now navigates internally
-  onInvite:        (p: TIProfile, email: string|null, phone: string|null) => void;
-  onPageChange:    (p: number) => void;
-  onRevealUpdate:  (id: string, emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
+  profiles:          TIProfile[];
+  total:             number;
+  page:              number;
+  isLoading:         boolean;
+  isSearching:       boolean;
+  activeFilters:     { skillChips?:{label:string;mode:string}[]; titles?:string[]; query?:string };
+  onSelectProfile?:  (p: TIProfile) => void;
+  onInvite:          (p: TIProfile, email: string|null, phone: string|null) => void;
+  onPageChange:      (p: number) => void;
+  onRevealUpdate:    (id: string, emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => void;
+  waterfallEnabled?: boolean;  // org config — show waterfall button on no-personal-email
 }
 
-export function TIResultsTable({ profiles, total, page, isLoading, isSearching, activeFilters, onInvite, onPageChange, onRevealUpdate }: TIResultsTableProps) {
+export function TIResultsTable({ profiles, total, page, isLoading, isSearching, activeFilters, onInvite, onPageChange, onRevealUpdate, waterfallEnabled }: TIResultsTableProps) {
   const navigate = useNavigate();
   const [saved,            setSaved]            = useState<Set<string>>(new Set());
   const [invitePickerId,   setInvitePickerId]   = useState<string|null>(null);
   const [expandedProfileId,setExpandedProfileId] = useState<string|null>(null);
-
   const toggleExpand = (id: string) => setExpandedProfileId(prev => prev === id ? null : id);
 
   const activeSkillLabels = new Set(
@@ -481,7 +568,6 @@ export function TIResultsTable({ profiles, total, page, isLoading, isSearching, 
 
               return (
                 <React.Fragment key={profile.id}>
-                  {/* ── Main row ── */}
                   <tr
                     onClick={() => toggleExpand(profile.id)}
                     className={cn("border-b border-slate-50 cursor-pointer group transition-colors", isExpanded && "ti-expanded")}
@@ -496,30 +582,23 @@ export function TIResultsTable({ profiles, total, page, isLoading, isSearching, 
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 min-w-0">
-                            {/* Profile name → navigates to profile page */}
                             <button
                               onClick={e => { e.stopPropagation(); navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } }); }}
                               className="text-[11px] font-semibold text-slate-800 truncate leading-tight hover:text-violet-700 hover:underline transition-colors text-left">
                               {profile.full_name ?? "Unknown"}
                             </button>
                             {profile.linkedin_url && (
-                              <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer"
-                                onClick={e=>e.stopPropagation()}
+                              <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
                                 className="flex-shrink-0 hover:text-indigo-300 text-[#0A66C2] transition-colors">
                                 <Linkedin size={9}/>
                               </a>
                             )}
                           </div>
                           <div className="relative z-10 flex items-center gap-1.5 mt-1 flex-nowrap overflow-visible">
-                            {yrs && (
-                              <span className="inline-flex items-center px-2 py-[3px] rounded-full text-[9px] font-bold whitespace-nowrap bg-indigo-100 text-indigo-900 shadow-sm">{yrs}</span>
-                            )}
-                            {isOTW && (
-                              <span className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[9px] font-bold whitespace-nowrap bg-gradient-to-r from-violet-500 to-pink-500 text-white animate-expGlow">Open to Work</span>
-                            )}
+                            {yrs && <span className="inline-flex items-center px-2 py-[3px] rounded-full text-[9px] font-bold whitespace-nowrap bg-indigo-100 text-indigo-900 shadow-sm">{yrs}</span>}
+                            {isOTW && <span className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[9px] font-bold whitespace-nowrap bg-gradient-to-r from-violet-500 to-pink-500 text-white animate-expGlow">Open to Work</span>}
                           </div>
                         </div>
-                        {/* Expand/collapse indicator */}
                         <div className="flex-shrink-0 text-slate-300 group-hover:text-violet-400 transition-colors ml-1">
                           {isExpanded ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
                         </div>
@@ -528,7 +607,11 @@ export function TIResultsTable({ profiles, total, page, isLoading, isSearching, 
 
                     {/* 2. Contact */}
                     <td className="px-3 py-2" onClick={e=>e.stopPropagation()}>
-                      <RevealCell profile={profile} onRevealDone={(em,ph)=>onRevealUpdate(profile.id,em,ph)}/>
+                      <RevealCell
+                        profile={profile}
+                        waterfallEnabled={waterfallEnabled}
+                        onRevealDone={(em,ph)=>onRevealUpdate(profile.id,em,ph)}
+                      />
                     </td>
 
                     {/* 3. Title */}
@@ -566,22 +649,18 @@ export function TIResultsTable({ profiles, total, page, isLoading, isSearching, 
                     {/* 7. Actions */}
                     <td className="px-3 py-2" onClick={e=>e.stopPropagation()}>
                       <div className="flex items-center gap-0.5 relative">
-                        {/* View profile → navigates to profile page */}
-                        <button
-                          onClick={() => navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } })}
+                        <button onClick={() => navigate(`/profile-hub/profile/${profile.id}`, { state: { profile } })}
                           title="View full profile"
                           className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-all">
                           <ExternalLink size={11}/>
                         </button>
-                        <button
-                          onClick={()=>canInvite&&setInvitePickerId(showPick?null:profile.id)}
+                        <button onClick={()=>canInvite&&setInvitePickerId(showPick?null:profile.id)}
                           title={canInvite?"Send invite":"Reveal personal email or phone first"}
                           disabled={!canInvite}
                           className={cn("w-6 h-6 flex items-center justify-center rounded transition-all",canInvite?"text-slate-400 hover:text-green-600 hover:bg-green-50":"text-slate-200 cursor-not-allowed")}>
                           <Send size={11}/>
                         </button>
-                        <button
-                          onClick={()=>setSaved(p=>{const s=new Set(p);isSaved?s.delete(profile.id):s.add(profile.id);return s;})}
+                        <button onClick={()=>setSaved(p=>{const s=new Set(p);isSaved?s.delete(profile.id):s.add(profile.id);return s;})}
                           title={isSaved?"Saved":"Save"}
                           className={cn("w-6 h-6 flex items-center justify-center rounded transition-all",isSaved?"text-emerald-600 bg-emerald-50":"text-slate-400 hover:text-violet-600 hover:bg-violet-50")}>
                           {isSaved?<BookmarkCheck size={11}/>:<Bookmark size={11}/>}
