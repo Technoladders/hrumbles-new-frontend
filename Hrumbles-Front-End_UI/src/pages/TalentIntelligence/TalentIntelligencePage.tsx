@@ -1,11 +1,12 @@
 // src/pages/TalentIntelligence/TalentIntelligencePage.tsx
-// Changes: removed TIProfileModal + selectedProfile state.
-// Table now navigates to /talent-intelligence/profile/:id internally.
+// Changes: fetches waterfall_enabled from hr_organizations, passes to TIResultsTable
 
 import React, { useState, useCallback } from "react";
 import { Database, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getAuthDataFromLocalStorage } from "@/utils/localstorage";
+import { supabase } from "@/integrations/supabase/client";
 import { useTISearch } from "@/hooks/useTISearch";
 import { TISearchSidebar } from "@/components/talent-intelligence/TISearchSidebar";
 import { TIResultsTable } from "@/components/talent-intelligence/TIResultsTable";
@@ -27,15 +28,31 @@ export function TalentIntelligencePage() {
     setFilters, setPage, resetFilters, refetch, patchProfile,
   } = useTISearch();
 
+  // Fetch org config including waterfall_enabled
+  const { data: orgConfig } = useQuery({
+    queryKey: ["org-config-ti", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return null;
+      const { data } = await supabase
+        .from("hr_organizations")
+        .select("waterfall_enabled")
+        .eq("id", organizationId)
+        .single();
+      return data as { waterfall_enabled: boolean } | null;
+    },
+    enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000, // 5 min cache — org config changes rarely
+  });
+
+  const waterfallEnabled = orgConfig?.waterfall_enabled ?? false;
+
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
   const [inviteTarget, setInviteTarget] = useState<InviteTarget | null>(null);
 
-  // Update in-memory profiles when reveal is done from the table
   const handleRevealUpdate = useCallback((id: string, emails: TIRevealedEmail[], phones: TIRevealedPhone[]) => {
     patchProfile(id, { revealed_emails: emails, revealed_phones: phones, revealed_at: new Date().toISOString() });
   }, [patchProfile]);
 
-  // Invite target comes from table's InvitePicker (contact already selected)
   const handleInvite = useCallback((profile: TIProfile, email: string|null, phone: string|null) => {
     setInviteTarget({ profile, email, phone });
   }, []);
@@ -71,6 +88,11 @@ export function TalentIntelligencePage() {
               <span className="text-[9px] text-violet-200"><span className="font-bold text-white">{Number(stats.phone_revealed).toLocaleString()}</span> phone revealed</span>
               <span className="text-[9px] text-violet-200"><span className="font-bold text-white">{Number(stats.open_to_work).toLocaleString()}</span> Open to Work</span>
             </div>
+          )}
+          {waterfallEnabled && (
+            <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/30 font-semibold">
+              Waterfall ON
+            </span>
           )}
           <button onClick={refetch} title="Refresh" className="p-1.5 text-violet-200 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
             <RefreshCw size={13}/>
@@ -130,14 +152,14 @@ export function TalentIntelligencePage() {
                 onInvite={handleInvite}
                 onPageChange={setPage}
                 onRevealUpdate={handleRevealUpdate}
-                // onSelectProfile intentionally not passed — table navigates internally
+                waterfallEnabled={waterfallEnabled}
               />
             )}
           </div>
         </div>
       </div>
 
-      {/* CandidateInviteGate — opened from table InvitePicker */}
+      {/* CandidateInviteGate */}
       {inviteTarget && (
         <CandidateInviteGate
           candidateName={inviteTarget.profile.full_name ?? "Candidate"}

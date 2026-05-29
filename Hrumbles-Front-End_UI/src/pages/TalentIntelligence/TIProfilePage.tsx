@@ -1,10 +1,9 @@
 // src/pages/TalentIntelligence/TIProfilePage.tsx
-// Standalone profile page for /talent-intelligence/profile/:id
-// Renders same content as TIProfileModal but as a full page within MainLayout.
-// Data comes from navigation state (passed by TIResultsTable) or fetched by ID.
+// Standalone profile page — original UI preserved, waterfall added to RevealBlock.
 
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft, Linkedin, MapPin, Building2, Briefcase, Mail, Phone,
   GraduationCap, Award, Globe, Clock, Zap, Star,
@@ -46,7 +45,16 @@ function Avatar({ profile, size = 20 }: { profile: TIProfile; size?: number }) {
 }
 
 // ── RevealBlock ───────────────────────────────────────────────
-function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDone: (e: TIRevealedEmail[], p: TIRevealedPhone[]) => void }) {
+// Waterfall additions:
+//   - waterfallEnabled prop: org config gate
+//   - After email reveal returns no personal → show "Add to Waterfall" button
+//   - Realtime subscription fires onRevealDone when superadmin resolves
+interface RevealBlockProps {
+  profile:          TIProfile;
+  waterfallEnabled: boolean;
+  onRevealDone:     (e: TIRevealedEmail[], p: TIRevealedPhone[]) => void;
+}
+function RevealBlock({ profile, waterfallEnabled, onRevealDone }: RevealBlockProps) {
   const auth           = getAuthDataFromLocalStorage();
   const organizationId = auth?.organization_id ?? null;
   const userId         = auth?.userId ?? null;
@@ -61,12 +69,24 @@ function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDo
   const [phonePending, setPhonePending] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+  // Waterfall states
+  const [waterfallInQueue, setWaterfallInQueue] = useState(false);
+  const [waterfallDone,    setWaterfallDone]    = useState(false);
+  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel>|null>(null);
+
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+  }, []);
+
   useEffect(() => { setEmails(profile.revealed_emails ?? []); }, [profile.id]);
   useEffect(() => {
     const np = profile.revealed_phones ?? [];
-    if (np.length > 0 && phonePending) { setPhonePending(false); if(pollRef.current){clearInterval(pollRef.current);pollRef.current=null;} setPhones(np); onRevealDone(emails, np); }
-    else if (np.length > phones.length) setPhones(np);
+    if (np.length > 0 && phonePending) {
+      setPhonePending(false);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setPhones(np); onRevealDone(emails, np);
+    } else if (np.length > phones.length) setPhones(np);
   }, [profile.revealed_phones?.length ?? 0]);
 
   const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(()=>setCopied(null),2000); };
@@ -81,6 +101,44 @@ function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDo
         if(np.length>0){ clearInterval(pollRef.current!);pollRef.current=null;setPhonePending(false);setPhones(np);onRevealDone(emails,np); }
       } catch {}
     }, 3000);
+  };
+
+  const handleAddToWaterfall = async () => {
+    if (!organizationId || !profile.linkedin_url) return;
+    try {
+      await supabase.from("candidate_waterfall").upsert({
+        organization_id:     organizationId,
+        requested_by:        userId,
+        linkedin_url:        profile.linkedin_url,
+        full_name:           profile.full_name,
+        title:               profile.title,
+        company_name:        profile.company_name,
+        profile_picture_url: profile.profile_picture_url,
+        status:              "pending",
+      }, { onConflict: "linkedin_url,organization_id", ignoreDuplicates: true });
+      setWaterfallInQueue(true);
+
+      // Realtime — auto-update when superadmin resolves
+      if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+      waterfallChannelRef.current = supabase
+        .channel(`wf-profile-${profile.id}`)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "candidate_waterfall",
+          filter: `linkedin_url=eq.${profile.linkedin_url}`,
+        }, (payload: any) => {
+          if (payload.new?.status === "found" && payload.new.found_email) {
+            const newEmail = { email: payload.new.found_email, type: "personal", is_primary: true } as TIRevealedEmail;
+            const newPhones = payload.new.found_phone
+              ? [{ number: payload.new.found_phone, type: "mobile", recommended: true } as TIRevealedPhone]
+              : phones;
+            setEmails([newEmail]); setPhones(newPhones);
+            setWaterfallDone(true); setWaterfallInQueue(false);
+            onRevealDone([newEmail], newPhones);
+            if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+          }
+        })
+        .subscribe();
+    } catch (e: any) { console.error("[wf-profile]", e?.message); }
   };
 
   const reveal = async (revealType: "email"|"phone") => {
@@ -105,17 +163,28 @@ function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDo
   const canPersonalEmail = !!ca?.personal_email, canPhone = !!ca?.phone;
   const personalEmails = emails.filter(isPersonalEmail);
   const emailWasRevealed = emails.length > 0, hasPersonal = personalEmails.length > 0;
+  const noPersonalFound  = emailWasRevealed && !hasPersonal;  // reveal ran, professional-only result
 
   return (
     <div className="space-y-3">
       {canPersonalEmail && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5"><Mail size={13} className="text-violet-500"/><span className="text-xs font-semibold text-slate-700">Email</span><span className="text-[9px] text-slate-400">(personal)</span></div>
-            {!emailWasRevealed&&!emailLoad&&<button onClick={()=>reveal("email")} className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[11px] rounded-lg font-medium hover:bg-violet-700 transition-colors"><Eye size={10}/> Reveal</button>}
-            {emailLoad&&<span className="flex items-center gap-1 text-[11px] text-violet-600"><Loader2 size={10} className="animate-spin"/> Revealing…</span>}
+            <div className="flex items-center gap-1.5">
+              <Mail size={13} className="text-violet-500"/>
+              <span className="text-xs font-semibold text-slate-700">Email</span>
+              <span className="text-[9px] text-slate-400">(personal)</span>
+            </div>
+            {!emailWasRevealed && !emailLoad && (
+              <button onClick={()=>reveal("email")} className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[11px] rounded-lg font-medium hover:bg-violet-700 transition-colors">
+                <Eye size={10}/> Reveal
+              </button>
+            )}
+            {emailLoad && <span className="flex items-center gap-1 text-[11px] text-violet-600"><Loader2 size={10} className="animate-spin"/> Revealing…</span>}
           </div>
-          {emailErr&&<p className="text-xs text-red-500 mb-1">{emailErr}</p>}
+
+          {emailErr && <p className="text-xs text-red-500 mb-1">{emailErr}</p>}
+
           {hasPersonal ? (
             <div className="space-y-2">
               {personalEmails.map((e,i)=>(
@@ -130,11 +199,35 @@ function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDo
                 </div>
               ))}
             </div>
-          ) : emailWasRevealed ? (
-            <p className="text-[11px] text-amber-600">No personal email found for this profile</p>
-          ) : !emailLoad && <p className="text-[11px] text-slate-400">Click Reveal to unlock personal email</p>}
+          ) : noPersonalFound ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-amber-600">No personal email found for this profile</p>
+
+              {/* Waterfall — only when org has it enabled */}
+              {waterfallEnabled && (
+                waterfallDone ? (
+                  <div className="flex items-center gap-2 px-2.5 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-700 font-medium">
+                    <Check size={11}/> Email found — see above
+                  </div>
+                ) : waterfallInQueue ? (
+                  <div className="flex items-center gap-2 px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium cursor-default">
+                    <Loader2 size={10} className="animate-spin flex-shrink-0"/> In Waterfall Queue (24–48h)
+                  </div>
+                ) : (
+                  <button onClick={handleAddToWaterfall}
+                    title="We'll source this personal email within 24–48 hours"
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[11px] font-semibold transition-colors">
+                    <Clock size={11}/> Add to Waterfall (24–48h)
+                  </button>
+                )
+              )}
+            </div>
+          ) : (
+            !emailLoad && <p className="text-[11px] text-slate-400">Click Reveal to unlock personal email</p>
+          )}
         </div>
       )}
+
       {canPhone && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="flex items-center justify-between mb-2">
@@ -167,6 +260,7 @@ function RevealBlock({ profile, onRevealDone }: { profile: TIProfile; onRevealDo
           ) : !phoneLoad && <p className="text-[11px] text-slate-400">Click Reveal to unlock phone</p>}
         </div>
       )}
+
       {!canPersonalEmail&&!canPhone&&<p className="text-xs text-slate-400 py-2">No contact info available for this profile</p>}
     </div>
   );
@@ -219,19 +313,31 @@ function EmailPickerDropdown({ personalEmails, phones, onSelect, onClose }: { pe
 
 // ── Main page component ───────────────────────────────────────
 export function TIProfilePage() {
-  const { id }       = useParams<{ id: string }>();
-  const location     = useLocation();
-  const navigate     = useNavigate();
-  const auth         = getAuthDataFromLocalStorage();
-  const orgId        = auth?.organization_id ?? null;
-  const userId       = auth?.userId ?? null;
+  const { id }   = useParams<{ id: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const auth     = getAuthDataFromLocalStorage();
+  const orgId    = auth?.organization_id ?? null;
+  const userId   = auth?.userId ?? null;
 
-  // Profile from navigation state (fast) or fetched from DB
   const [profile,      setProfile]      = useState<TIProfile | null>(location.state?.profile ?? null);
   const [loading,      setLoading]      = useState(!location.state?.profile);
   const [notFound,     setNotFound]     = useState(false);
   const [inviteTarget, setInviteTarget] = useState<{ email: string|null; phone: string|null }|null>(null);
   const [showPicker,   setShowPicker]   = useState(false);
+
+  // Fetch org config — waterfall_enabled
+  const { data: orgConfig } = useQuery({
+    queryKey: ["org-config-ti-profile", orgId],
+    queryFn: async () => {
+      if (!orgId) return null;
+      const { data } = await supabase.from("hr_organizations").select("waterfall_enabled").eq("id", orgId).single();
+      return data as { waterfall_enabled: boolean } | null;
+    },
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const waterfallEnabled = orgConfig?.waterfall_enabled ?? false;
 
   // Fetch from DB if no state was passed
   useEffect(() => {
@@ -270,16 +376,15 @@ export function TIProfilePage() {
     );
   }
 
-  const isOpenToWork       = profile.work_status === "open_to_work";
-  const currentExp         = (profile.experience ?? []).find(e => e.is_current);
-  const allExp             = profile.experience ?? [];
-  const allEdu             = profile.education  ?? [];
-  const allCerts           = profile.certifications ?? [];
-  const allLangs           = profile.languages ?? [];
-  const skills             = profile.skills ?? [];
-  const revealedPersonals  = (profile.revealed_emails ?? []).filter(isPersonalEmail);
-  const revealedPhones     = profile.revealed_phones ?? [];
-  const hasContactForInvite = revealedPersonals.length > 0 || revealedPhones.length > 0;
+  const isOpenToWork      = profile.work_status === "open_to_work";
+  const currentExp        = (profile.experience ?? []).find(e => e.is_current);
+  const allExp            = profile.experience ?? [];
+  const allEdu            = profile.education  ?? [];
+  const allCerts          = profile.certifications ?? [];
+  const allLangs          = profile.languages ?? [];
+  const skills            = profile.skills ?? [];
+  const revealedPersonals = (profile.revealed_emails ?? []).filter(isPersonalEmail);
+  const revealedPhones    = profile.revealed_phones ?? [];
 
   const handleSendInvite = () => {
     if (revealedPersonals.length > 1 || (revealedPersonals.length >= 1 && revealedPhones.length > 0)) {
@@ -298,8 +403,7 @@ export function TIProfilePage() {
       {/* ── Page header ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-5 py-2.5 bg-white border-b border-slate-200 shadow-sm">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
+          <button onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-violet-700 transition-colors font-medium">
             <ArrowLeft size={14}/> Back
           </button>
@@ -311,7 +415,6 @@ export function TIProfilePage() {
           </nav>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Send Invite */}
           <div className="relative">
             <button onClick={handleSendInvite}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs rounded-lg font-semibold transition-colors">
@@ -364,10 +467,10 @@ export function TIProfilePage() {
 
             {/* Meta */}
             <div className="space-y-1.5 bg-slate-50 rounded-xl p-3">
-              {profile.seniority && <div className="flex items-center gap-2 text-xs text-slate-600"><Star size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.seniority}</span></div>}
-              {profile.job_function && <div className="flex items-center gap-2 text-xs text-slate-600"><Briefcase size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.job_function}</span></div>}
+              {profile.seniority        && <div className="flex items-center gap-2 text-xs text-slate-600"><Star     size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.seniority}</span></div>}
+              {profile.job_function     && <div className="flex items-center gap-2 text-xs text-slate-600"><Briefcase size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.job_function}</span></div>}
               {profile.company_industry && <div className="flex items-center gap-2 text-xs text-slate-600"><Building2 size={12} className="text-violet-400 flex-shrink-0"/><span className="truncate">{profile.company_industry}</span></div>}
-              {profile.followers && <div className="flex items-center gap-2 text-xs text-slate-600"><Users size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.followers.toLocaleString()} followers</span></div>}
+              {profile.followers        && <div className="flex items-center gap-2 text-xs text-slate-600"><Users     size={12} className="text-violet-400 flex-shrink-0"/><span>{profile.followers.toLocaleString()} followers</span></div>}
               {profile.first_discovered_at && (
                 <div className="flex items-center gap-2 text-xs text-slate-400"><Clock size={12} className="flex-shrink-0"/>
                   <span>Discovered {new Date(profile.first_discovered_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</span>
@@ -375,10 +478,14 @@ export function TIProfilePage() {
               )}
             </div>
 
-            {/* Contact */}
+            {/* Contact — waterfall-aware */}
             <div>
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Contact Information</h3>
-              <RevealBlock profile={profile} onRevealDone={handleRevealDone}/>
+              <RevealBlock
+                profile={profile}
+                waterfallEnabled={waterfallEnabled}
+                onRevealDone={handleRevealDone}
+              />
             </div>
 
             {/* Skills */}
@@ -411,7 +518,7 @@ export function TIProfilePage() {
                       <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0"><GraduationCap size={14} className="text-blue-500"/></div>
                       <div>
                         <p className="text-xs font-semibold text-slate-800 leading-tight">{e.school_name}</p>
-                        {e.degree && <p className="text-[11px] text-slate-500">{e.degree}</p>}
+                        {e.degree       && <p className="text-[11px] text-slate-500">{e.degree}</p>}
                         {e.field_of_study && <p className="text-[11px] text-slate-400">{e.field_of_study}</p>}
                         {(e.start_date_year||e.end_date_year) && <p className="text-[10px] text-slate-400">{e.start_date_year}{e.end_date_year?` – ${e.end_date_year}`:""}</p>}
                       </div>
@@ -429,7 +536,11 @@ export function TIProfilePage() {
                   {allCerts.map((c: any, i: number) => (
                     <div key={i} className="flex gap-2">
                       <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0"><Award size={14} className="text-amber-500"/></div>
-                      <div><p className="text-[11px] font-semibold text-slate-800 leading-tight">{c.name}</p>{c.authority&&<p className="text-[10px] text-slate-500">{c.authority}</p>}{c.start_date_year&&<p className="text-[10px] text-slate-400">{c.start_date_year}</p>}</div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-800 leading-tight">{c.name}</p>
+                        {c.authority&&<p className="text-[10px] text-slate-500">{c.authority}</p>}
+                        {c.start_date_year&&<p className="text-[10px] text-slate-400">{c.start_date_year}</p>}
+                      </div>
                     </div>
                   ))}
                 </div>

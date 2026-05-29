@@ -17,7 +17,7 @@ import { cn }            from "@/lib/utils";
 import {
   X, Mail, Phone, Linkedin, MapPin, Globe, Building2,
   ChevronDown, ChevronUp, Loader2, Copy, Check,
-  Bookmark, BookmarkCheck, Calendar, GraduationCap, Award, Send,
+  Bookmark, BookmarkCheck, Calendar, GraduationCap, Award, Send, Clock,
 } from "lucide-react";
 
 import { supabase }        from "@/integrations/supabase/client";
@@ -117,18 +117,35 @@ function Divider() { return <div className="h-px bg-violet-100 my-1" />; }
 
 // ─── Reveal button ─────────────────────────────────────────────────────────────
 const RevealBtn: React.FC<{
-  type: "email"|"phone"; loading: boolean; done: boolean; onClick: () => void;
-}> = ({ type, loading, done, onClick }) => (
-  <button type="button" onClick={onClick} disabled={loading || done}
+  type: "email"|"phone"; loading: boolean; done: boolean;
+  notFound?: boolean; pending?: boolean;
+  onClick: () => void;
+}> = ({ type, loading, done, notFound, pending, onClick }) => (
+  <button type="button" onClick={onClick}
+    disabled={loading || done || notFound || pending}
     className={cn(
       "flex items-center justify-center gap-1.5 w-full py-2 rounded-lg text-[11px] font-bold border transition-all",
       done
         ? "bg-emerald-50 text-emerald-700 border-emerald-200 cursor-default"
-        : "bg-violet-600 hover:bg-violet-700 text-white border-transparent shadow-sm",
+        : notFound
+          ? "bg-slate-50 text-slate-400 border-slate-200 cursor-default"
+          : pending
+            ? "bg-amber-50 text-amber-600 border-amber-200 cursor-default"
+            : "bg-violet-600 hover:bg-violet-700 text-white border-transparent shadow-sm",
       loading && "opacity-60 cursor-not-allowed"
     )}>
-    {loading ? <Loader2 size={11} className="animate-spin" /> : done ? <Check size={11} /> : type === "email" ? <Mail size={11} /> : <Phone size={11} />}
-    {loading ? "Looking up…" : done ? (type === "email" ? "Email revealed" : "Phone revealed") : type === "email" ? "Reveal Email" : "Find Phone"}
+    {loading
+      ? <Loader2 size={11} className="animate-spin" />
+      : pending
+        ? <Loader2 size={11} className="animate-spin" />
+        : done
+          ? <Check size={11} />
+          : type === "email" ? <Mail size={11} /> : <Phone size={11} />}
+    {loading ? "Looking up…"
+      : pending ? "Verifying…"
+      : done ? (type === "email" ? "Email revealed" : "Phone revealed")
+      : notFound ? (type === "email" ? "No personal email" : "No phone found")
+      : type === "email" ? "Reveal Email" : "Find Phone"}
   </button>
 );
 
@@ -449,10 +466,14 @@ interface RRDetailPanelProps {
   onCreateFolder?:   (name: string) => Promise<string|null>;
   // New in v5: org's ti_reveal_provider — drives which API is called for reveal
   tiRevealProvider:  string;
+  // Waterfall support
+  waterfallEnabled?: boolean;
+  organizationId?:   string;
 }
 
 export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
   profile, onClose, onRevealComplete, onInvite, tiRevealProvider,
+  waterfallEnabled, organizationId,
 }) => {
   const provider     = (profile as any)._provider ?? "rocketreach";
   const isContactOut = provider === "contactout";
@@ -470,6 +491,22 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
   const [jobHistory,    setJobHistory]    = useState(profile._jobHistory ?? []);
   const [education,     setEducation]     = useState<any[]>(profile._education ?? []);
   const [skills,        setSkills]        = useState<string[]>((profile._skills ?? profile.skills ?? []) as string[]);
+
+  // Not-found states — disables re-trigger after definitive API response
+  const [emailNotFound,  setEmailNotFound]  = useState(false);
+  const [phoneNotFound,  setPhoneNotFound]  = useState(false);
+  const [phonePending,   setPhonePending]   = useState(false);
+  const phonePollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Waterfall states
+  const [waterfallInQueue, setWaterfallInQueue] = useState(false);
+  const [waterfallDone,    setWaterfallDone]    = useState(false);
+  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  useEffect(() => () => {
+    if (phonePollRef.current) clearInterval(phonePollRef.current);
+    if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+  }, []);
 
   useEffect(() => {
     if (profile._allEmails?.length) { setAllEmails(profile._allEmails); setEmailRevealed(true); }
@@ -500,6 +537,64 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
     queryClient.invalidateQueries({ queryKey: ["saved-candidates-count"] });
   };
 
+  // ── Phone poll (Apollo async webhook) ────────────────────────────────────
+  const startPollingForPhone = (linkedinUrl: string) => {
+    let count = 0;
+    phonePollRef.current = setInterval(async () => {
+      if (++count > 20) {
+        clearInterval(phonePollRef.current!); phonePollRef.current = null;
+        setPhonePending(false);
+        setRevealErrors(prev => ({ ...prev, phone: "Phone not returned yet — try again later." }));
+        return;
+      }
+      try {
+        const { data } = await supabase.from("ti_profile_reveals").select("phones").eq("linkedin_url", linkedinUrl).maybeSingle();
+        const phones: any[] = data?.phones ?? [];
+        if (phones.length > 0) {
+          clearInterval(phonePollRef.current!); phonePollRef.current = null;
+          setPhonePending(false);
+          setAllPhones(phones); setPhoneRevealed(true);
+          onRevealComplete?.(profile.id, { success: true, allPhones: phones, allEmails: [] });
+        }
+      } catch { /* retry */ }
+    }, 3000);
+  };
+
+  // ── Waterfall insert + realtime subscription ──────────────────────────────
+  const handleAddToWaterfall = async () => {
+    const auth = await resolveAuth();
+    if (!auth || !profile.linkedin_url) return;
+    try {
+      await supabase.from("candidate_waterfall").upsert({
+        organization_id:     organizationId ?? auth.organizationId,
+        requested_by:        auth.userId,
+        linkedin_url:        profile.linkedin_url,
+        full_name:           profile.name,
+        title:               profile.current_title,
+        company_name:        profile.current_employer,
+        profile_picture_url: profile.profile_pic,
+        status:              "pending",
+      }, { onConflict: "linkedin_url,organization_id", ignoreDuplicates: true });
+      setWaterfallInQueue(true);
+
+      if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+      waterfallChannelRef.current = supabase
+        .channel(`wf-panel-${profile.id}`)
+        .on("postgres_changes", {
+          event: "UPDATE", schema: "public", table: "candidate_waterfall",
+          filter: `linkedin_url=eq.${profile.linkedin_url}`,
+        }, (payload: any) => {
+          if (payload.new?.status === "found" && payload.new.found_email) {
+            const foundEmail: RREmailEntry = { email: payload.new.found_email, type: "personal", is_primary: true, smtp_valid: null, grade: null };
+            setAllEmails([foundEmail]); setEmailRevealed(true); setWaterfallDone(true); setWaterfallInQueue(false);
+            onRevealComplete?.(profile.id, { success: true, allEmails: [foundEmail], allPhones: payload.new.found_phone ? [{ number: payload.new.found_phone }] : [] });
+            if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+          }
+        })
+        .subscribe();
+    } catch (e: any) { console.error("[waterfall-panel]", e?.message); }
+  };
+
   // ── Unified reveal via ti-reveal ──────────────────────────────────────────
   const doReveal = async (revealType: "email" | "phone") => {
     const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
@@ -517,15 +612,21 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
       const data = await revealContact(profile, revealType, auth, tiRevealProvider);
       setter(false);
 
+      // Apollo async phone pending
+      if (data?.phonePending) {
+        setPhonePending(true);
+        if (profile.linkedin_url) startPollingForPhone(profile.linkedin_url);
+        return;
+      }
+
       if (!data?.success) {
         if (data?.code === "INSUFFICIENT_CREDITS") {
-          setRevealErrors(prev => ({
-            ...prev,
-            [revealType]: `Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`,
-          }));
+          setRevealErrors(prev => ({ ...prev, [revealType]: `Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.` }));
           return;
         }
-        setRevealErrors(prev => ({ ...prev, [revealType]: data?.error ?? "Reveal failed" }));
+        // Definitive not-found — show grey state, enable waterfall
+        if (revealType === "email") setEmailNotFound(true);
+        else setPhoneNotFound(true);
         return;
       }
 
@@ -543,6 +644,17 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
       onRevealComplete?.(profile.id, data);
       queryClient.invalidateQueries({ queryKey: ["saved-candidates"] });
       queryClient.invalidateQueries({ queryKey: ["rr-revealed-ids"] });
+
+      // Post-reveal personal check — success:true but only professional emails returned
+      if (revealType === "email") {
+        const hasPersonal = incomingEmails.some((e: any) =>
+          e.type === "personal" || e.type === "direct" || e.type === "personal_email"
+        );
+        if (!hasPersonal) setEmailNotFound(true);
+      }
+      if (revealType === "phone" && incomingPhones.length === 0) {
+        setPhoneNotFound(true);
+      }
     } catch (e: any) {
       setter(false);
       setRevealErrors(prev => ({ ...prev, [revealType]: e.message ?? "Reveal failed" }));
@@ -683,14 +795,36 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <RevealBtn type="email" loading={revealingEmail} done={emailRevealed} onClick={() => doReveal("email")} />
+                    <RevealBtn type="email" loading={revealingEmail} done={emailRevealed && !emailNotFound} notFound={emailNotFound} onClick={() => doReveal("email")} />
                     {revealErrors.email && <p className="text-[9px] text-red-500">{revealErrors.email}</p>}
                   </div>
                   <div className="space-y-1">
-                    <RevealBtn type="phone" loading={revealingPhone} done={phoneRevealed} onClick={() => doReveal("phone")} />
+                    <RevealBtn type="phone" loading={revealingPhone} done={phoneRevealed} notFound={phoneNotFound} pending={phonePending} onClick={() => doReveal("phone")} />
                     {revealErrors.phone && <p className="text-[9px] text-red-500">{revealErrors.phone}</p>}
                   </div>
                 </div>
+
+                {/* Waterfall — shown when email reveal found no personal email */}
+                {emailNotFound && waterfallEnabled && (
+                  <div className="mt-1">
+                    {waterfallDone ? (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-700 font-medium">
+                        <Check size={12} /> Email found via Waterfall — check Contact tab
+                      </div>
+                    ) : waterfallInQueue ? (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium cursor-default"
+                        title="Our team is sourcing this email. Check back in 24–48 hours.">
+                        <Loader2 size={11} className="animate-spin flex-shrink-0" /> In Waterfall Queue (24–48h)
+                      </div>
+                    ) : (
+                      <button type="button" onClick={handleAddToWaterfall}
+                        title="We'll source this personal email within 24–48 hours"
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-bold border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors">
+                        <Clock size={11} /> Add to Waterfall
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {coData?.summary && (
                   <div>
@@ -711,22 +845,48 @@ export const RRDetailPanel: React.FC<RRDetailPanelProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <SectionHead>Email</SectionHead>
-                    {!emailRevealed && !revealingEmail && (
+                    {!emailRevealed && !emailNotFound && !revealingEmail && (
                       <button type="button" onClick={() => doReveal("email")} className="text-[10px] font-bold text-violet-600 hover:text-violet-700 bg-violet-50 border border-violet-200 rounded px-2 py-0.5">Reveal →</button>
                     )}
                     {revealingEmail && <Loader2 size={10} className="animate-spin text-violet-500" />}
+                    {emailNotFound && !waterfallInQueue && !waterfallDone && (
+                      <span className="text-[9px] text-slate-400 italic">No personal email found</span>
+                    )}
                   </div>
                   <EmailSection emails={allEmails} teaserEmails={teaserEmails} loading={revealingEmail} />
                   {revealErrors.email && <p className="mt-1 text-[9px] text-red-500">{revealErrors.email}</p>}
+
+                  {/* Waterfall in contact tab */}
+                  {emailNotFound && waterfallEnabled && (
+                    <div className="mt-2.5">
+                      {waterfallDone ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-700 font-medium">
+                          <Check size={11} /> Email found via Waterfall
+                        </div>
+                      ) : waterfallInQueue ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium cursor-default">
+                          <Loader2 size={10} className="animate-spin flex-shrink-0" /> In Queue — we'll update within 24–48h
+                        </div>
+                      ) : (
+                        <button type="button" onClick={handleAddToWaterfall}
+                          title="We'll source this personal email within 24–48 hours"
+                          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-bold border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors">
+                          <Clock size={11} /> Add to Waterfall (24–48h sourcing)
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <Divider />
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <SectionHead>Phone</SectionHead>
-                    {!phoneRevealed && !revealingPhone && (
+                    {!phoneRevealed && !phoneNotFound && !phonePending && !revealingPhone && (
                       <button type="button" onClick={() => doReveal("phone")} className="text-[10px] font-bold text-slate-600 hover:text-violet-600 border border-slate-200 hover:border-violet-300 rounded px-2 py-0.5">Find →</button>
                     )}
-                    {revealingPhone && <Loader2 size={10} className="animate-spin text-slate-400" />}
+                    {(revealingPhone || phonePending) && <Loader2 size={10} className={cn("animate-spin", phonePending ? "text-amber-500" : "text-slate-400")} />}
+                    {phonePending && <span className="text-[9px] text-amber-600 font-medium">Verifying…</span>}
+                    {phoneNotFound && <span className="text-[9px] text-slate-400 italic">No phone found</span>}
                   </div>
                   <PhoneSection phones={allPhones} teaserPhones={teaserPhones} loading={revealingPhone} />
                   {revealErrors.phone && <p className="mt-1 text-[9px] text-red-500">{revealErrors.phone}</p>}

@@ -44,6 +44,16 @@ import type { RRProfile } from "./types";
 // CHANGE 3: Demo org ID — toggle only visible for this org
 const DEMO_ORG_ID = "53989f03-bdc9-439a-901c-45b274eff506";
 
+// ─── CO Split-Page Config ─────────────────────────────────────────────────────
+// ContactOut API enforces a 25-result minimum per call regardless of pageSize.
+// When SPLIT_PAGES = true we show CO_UI_PAGE_SIZE results per UI page, creating
+// 2 seamless UI pages from each API call — completely transparent to the user.
+//
+// To revert to old 25-per-page behaviour: set SPLIT_PAGES = false.
+const SPLIT_PAGES      = true;   // ← toggle this to enable/disable split
+const CO_API_PAGE_SIZE = 25;     // ContactOut hard minimum (never changes)
+const CO_UI_PAGE_SIZE  = 13;     // first half 13, second half 12 → avg 12.5
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SearchProvider = "rocketreach" | "contactout";
 
@@ -318,6 +328,11 @@ export const RocketReachSearchPage: React.FC = () => {
   const [demoTotal,    setDemoTotal]    = useState(0);
   const [demoLoading,  setDemoLoading]  = useState(false);
 
+  // Split-page cursor: tracks which UI page (1-based) is displayed.
+  // When SPLIT_PAGES is on: uiPage 1&2 → API page 1, uiPage 3&4 → API page 2, etc.
+  // Always reset to 1 on a new search. Not stored in URL — intentional.
+  const [uiPage, setUiPage] = useState(1);
+
   const updateState = useCallback((patch: Partial<PageState>) => {
     setPageState(prev => {
       const next = { ...prev, ...patch };
@@ -470,6 +485,7 @@ export const RocketReachSearchPage: React.FC = () => {
 
   // ── Search handlers ───────────────────────────────────────────────────────
   const handleRunSearch = useCallback(() => {
+    setUiPage(1);   // always reset split cursor on a fresh search
     if (demoMode) {
       runDemoSearch(1);
       updateState({ page: 1 });
@@ -484,6 +500,20 @@ export const RocketReachSearchPage: React.FC = () => {
     if (demoMode) runDemoSearch(p);
     else search(p);
   }, [demoMode, updateState, runDemoSearch, search]);
+
+  // goUiPage — split-aware navigation called by pagination buttons.
+  // For CO split mode: maps UI page → API page, only fetches when the API page changes.
+  // For all other cases: identical to goPage.
+  const goUiPage = useCallback((newUiPage: number) => {
+    const curApiPage = pageState.page;
+    const newApiPage = Math.ceil(newUiPage / 2);   // UI 1&2 → API 1, UI 3&4 → API 2...
+    setUiPage(newUiPage);
+    if (newApiPage !== curApiPage) {
+      // Different API page — fetch it
+      goPage(newApiPage);
+    }
+    // else: same API buffer, just re-slice → zero extra API calls
+  }, [pageState.page, goPage]);
 
   // ── Reveal complete ───────────────────────────────────────────────────────
   const handleRevealComplete = useCallback((rrProfileId: number, data: any) => {
@@ -525,14 +555,28 @@ export const RocketReachSearchPage: React.FC = () => {
   const filterCount = useMemo(() => countFilters(filters), [filters]);
   const hasFilters  = filterCount > 0;
   const isLoading   = state === "loading";
-  const totalPages  = Math.ceil(totalEntries / pageSize) || 0;
 
-  // CHANGE 3: Display layer — switches between live and demo data
-  const displayProfiles   = demoMode ? demoProfiles   : enrichedProfiles;
-  const displayTotal      = demoMode ? demoTotal      : totalEntries;
-  const displayLoading    = demoMode ? demoLoading    : isLoading;
-  const displayTotalPages = Math.ceil(displayTotal / effectivePageSize) || 0;
-  const displayState      = demoMode
+  // ── Split-page derived values ─────────────────────────────────────────────
+  // useSplit: only active when SPLIT_PAGES is on AND provider is ContactOut in live mode.
+  // Demo mode always shows its own results as-is (RPC returns a variable count).
+  const useSplit = SPLIT_PAGES && provider === "contactout" && !demoMode;
+
+  // Base profiles before split (full API batch)
+  const baseProfiles = demoMode ? demoProfiles : enrichedProfiles;
+
+  // Slice the buffer: uiPage odd → first half, even → second half
+  const splitStart = useSplit ? (uiPage % 2 === 1 ? 0 : CO_UI_PAGE_SIZE) : 0;
+  const splitEnd   = useSplit ? (uiPage % 2 === 1 ? CO_UI_PAGE_SIZE : CO_API_PAGE_SIZE) : baseProfiles.length;
+
+  // CHANGE 3: Display layer — switches between live, demo, and split data
+  const displayProfiles   = useSplit ? baseProfiles.slice(splitStart, splitEnd) : baseProfiles;
+  const displayTotal      = demoMode ? demoTotal : totalEntries;
+  const displayLoading    = demoMode ? demoLoading : isLoading;
+  const displayTotalPages = useSplit
+    ? Math.ceil(displayTotal / CO_UI_PAGE_SIZE) || 0
+    : Math.ceil(displayTotal / (provider === "contactout" ? CO_API_PAGE_SIZE : pageSize)) || 0;
+  const displayPage = useSplit ? uiPage : page;  // page number shown in UI
+  const displayState = demoMode
     ? (demoLoading ? "loading" : demoProfiles.length > 0 ? "results" : hasFilters ? "empty" : "idle")
     : state;
 
@@ -572,17 +616,17 @@ export const RocketReachSearchPage: React.FC = () => {
             {displayTotal > 0 && !displayLoading && (
               <span className="text-[10px] text-slate-500">
                 {displayTotalPages > 1 && (
-                  <span className="ml-1.5 text-slate-400">· Page {page}/{displayTotalPages}</span>
+                  <span className="ml-1.5 text-slate-400">· Page {displayPage}/{displayTotalPages}</span>
                 )}
               </span>
             )}
             {displayTotalPages > 1 && (
               <div className="flex items-center gap-1">
-                <button disabled={page <= 1} onClick={() => goPage(page - 1)}
+                <button disabled={displayPage <= 1} onClick={() => goUiPage(displayPage - 1)}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                   <ChevronLeft size={11} />
                 </button>
-                <button disabled={page >= displayTotalPages} onClick={() => goPage(page + 1)}
+                <button disabled={displayPage >= displayTotalPages} onClick={() => goUiPage(displayPage + 1)}
                   className="w-6 h-6 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:border-violet-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                   <ChevronRight size={11} />
                 </button>
@@ -592,18 +636,25 @@ export const RocketReachSearchPage: React.FC = () => {
 
           <div className="flex items-center gap-2">
             {hasFilters && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-slate-400 hidden sm:block">Per page</span>
-                <select
-                  value={provider === "contactout" ? 25 : pageSize}
-                  disabled={provider === "contactout"}
-                  onChange={e => { updateState({ pageSize: Number(e.target.value), page: 1 }); setTimeout(() => search(1), 0); }}
+              useSplit ? (
+                // Split active — per-page selector would be misleading; show info chip
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200 font-medium">
+                  ~{CO_UI_PAGE_SIZE}/pg
+                </span>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 hidden sm:block">Per page</span>
+                  <select
+                    value={provider === "contactout" ? CO_API_PAGE_SIZE : pageSize}
+                    disabled={provider === "contactout"}
+                    onChange={e => { updateState({ pageSize: Number(e.target.value), page: 1 }); setTimeout(() => search(1), 0); }}
                   className="h-6 px-1.5 rounded border border-slate-200 text-[11px] text-slate-600 bg-white focus:outline-none focus:border-violet-400 cursor-pointer">
                   {provider !== "contactout" && <option value={10}>10</option>}
                   <option value={25}>25</option>
                   <option value={50}>50</option>
                 </select>
               </div>
+              ) /* end !useSplit */
             )}
 
             {/* CHANGE 3: Demo org toggle — amber, only for DEMO_ORG_ID */}
@@ -671,8 +722,8 @@ export const RocketReachSearchPage: React.FC = () => {
               profiles={displayProfiles}
               loading={displayLoading}
               totalEntries={displayTotal}
-              page={page}
-              pageSize={effectivePageSize}
+              page={displayPage}
+              pageSize={useSplit ? CO_UI_PAGE_SIZE : effectivePageSize}
               totalPages={displayTotalPages}
               selectedId={selectedProfile?.id ?? null}
               checkedIds={checkedIds}
@@ -687,8 +738,8 @@ export const RocketReachSearchPage: React.FC = () => {
               onSelectRow={p => setSelectedProfile(prev => prev?.id === p?.id ? null : p)}
               onCheckRow={(id, v) => setCheckedIds(prev => { const s = new Set(prev); v ? s.add(id) : s.delete(id); return s; })}
               onCheckAll={v => setCheckedIds(v ? new Set(displayProfiles.map(p => p.id)) : new Set())}
-              onPrev={() => goPage(Math.max(1, page - 1))}
-              onNext={() => goPage(page + 1)}
+              onPrev={() => goUiPage(Math.max(1, displayPage - 1))}
+              onNext={() => goUiPage(displayPage + 1)}
               onRevealComplete={handleRevealComplete}
               onInvite={(profile, email, phone) => setRrInviteTarget({ profile, email, phone })}
             />
@@ -703,6 +754,8 @@ export const RocketReachSearchPage: React.FC = () => {
           onClose={() => setSelectedProfile(null)}
           onRevealComplete={handleRevealComplete}
           tiRevealProvider={tiRevealProvider}
+          waterfallEnabled={waterfallEnabled}
+          organizationId={orgId ?? undefined}
           onInvite={(rrProfileId, email, phone) => {
             const p = displayProfiles.find(x => String(x.id) === rrProfileId);
             if (p) setRrInviteTarget({ profile: p, email, phone });
