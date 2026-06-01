@@ -25,6 +25,7 @@ import { generateDocx, generatePdf } from "@/utils/cvGenerator";
 import ResumeViewer          from "@/components/candidates/talent-pool/ResumeViewer";
 import CandidateFullTimeline from "@/components/candidates/talent-pool/CandidateFullTimeline";
 import { CandidateActivityPanel } from "@/components/candidates/activity/CandidateActivityPanel";
+import CallButton from "@/components/calling/CallButton";
 
 // ─── SVG gradient def ─────────────────────────────────────────────────────────
 const GradDef = () => (
@@ -325,6 +326,14 @@ const CandidateProfilePage = () => {
           <HBtn icon={<ScanSearch size={11} />} label="Compare" onClick={() => setCompareOpen(true)} />
           <HBtn icon={<History size={11} />}    label="History"  onClick={() => setHistoryOpen(true)} />
           <HBtn icon={<Sparkles size={11} />}   label="Enrich"   onClick={() => setEnrichOpen(true)} />
+           {candidate?.phone && (
+            <CallButton
+              candidatePhone={candidate.phone}
+              candidateId={candidateId}
+              candidateName={candidate.candidate_name}
+              variant="pill"
+            />
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button

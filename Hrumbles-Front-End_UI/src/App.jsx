@@ -10,6 +10,7 @@ import ReactGA from 'react-ga4';
 import store from "./Redux/store";
 import { useDispatch, useSelector } from "react-redux";
 import supabase from "./config/supabaseClient"
+import { PiopiyProvider } from '@/context/PiopiyContext'
 
 import { setOrganization } from "./Redux/organizationSlice";
 import { getOrganizationSubdomain } from "./utils/subdomain";
@@ -174,6 +175,9 @@ import { UploadFloatProvider } from '@/components/candidates/talent-pool/Draggab
 import { TalentIntelligencePage } from "./pages/TalentIntelligence";
 import { TIProfilePage } from "./pages/TalentIntelligence/TIProfilePage";
 import { EmailTemplatesPage } from "./pages/settings/EmailTemplatesPage.tsx";
+import  TelephonySettings  from './pages/settings/TelephonySettings';
+import  CDRDashboard  from './pages/settings/CDRDashboard';
+import TeleCMIFloat from './components/calling/TeleCMIFloat.tsx'
 
 
 import VendorDashboard from "./pages/VendorDashboard";
@@ -594,6 +598,8 @@ function AppContent() {
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
               <Route path="/settings/organization-profile" element={<OrganizationProfilePage />} />
               <Route path="/settings/email-templates" element={<EmailTemplatesPage />} />
+              <Route path="/settings/telephony" element={<TelephonySettings />} />
+              <Route path="/settings/cdr" element={<CDRDashboard />} />
             </Route>
           </Route>
         </Route>
@@ -605,13 +611,17 @@ function AppContent() {
 function App() {
   return (
     <>
+    
      <UploadFloatProvider> 
     <Router>
+      <PiopiyProvider>
       <AppContent />
       <GlobalDialogs />
       <InterviewReminderOverlay />
       <DraggableUploadFloat />
     <BulkProgressFloat />
+    <TeleCMIFloat />
+    </PiopiyProvider>
     </Router>
     <UploadProgressFloat />
      </UploadFloatProvider> 

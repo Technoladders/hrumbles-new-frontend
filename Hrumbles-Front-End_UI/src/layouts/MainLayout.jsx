@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { isSameDay } from "date-fns";
 import SubscriptionLockModal from "../layouts/SubscriptionLockModal";
 import { useInterviewReminders } from '../hooks/useInterviewReminders';
+import RecruiterStatusToggle from '@/components/calling/RecruiterStatusToggle'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -868,6 +869,8 @@ useEffect(() => {
   )}
 </MenuList>
           </Menu>
+
+          <RecruiterStatusToggle />
 
           {/* ── User menu ───────────────────────────────────────────────── */}
           <Menu>
