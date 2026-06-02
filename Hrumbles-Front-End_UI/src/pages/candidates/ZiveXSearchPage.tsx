@@ -1,211 +1,115 @@
 // src/pages/candidates/ZiveXSearchPage.tsx
-// REDESIGNED: Modern compact search page header
+// REDESIGNED: Matches TI page architecture — dark hero + collapsible sidebar + results table
 
 import { FC, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import RecentSearches from '@/components/candidates/zive-x/RecentSearches';
-import CandidateSearchFilters from '@/components/candidates/zive-x/CandidateSearchFilters';
 import { SearchFilters, SearchTag, SearchHistory } from '@/types/candidateSearch';
-import { ArrowLeft, Clock, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowLeft, Clock, Search, Zap } from 'lucide-react';
+import CandidateSearchFilters from '@/components/candidates/zive-x/CandidateSearchFilters';
+import RecentSearches from '@/components/candidates/zive-x/RecentSearches';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
 const ZiveXSearchPage: FC = () => {
-  const navigate = useNavigate();
-  const organizationId = useSelector((state: any) => state.auth.organization_id);
+  const navigate       = useNavigate();
+  const organizationId = useSelector((s: any) => s.auth.organization_id);
   const [selectedHistory, setSelectedHistory] = useState<SearchHistory | null>(null);
-  const [showRecentSearchesModal, setShowRecentSearchesModal] = useState(false);
+  const [showRecent,       setShowRecent]      = useState(false);
 
-  const handleSearch = (newFilters: SearchFilters) => {
-    const params = new URLSearchParams();
-    const processTags = (key: string, tags: SearchTag[] = []) => {
-      const mandatory = tags.filter(t => t.mandatory).map(t => t.value);
-      const optional = tags.filter(t => !t.mandatory).map(t => t.value);
-      if (mandatory.length) params.append(`mandatory_${key}`, mandatory.join(','));
-      if (optional.length) params.append(`optional_${key}`, optional.join(','));
+  const handleSearch = (f: SearchFilters) => {
+    const p = new URLSearchParams();
+    const enc = (key: string, tags: SearchTag[] = []) => {
+      const m = tags.filter(t => t.mandatory).map(t => t.value);
+      const o = tags.filter(t => !t.mandatory).map(t => t.value);
+      if (m.length) p.append(`mandatory_${key}`, m.join(','));
+      if (o.length) p.append(`optional_${key}`,  o.join(','));
     };
-
-    processTags('name', newFilters.name);
-    processTags('email', newFilters.email);
-    processTags('keywords', newFilters.keywords);
-    processTags('skills', newFilters.skills);
-    processTags('companies', newFilters.companies);
-    processTags('educations', newFilters.educations);
-    processTags('locations', newFilters.locations);
-
-    if (newFilters.current_company) params.append('current_company', newFilters.current_company);
-    if (newFilters.current_designation) params.append('current_designation', newFilters.current_designation);
-    if (newFilters.min_exp) params.append('min_exp', newFilters.min_exp.toString());
-    if (newFilters.max_exp) params.append('max_exp', newFilters.max_exp.toString());
-    if (newFilters.min_current_salary) params.append('min_current_salary', newFilters.min_current_salary.toString());
-    if (newFilters.max_current_salary) params.append('max_current_salary', newFilters.max_current_salary.toString());
-    if (newFilters.min_expected_salary) params.append('min_expected_salary', newFilters.min_expected_salary.toString());
-    if (newFilters.max_expected_salary) params.append('max_expected_salary', newFilters.max_expected_salary.toString());
-    if (newFilters.notice_periods?.length) params.append('notice_periods', newFilters.notice_periods.join(','));
-    if (newFilters.date_posted && newFilters.date_posted !== 'all_time') {
-      params.append('date_posted', newFilters.date_posted);
-    }
-    if (newFilters.jd_text) params.append('jd_text', encodeURIComponent(newFilters.jd_text));
-    if (newFilters.jd_job_title) params.append('jd_job_title', newFilters.jd_job_title);
-    if (newFilters.jd_selected_job_id) params.append('jd_selected_job_id', newFilters.jd_selected_job_id);
-    if (newFilters.jd_generated_keywords?.length) {
-      params.append('jd_generated_keywords', newFilters.jd_generated_keywords.join('|||'));
-    }
-    if (newFilters.jd_is_boolean_mode !== undefined) {
-      params.append('jd_is_boolean_mode', newFilters.jd_is_boolean_mode.toString());
-    }
-    const searchQuery = params.toString();
-    navigate(`/zive-x-search/results?${searchQuery}`);
-  };
-
-  const handleRecentSearchSelect = (history: SearchHistory) => {
-    setSelectedHistory(history);
-    setShowRecentSearchesModal(false);
+    enc('name',      f.name);      enc('email',     f.email);
+    enc('keywords',  f.keywords);  enc('skills',    f.skills);
+    enc('companies', f.companies); enc('educations',f.educations);
+    enc('locations', f.locations); enc('industries',f.industries);
+    if (f.current_company)     p.append('current_company',     f.current_company);
+    if (f.current_designation) p.append('current_designation', f.current_designation);
+    if (f.min_exp)  p.append('min_exp',  f.min_exp.toString());
+    if (f.max_exp)  p.append('max_exp',  f.max_exp.toString());
+    if (f.min_current_salary)  p.append('min_current_salary',  f.min_current_salary.toString());
+    if (f.max_current_salary)  p.append('max_current_salary',  f.max_current_salary.toString());
+    if (f.min_expected_salary) p.append('min_expected_salary', f.min_expected_salary.toString());
+    if (f.max_expected_salary) p.append('max_expected_salary', f.max_expected_salary.toString());
+    if (f.notice_periods?.length)        p.append('notice_periods',       f.notice_periods.join(','));
+    if (f.date_posted && f.date_posted !== 'all_time') p.append('date_posted', f.date_posted);
+    if (f.jd_text)                        p.append('jd_text',              encodeURIComponent(f.jd_text));
+    if (f.jd_job_title)                   p.append('jd_job_title',         f.jd_job_title);
+    if (f.jd_selected_job_id)             p.append('jd_selected_job_id',   f.jd_selected_job_id);
+    if (f.jd_generated_keywords?.length)  p.append('jd_generated_keywords',f.jd_generated_keywords.join('|||'));
+    if (f.jd_is_boolean_mode !== undefined) p.append('jd_is_boolean_mode', f.jd_is_boolean_mode.toString());
+    navigate(`/zive-x-search/results?${p.toString()}`);
   };
 
   return (
-    <>
-      <style>{`
-        .zxsp-root {
-          min-height: 100vh;
-          background: #F4F5F7;
-          font-family: 'Inter', system-ui, sans-serif;
-          --brand: #6C2BD9;
-          --brand-light: #EDE9FE;
-          --brand-mid: #DDD6FE;
-          --border: #E5E7EB;
-          --text-primary: #111827;
-          --text-secondary: #6B7280;
-          --transition: 150ms cubic-bezier(0.4,0,0.2,1);
-        }
-
-        /* ── TOP BAR ── */
-        .zxsp-header {
-          height: 52px;
-          background: white;
-          border-bottom: 1px solid var(--border);
-          padding: 0 20px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          position: sticky;
-          top: 0;
-          z-index: 20;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-        }
-
-        .zxsp-header-left {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .zxsp-back-btn {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          border: 1.5px solid var(--border);
-          background: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all var(--transition);
-          color: #6B7280;
-          flex-shrink: 0;
-        }
-        .zxsp-back-btn:hover {
-          border-color: #C4B5FD;
-          color: var(--brand);
-          background: var(--brand-light);
-        }
-
-        .zxsp-header-title {
-          font-size: 15px;
-          font-weight: 700;
-          color: var(--text-primary);
-          letter-spacing: -0.2px;
-        }
-
-        .zxsp-recent-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 8px;
-          border: 1.5px solid var(--border);
-          background: white;
-          cursor: pointer;
-          font-size: 12.5px;
-          font-weight: 600;
-          color: var(--text-secondary);
-          transition: all var(--transition);
-        }
-        .zxsp-recent-btn:hover {
-          border-color: #C4B5FD;
-          color: var(--brand);
-          background: var(--brand-light);
-        }
-        .zxsp-recent-btn svg { width: 14px; height: 14px; }
-
-        /* ── BODY ── */
-        .zxsp-body {
-          max-width: 960px;
-          margin: 0 auto;
-          padding: 0 16px 40px;
-        }
-
-        /* Dialog tweaks */
-        .zxsp-dialog-title {
-          font-size: 15px;
-          font-weight: 700;
-          color: var(--text-primary);
-        }
-      `}</style>
-
-      <div className="zxsp-root">
-        {/* Header */}
-        <div className="zxsp-header">
-          <div className="zxsp-header-left">
-            <button className="zxsp-back-btn" onClick={() => navigate(-1)}>
-              <ArrowLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="zxsp-header-title">Find Candidates</span>
-          </div>
-          <button className="zxsp-recent-btn" onClick={() => setShowRecentSearchesModal(true)}>
-            <Clock /> Recent Searches
+    <div style={{ minHeight:'calc(100vh - 70px - 8px)', background:'#f8f9fc', fontFamily:'Inter,system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{
+        height:44, background:'linear-gradient(90deg,#5B21B6,#7C3AED)',
+        borderBottom:'1px solid rgba(109,28,217,0.3)',
+        display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'0 16px', boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
+      }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <button onClick={() => navigate(-1)} style={{
+            width:28, height:28, borderRadius:7, border:'1px solid rgba(255,255,255,0.2)',
+            background:'rgba(255,255,255,0.1)', display:'flex', alignItems:'center',
+            justifyContent:'center', cursor:'pointer', color:'white',
+          }}>
+            <ArrowLeft size={13} />
           </button>
-        </div>
-
-        {/* Body */}
-        <div className="zxsp-body">
-          <CandidateSearchFilters
-            onSearch={handleSearch}
-            isSearching={false}
-            organizationId={organizationId}
-            searchHistory={selectedHistory}
-          />
-        </div>
-
-        {/* Recent Searches Modal */}
-        <Dialog open={showRecentSearchesModal} onOpenChange={setShowRecentSearchesModal}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="zxsp-dialog-title">Recent Searches</DialogTitle>
-            </DialogHeader>
-            <div className="mt-3">
-              <RecentSearches onSelectSearch={handleRecentSearchSelect} isModal={true} />
+          <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+            <div style={{
+              width:22, height:22, borderRadius:6, background:'rgba(255,255,255,0.2)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}>
+              <Zap size={12} color="white" />
             </div>
-          </DialogContent>
-        </Dialog>
+            <div>
+              <div style={{ fontSize:13, fontWeight:700, color:'white', lineHeight:1.2 }}>Zive-X Search</div>
+              <div style={{ fontSize:9, color:'rgba(255,255,255,0.65)', lineHeight:1 }}>AI-powered candidate discovery</div>
+            </div>
+          </div>
+        </div>
+        <button onClick={() => setShowRecent(true)} style={{
+          display:'flex', alignItems:'center', gap:5,
+          padding:'5px 10px', borderRadius:7,
+          border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)',
+          cursor:'pointer', fontSize:11, fontWeight:600, color:'white',
+        }}>
+          <Clock size={11} /> Recent Searches
+        </button>
       </div>
-    </>
+
+      {/* Filters */}
+      <div style={{ maxWidth:900, margin:'0 auto', padding:'0 16px 40px' }}>
+        <CandidateSearchFilters
+          onSearch={handleSearch}
+          isSearching={false}
+          organizationId={organizationId}
+          searchHistory={selectedHistory}
+        />
+      </div>
+
+      {/* Recent modal */}
+      <Dialog open={showRecent} onOpenChange={setShowRecent}>
+        <DialogContent style={{ maxWidth:720, maxHeight:'80vh', overflowY:'auto' }}>
+          <DialogHeader>
+            <DialogTitle style={{ fontSize:15, fontWeight:700 }}>Recent Searches</DialogTitle>
+          </DialogHeader>
+          <div style={{ marginTop:12 }}>
+            <RecentSearches onSelectSearch={h => { setSelectedHistory(h); setShowRecent(false); }} isModal={true} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

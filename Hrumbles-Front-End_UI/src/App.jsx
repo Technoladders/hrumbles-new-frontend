@@ -100,6 +100,7 @@ import CandidateProfilePage from "./pages/candidates/CandidateProfilePage";
 import MigratedTalentPoolPage from "./pages/candidates/MigratedTalentPoolPage";
 import MigratedCandidateProfilePage from "./pages/candidates/MigratedCandidateProfilePage";
 import ZiveXSearchPage from "./pages/candidates/ZiveXSearchPage";
+import ZiveXPage from "./pages/candidates/ZiveXPage";
 import ZiveXResultsPage from "./pages/candidates/ZiveXResultsPage";
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -541,7 +542,7 @@ function AppContent() {
               <Route path="/talent-pool/resume-processing" element={<ResumeProcessingPage />} />
               <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
               <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
-              <Route path="/zive-x" element={<ZiveXSearchPage />} />
+              <Route path="/zive-x" element={<ZiveXPage />} />
               <Route path="/zive-x-search/results" element={<ZiveXResultsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/user-activity-details/:employeeId" element={<UserActivityDetailsPage />} />
