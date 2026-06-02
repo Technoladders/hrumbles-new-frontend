@@ -323,7 +323,7 @@ export const RocketReachSearchPage: React.FC = () => {
   const [showPricingModal, setShowPricingModal] = useState(false);
 
   // CHANGE 3: Demo org state
-  const [demoMode,     setDemoMode]     = useState(true);
+  const [demoMode,     setDemoMode]     = useState(false);
   const [demoProfiles, setDemoProfiles] = useState<RRProfile[]>([]);
   const [demoTotal,    setDemoTotal]    = useState(0);
   const [demoLoading,  setDemoLoading]  = useState(false);
