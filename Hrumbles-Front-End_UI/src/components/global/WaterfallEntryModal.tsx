@@ -28,6 +28,7 @@ export interface WaterfallEntry {
   created_at:          string;
   expires_at:          string;
   sla_hours:           number;
+  reveal_type:         "email" | "phone";   // NEW — which contact was requested
   org_name?:           string;
 }
 
@@ -73,15 +74,18 @@ function InputRow({
 }
 
 export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryModalProps) {
-  // Resolution status
+  // Resolution status — default to "not_found" for missing contacts, "found" when data ready
   const [status, setStatus] = useState<"found" | "not_found">("found");
 
-  // Multi-email state — pre-populate from existing found_email if any
+  // Inputs scoped to reveal_type — email request shows only email fields, phone shows only phone
+  const isEmailRequest = entry.reveal_type === "email";
+  const isPhoneRequest = entry.reveal_type === "phone";
+
+  // Multi-email state (only used when reveal_type === "email")
   const [emails, setEmails] = useState<string[]>(
     entry.found_email ? [entry.found_email] : [""]
   );
-
-  // Multi-phone state — pre-populate from existing found_phone if any
+  // Multi-phone state (only used when reveal_type === "phone")
   const [phones, setPhones] = useState<string[]>(
     entry.found_phone ? [entry.found_phone] : [""]
   );
@@ -104,11 +108,15 @@ export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryM
   const addPhone     = ()                       => setPhones(prev => [...prev, ""]);
 
   const handleSubmit = async () => {
-    const cleanEmails = emails.map(e => e.trim()).filter(Boolean);
-    const cleanPhones = phones.map(p => p.trim()).filter(Boolean);
+    const cleanEmails = isEmailRequest ? emails.map(e => e.trim()).filter(Boolean) : [];
+    const cleanPhones = isPhoneRequest ? phones.map(p => p.trim()).filter(Boolean) : [];
 
     if (status === "found" && cleanEmails.length === 0 && cleanPhones.length === 0) {
-      setError("Enter at least one email or phone number when marking as found.");
+      setError(
+        isEmailRequest
+          ? "Enter at least one email address when marking as found."
+          : "Enter at least one phone number when marking as found."
+      );
       return;
     }
 
@@ -238,6 +246,13 @@ export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryM
                     <Building2 size={7} /> {entry.org_name}
                   </span>
                 )}
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+                  entry.reveal_type === "email"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-teal-100 text-teal-700"
+                }`}>
+                  {entry.reveal_type === "email" ? "✉ Email Request" : "📞 Phone Request"}
+                </span>
                 {pastSLA && entry.status === "pending" && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-100
                     text-red-600 font-medium">SLA Breached</span>
@@ -286,8 +301,8 @@ export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryM
             </div>
           </div>
 
-          {/* ── Email inputs (multi) ─────────────────────────────────────── */}
-          {status === "found" && (
+          {/* ── Email inputs (only for email reveal_type requests) ────── */}
+          {status === "found" && isEmailRequest && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider
@@ -323,21 +338,23 @@ export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryM
               </div>
 
               {emails.length > 1 && (
-                <p className="text-[9px] text-slate-400 mt-1">
-                  First email will be set as primary.
-                </p>
+                <p className="text-[9px] text-slate-400 mt-1">First email will be set as primary.</p>
               )}
             </div>
           )}
 
-          {/* ── Phone inputs (multi) ─────────────────────────────────────── */}
-          {status === "found" && (
+          {/* ── Phone inputs (only for phone reveal_type requests) ─────── */}
+          {status === "found" && isPhoneRequest && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider
                   flex items-center gap-1">
                   <Phone size={9} /> Phone Number(s)
-                  <span className="text-slate-400 font-normal normal-case ml-1">(optional)</span>
+                  <span className="text-slate-400 font-normal normal-case ml-1">
+                    {phones.filter(p => p.trim()).length > 0
+                      ? `(${phones.filter(p => p.trim()).length} added)`
+                      : "(at least one required)"}
+                  </span>
                 </label>
                 <button
                   type="button"
@@ -363,9 +380,7 @@ export function WaterfallEntryModal({ entry, onClose, onSaved }: WaterfallEntryM
               </div>
 
               {phones.length > 1 && (
-                <p className="text-[9px] text-slate-400 mt-1">
-                  First phone will be set as recommended.
-                </p>
+                <p className="text-[9px] text-slate-400 mt-1">First phone will be set as recommended.</p>
               )}
             </div>
           )}

@@ -49,7 +49,7 @@ async function revealProfile(
   auth:             { organizationId: string; userId: string },
   tiRevealProvider: string
 ): Promise<any> {
-  const { data, error } = await supabase.functions.invoke("ti-reveal-v1", {
+  const { data, error } = await supabase.functions.invoke("ti-reveal", {
     body: {
       linkedinUrl:      profile.linkedin_url ?? null,
       rrProfileId:      String(profile.id),
