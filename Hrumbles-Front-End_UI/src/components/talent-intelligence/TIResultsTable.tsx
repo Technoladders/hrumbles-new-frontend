@@ -323,9 +323,9 @@ export function RevealCell({ profile, onRevealDone, waterfallEnabled }: RevealCe
         // Waterfall in-queue or done state — show queue indicator
         waterfallInQueue ? (
           <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 cursor-default max-w-[130px]"
-            title="Our team is sourcing this email. Check back in 30–180 minutes.">
+            title="Estimated time: 30–180 minutes.">
             <Loader2 size={8} className="animate-spin text-amber-500 flex-shrink-0" />
-            <span className="text-[9px] text-amber-600 font-medium truncate">In Queue…</span>
+            <span className="text-[8px] text-amber-600 font-medium truncate">In Queue… (Est. 30–180 min)</span>
           </div>
         ) : waterfallDone ? (
           hasPersonal ? (
@@ -657,7 +657,7 @@ export function TIResultsTable({ profiles, total, page, isLoading, isSearching, 
                           </div>
                           <div className="relative z-10 flex items-center gap-1.5 mt-1 flex-nowrap overflow-visible">
                             {yrs && <span className="inline-flex items-center px-2 py-[3px] rounded-full text-[9px] font-bold whitespace-nowrap bg-indigo-100 text-indigo-900 shadow-sm">{yrs}</span>}
-                            {isOTW && <span className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[9px] font-bold whitespace-nowrap bg-gradient-to-r from-violet-500 to-pink-500 text-white animate-expGlow">Open to Work</span>}
+                            {isOTW && <span className="inline-flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[8px] font-bold whitespace-nowrap bg-green-200 text-green-800 animate-expGlow">Open to Work</span>}
                           </div>
                         </div>
                         <div className="flex-shrink-0 text-slate-300 group-hover:text-violet-400 transition-colors ml-1">
