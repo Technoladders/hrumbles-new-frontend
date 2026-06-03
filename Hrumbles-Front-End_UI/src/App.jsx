@@ -10,6 +10,7 @@ import ReactGA from 'react-ga4';
 import store from "./Redux/store";
 import { useDispatch, useSelector } from "react-redux";
 import supabase from "./config/supabaseClient"
+import { PiopiyProvider } from '@/context/PiopiyContext'
 
 import { setOrganization } from "./Redux/organizationSlice";
 import { getOrganizationSubdomain } from "./utils/subdomain";
@@ -37,6 +38,7 @@ import DetailedResourceView from './components/global/DetailedResourceView';
 import OrganizationTalentTrendsReport from "./components/global/OrganizationManagement/OrganizationTalentTrendsReport";
 import GlobalInvoicesPage from "./components/global/invoices/GlobalInvoicesPage";
 import { WaterfallPage } from "./pages/global/WaterfallPage";
+import { WaterfallNotificationConfig }from "./components/global/WaterfallNotificationConfig";
 
 import MainLayout from "./layouts/MainLayout";
 import HomePage from "./pages/HomePage";
@@ -99,6 +101,7 @@ import CandidateProfilePage from "./pages/candidates/CandidateProfilePage";
 import MigratedTalentPoolPage from "./pages/candidates/MigratedTalentPoolPage";
 import MigratedCandidateProfilePage from "./pages/candidates/MigratedCandidateProfilePage";
 import ZiveXSearchPage from "./pages/candidates/ZiveXSearchPage";
+import ZiveXPage from "./pages/candidates/ZiveXPage";
 import ZiveXResultsPage from "./pages/candidates/ZiveXResultsPage";
 import FinanceIndex from "./pages/finance/Index";
 import PayrollEdit from "./pages/finance/PayrollEdit";
@@ -174,6 +177,9 @@ import { UploadFloatProvider } from '@/components/candidates/talent-pool/Draggab
 import { TalentIntelligencePage } from "./pages/TalentIntelligence";
 import { TIProfilePage } from "./pages/TalentIntelligence/TIProfilePage";
 import { EmailTemplatesPage } from "./pages/settings/EmailTemplatesPage.tsx";
+import  TelephonySettings  from './pages/settings/TelephonySettings';
+import  CDRDashboard  from './pages/settings/CDRDashboard';
+import TeleCMIFloat from './components/calling/TeleCMIFloat.tsx'
 
 
 import VendorDashboard from "./pages/VendorDashboard";
@@ -493,6 +499,7 @@ function AppContent() {
               <Route path="/reports/openai-usage" element={<OpenAIUsageReport />} />
               <Route path="/reports/apollo-usage" element={<ApolloUsageReport />} />
               <Route path="/waterfall" element={<WaterfallPage />} />
+              <Route path="/waterfall/settings" element={<WaterfallNotificationConfig />} />
               <Route path="/projects" element={<ProjectManagement />} />
               <Route path="/client/:id" element={<ClientDashboard />} />
               <Route path="/projects/:id" element={<ProjectDashboard />} />
@@ -537,7 +544,7 @@ function AppContent() {
               <Route path="/talent-pool/resume-processing" element={<ResumeProcessingPage />} />
               <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
               <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
-              <Route path="/zive-x" element={<ZiveXSearchPage />} />
+              <Route path="/zive-x" element={<ZiveXPage />} />
               <Route path="/zive-x-search/results" element={<ZiveXResultsPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/user-activity-details/:employeeId" element={<UserActivityDetailsPage />} />
@@ -594,6 +601,8 @@ function AppContent() {
               <Route path="/whatsapp-settings" element={<WhatsAppSettings />} />
               <Route path="/settings/organization-profile" element={<OrganizationProfilePage />} />
               <Route path="/settings/email-templates" element={<EmailTemplatesPage />} />
+              <Route path="/settings/telephony" element={<TelephonySettings />} />
+              <Route path="/settings/cdr" element={<CDRDashboard />} />
             </Route>
           </Route>
         </Route>
@@ -605,13 +614,17 @@ function AppContent() {
 function App() {
   return (
     <>
+    
      <UploadFloatProvider> 
     <Router>
+      <PiopiyProvider>
       <AppContent />
       <GlobalDialogs />
       <InterviewReminderOverlay />
       <DraggableUploadFloat />
     <BulkProgressFloat />
+    <TeleCMIFloat />
+    </PiopiyProvider>
     </Router>
     <UploadProgressFloat />
      </UploadFloatProvider> 

@@ -31,6 +31,7 @@ import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/jo
 import V2WhatsAppFloat             from '@/components/MagicLinkView/candidate-profile-v2/components/V2WhatsAppFloat';
 import BatchJobsPanel              from '@/components/candidates/talent-pool/BatchJobsPanel';
 import AnalyticsTab                from '@/components/candidates/talent-pool/AnalyticsTab';
+import CallButton from '@/components/calling/CallButton'
 
 
 
@@ -1118,6 +1119,13 @@ const TableTab: FC<{
                                 </button>
                               </TooltipTrigger><TooltipContent>WhatsApp</TooltipContent></Tooltip>
                             )}
+                            {c.phone && (
+              <CallButton
+                candidatePhone={c.phone}
+                candidateId={c.id}
+                candidateName={c.candidate_name}
+              />
+            )}
                           </div>
                         </td>
                       </tr>

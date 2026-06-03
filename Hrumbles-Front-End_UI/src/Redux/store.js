@@ -11,12 +11,14 @@ import uiReducer from './uiSlice';
 import permissionsReducer from './permissionSlice';
 import intelligenceSearchReducer from './intelligenceSearchSlice';
 import contactsV2Reducer from './contactsV2Slice';
+import callReducer from './callSlice'
 
 
 
 const store = configureStore({
   reducer: {
     auth: authReducer,
+    call: callReducer,
     employees: employeeReducer,
     departments: departmentReducer,
     roles: roleReducer,
