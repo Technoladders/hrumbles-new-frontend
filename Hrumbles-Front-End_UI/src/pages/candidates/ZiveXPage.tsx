@@ -256,16 +256,16 @@ const ZiveXPage: FC = () => {
                   ? <><RefreshCw size={8} style={{ animation:'spin 0.8s linear infinite' }}/>&nbsp;Searching…</>
                   : hasSearched
                   ? <><span style={{ width:5,height:5,borderRadius:'50%',background:'#34D399',display:'inline-block' }}/>&nbsp;{searchResults.length.toLocaleString()} results</>
-                  : 'AI-powered talent search'
+                  : 'xrilic powered talent search'
                 }
               </div>
             </div>
           </div>
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:6 }}>
-          <div style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:99,background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.18)',fontSize:9,fontWeight:700,color:'white' }}>
+          {/* <div style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:99,background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.18)',fontSize:9,fontWeight:700,color:'white' }}>
             <Zap size={9}/> Typesense
-          </div>
+          </div> */}
           {hasSearched&&searchResults.length>0&&(<>
             <div style={{ display:'flex',alignItems:'center',background:'rgba(255,255,255,0.1)',borderRadius:7,border:'1px solid rgba(255,255,255,0.15)',overflow:'hidden' }}>
               {(['card','table'] as const).map(m=>(

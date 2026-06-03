@@ -49,7 +49,7 @@ async function revealProfile(
   auth:             { organizationId: string; userId: string },
   tiRevealProvider: string
 ): Promise<any> {
-  const { data, error } = await supabase.functions.invoke("ti-reveal", {
+  const { data, error } = await supabase.functions.invoke("ti-reveal-v1", {
     body: {
       linkedinUrl:      profile.linkedin_url ?? null,
       rrProfileId:      String(profile.id),
@@ -384,21 +384,23 @@ const RightCard: React.FC<RightCardProps> = ({
     });
   };
 
-  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;  
-  const emailDisabled = revealingEmail || emailAvailable === false || emailNotFound;
+  const emailDone     = !!(enriched && displayEmail) || hasEmailsFromCO;
+  // Always show — reveal provider may surface what search provider didn't
+  const emailDisabled = revealingEmail || emailNotFound;
   const emailClass = emailDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
-    : (emailAvailable === false || emailNotFound)
+    : emailNotFound
       ? "text-slate-400 border-slate-200 bg-slate-50"
       : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
-
+ 
   const phoneDone     = !!(enriched && displayPhone);
-  const phoneDisabled = revealingPhone || phoneIsPending || phoneAvailable === false || phoneNotFound;
+  // Always show — reveal provider may surface what search provider didn't
+  const phoneDisabled = revealingPhone || phoneIsPending || phoneNotFound;
   const phoneClass = phoneDone
     ? "text-emerald-600 border-emerald-200 bg-emerald-50"
     : phoneIsPending
       ? "text-amber-600 border-amber-200 bg-amber-50"
-      : (phoneAvailable === false || phoneNotFound)
+      : phoneNotFound
         ? "text-slate-400 border-slate-200 bg-slate-50"
         : "text-violet-600 border-violet-300 bg-white hover:bg-violet-50";
 
@@ -497,31 +499,31 @@ const RightCard: React.FC<RightCardProps> = ({
       </div>
 
       {/* CHANGE: Added verification conditions to ensure display persistence across renders */}
-      {waterfallEnabled && (emailNotFound || waterfallInQueue || waterfallDone) && (
-        waterfallChecking ? (
-          <div className="flex items-center justify-center gap-1 text-[9px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 cursor-default">
-            <Loader2 size={8} className="animate-spin flex-shrink-0" />
-            <span className="truncate">Checking queue...</span>
-          </div>
-        ) : waterfallDone ? (
-          <div className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1.5">
-            <Check size={8} /> Email found — check again
-          </div>
-        ) : waterfallInQueue ? (
-          <div className="flex items-center gap-1 text-[9px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 cursor-default"
-            title="Our team is sourcing this email. Check back in 24–48 hours.">
-            <Loader2 size={8} className="animate-spin flex-shrink-0" />
-            <span className="truncate">In Queue (24–48h)</span>
-          </div>
-        ) : (
-          <button
-            onClick={e => { e.stopPropagation(); onAddToWaterfall?.(); }}
-            title="We'll source this personal email within 24–48 hours"
-            className="w-full text-[9px] font-semibold border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-md px-1.5 py-1.5 flex items-center justify-center gap-1 transition-colors">
-            <Clock size={9} /> Add to Waterfall
-          </button>
-        )
-      )}
+{waterfallEnabled && (emailNotFound || waterfallInQueue || waterfallDone) && (
+  waterfallChecking ? (
+    <div className="flex items-center justify-center gap-1 text-[9px] text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5 cursor-default">
+      <Loader2 size={8} className="animate-spin flex-shrink-0" />
+      <span className="truncate">Checking queue...</span>
+    </div>
+  ) : waterfallDone ? (
+    <div className="flex items-center gap-1 text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1.5">
+      <Check size={8} /> Email found — check above
+    </div>
+  ) : waterfallInQueue ? (
+    <div
+      className="flex items-center gap-1 text-[9px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 cursor-default"
+      title="Our team is sourcing this email. Check back in 30–180 minutes."
+    >
+      <Loader2 size={8} className="animate-spin flex-shrink-0" />
+      <span className="truncate">In Queue (30–180 min)</span>
+    </div>
+  ) : (
+    <div className="flex items-center gap-1 text-[9px] text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 cursor-default">
+      <Loader2 size={8} className="animate-spin flex-shrink-0" />
+      <span className="truncate">Adding to Queue…</span>
+    </div>
+  )
+)}
 
       <div className="grid grid-cols-2 gap-1.5">
         <button onClick={e => { e.stopPropagation(); onInvite?.(); }}
@@ -727,44 +729,102 @@ export const RRResultRow: React.FC<RRResultRowProps> = ({
     }, 3000);
   }, [p.id, provider, onRevealComplete]);
 
-  const doReveal = useCallback(async (revealType: "email"|"phone") => {
-    const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
-    setter(true); setRevealError(null);
-    const auth = await resolveAuth();
-    if (!auth) { setter(false); setRevealError("Not authenticated"); return; }
-    try {
-      const data = await revealProfile(p, revealType, auth, tiRevealProvider);
-      
-      if (data?.phonePending) {
-        setter(false);
-        setPhonePendingState(true);
-        if (p.linkedin_url) startPollingForPhone(p.linkedin_url);
+const doReveal = useCallback(async (revealType: "email" | "phone") => {
+  const setter = revealType === "email" ? setRevealingEmail : setRevealingPhone;
+
+  setter(true);
+  setRevealError(null);
+
+  const auth = await resolveAuth();
+
+  if (!auth) {
+    setter(false);
+    setRevealError("Not authenticated");
+    return;
+  }
+
+  try {
+    const data = await revealProfile(p, revealType, auth, tiRevealProvider);
+
+    if (data?.phonePending) {
+      setter(false);
+      setPhonePendingState(true);
+
+      if (p.linkedin_url) {
+        startPollingForPhone(p.linkedin_url);
+      }
+
+      return;
+    }
+
+    if (data?.addedToWaterfall || data?.waterfallPending) {
+      setter(false);
+      setEmailNotFound(false);
+      setWaterfallInQueue(true);
+
+      onRevealComplete(p.id, {
+        success: true,
+        addedToWaterfall: true,
+        allEmails: [],
+        allPhones: [],
+        _provider: provider,
+      });
+
+      return;
+    }
+
+    if (!data?.success) {
+      if (data?.code === "INSUFFICIENT_CREDITS") {
+        setRevealError(
+          `Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`
+        );
         return;
       }
-      if (!data?.success) {
-        if (data?.code === "INSUFFICIENT_CREDITS") {
-          setRevealError(`Insufficient credits. Need ${data.required}, have ${data.available?.toFixed(2)}.`);
-          return;
-        }
-        if (revealType === "email") setEmailNotFound(true);
-        else setPhoneNotFound(true);
-        return;
-      }
-      onRevealComplete(p.id, { ...data, _provider: provider });
 
       if (revealType === "email") {
-        const hasPersonal = (data.allEmails ?? []).some(
-          (e: any) => e.type === "personal" || e.type === "direct" || e.type === "personal_email"
-        );
-        if (!hasPersonal) setEmailNotFound(true);
-      }
-      if (revealType === "phone" && (data.allPhones ?? []).length === 0) {
+        setEmailNotFound(true);
+      } else {
         setPhoneNotFound(true);
       }
-    } catch (e: any) {
-      setRevealError(e.message ?? "Reveal failed");
-    } finally { setter(false); }
-  }, [p, provider, tiRevealProvider, onRevealComplete, startPollingForPhone]);
+
+      return;
+    }
+
+    onRevealComplete(p.id, { ...data, _provider: provider });
+
+    if (revealType === "email") {
+      const hasPersonal = (data.allEmails ?? []).some(
+        (e: any) =>
+          e.type === "personal" ||
+          e.type === "direct" ||
+          e.type === "personal_email"
+      );
+
+      if (!hasPersonal) {
+        if (data?.addedToWaterfall) {
+          setWaterfallInQueue(true);
+        } else {
+          setEmailNotFound(true);
+        }
+      }
+    }
+
+    if (revealType === "phone" && (data.allPhones ?? []).length === 0) {
+      setPhoneNotFound(true);
+    }
+  } catch (e: any) {
+    setRevealError(e.message ?? "Reveal failed");
+  } finally {
+    setter(false);
+  }
+}, [
+  p,
+  provider,
+  tiRevealProvider,
+  onRevealComplete,
+  startPollingForPhone,
+  waterfallEnabled,
+]);
 
   const handleAddToWaterfall = useCallback(async () => {
     const auth = await resolveAuth();

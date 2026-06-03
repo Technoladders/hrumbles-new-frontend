@@ -54,32 +54,37 @@ interface RevealBlockProps {
   waterfallEnabled: boolean;
   onRevealDone:     (e: TIRevealedEmail[], p: TIRevealedPhone[]) => void;
 }
-function RevealBlock({ profile, waterfallEnabled, onRevealDone }: RevealBlockProps) {
+ 
+export function RevealBlock({ profile, waterfallEnabled, onRevealDone }: RevealBlockProps) {
   const auth           = getAuthDataFromLocalStorage();
   const organizationId = auth?.organization_id ?? null;
   const userId         = auth?.userId ?? null;
-
+ 
   const [emails,       setEmails]       = useState<TIRevealedEmail[]>(profile.revealed_emails ?? []);
   const [phones,       setPhones]       = useState<TIRevealedPhone[]>(profile.revealed_phones ?? []);
   const [emailLoad,    setEmailLoad]    = useState(false);
   const [phoneLoad,    setPhoneLoad]    = useState(false);
-  const [emailErr,     setEmailErr]     = useState<string|null>(null);
-  const [phoneErr,     setPhoneErr]     = useState<string|null>(null);
-  const [copied,       setCopied]       = useState<string|null>(null);
+  const [emailErr,     setEmailErr]     = useState<string | null>(null);
+  const [phoneErr,     setPhoneErr]     = useState<string | null>(null);
+  const [copied,       setCopied]       = useState<string | null>(null);
   const [phonePending, setPhonePending] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval>|null>(null);
-
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+ 
   // Waterfall states
   const [waterfallInQueue, setWaterfallInQueue] = useState(false);
   const [waterfallDone,    setWaterfallDone]    = useState(false);
-  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel>|null>(null);
-
+  const [waterfallChecking, setWaterfallChecking] = useState(false);
+  const waterfallChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+ 
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
   }, []);
-
-  useEffect(() => { setEmails(profile.revealed_emails ?? []); }, [profile.id]);
+ 
+  useEffect(() => {
+    setEmails(profile.revealed_emails ?? []);
+  }, [profile.id]);
+ 
   useEffect(() => {
     const np = profile.revealed_phones ?? [];
     if (np.length > 0 && phonePending) {
@@ -88,180 +93,290 @@ function RevealBlock({ profile, waterfallEnabled, onRevealDone }: RevealBlockPro
       setPhones(np); onRevealDone(emails, np);
     } else if (np.length > phones.length) setPhones(np);
   }, [profile.revealed_phones?.length ?? 0]);
-
-  const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(()=>setCopied(null),2000); };
-
+ 
+  // Check existing waterfall status on mount
+  useEffect(() => {
+    if (!waterfallEnabled || !profile.linkedin_url || !organizationId) return;
+ 
+    const checkWaterfall = async () => {
+      setWaterfallChecking(true);
+      try {
+        const { data } = await supabase
+          .from("candidate_waterfall")
+          .select("id, status, found_email, found_phone")
+          .eq("linkedin_url", profile.linkedin_url)
+          .eq("organization_id", organizationId)
+          .maybeSingle();
+ 
+        if (data?.status === "pending") {
+          setWaterfallInQueue(true);
+          subscribeToWaterfall();
+        } else if (data?.status === "found") {
+          setWaterfallDone(true);
+          if (data.found_email) {
+            const newEmail: TIRevealedEmail = { email: data.found_email, type: "personal", is_primary: true };
+            setEmails([newEmail]);
+            onRevealDone([newEmail], data.found_phone ? [{ number: data.found_phone, type: "unknown", recommended: true }] : phones);
+          }
+        }
+      } catch (err) {
+        console.error("[RevealBlock] waterfall check:", err);
+      } finally {
+        setWaterfallChecking(false);
+      }
+    };
+ 
+    checkWaterfall();
+  }, [profile.linkedin_url, waterfallEnabled, organizationId]);
+ 
+  const subscribeToWaterfall = () => {
+    if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+    waterfallChannelRef.current = supabase
+      .channel(`wf-profile-page-${profile.id}`)
+      .on("postgres_changes", {
+        event:  "UPDATE",
+        schema: "public",
+        table:  "candidate_waterfall",
+        filter: `linkedin_url=eq.${profile.linkedin_url}`,
+      }, (payload: any) => {
+        if (payload.new?.status === "found" && payload.new.found_email) {
+          const newEmail: TIRevealedEmail = { email: payload.new.found_email, type: "personal", is_primary: true };
+          const newPhones = payload.new.found_phone
+            ? [{ number: payload.new.found_phone, type: "mobile", recommended: true } as TIRevealedPhone]
+            : phones;
+          setEmails([newEmail]); setPhones(newPhones);
+          setWaterfallDone(true); setWaterfallInQueue(false);
+          onRevealDone([newEmail], newPhones);
+          if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
+        } else if (payload.new?.status === "pending") {
+          setWaterfallInQueue(true);
+          setWaterfallDone(false);
+        }
+      })
+      .subscribe();
+  };
+ 
+  const copy = (t: string) => { navigator.clipboard.writeText(t); setCopied(t); setTimeout(() => setCopied(null), 2000); };
+ 
   const startPhonePolling = (url: string) => {
     let c = 0;
     pollRef.current = setInterval(async () => {
-      if(++c>20){ clearInterval(pollRef.current!);pollRef.current=null;setPhonePending(false);setPhoneErr("Phone verification taking longer — check back shortly."); return; }
+      if (++c > 20) {
+        clearInterval(pollRef.current!); pollRef.current = null;
+        setPhonePending(false);
+        setPhoneErr("Phone verification taking longer — check back shortly.");
+        return;
+      }
       try {
-        const {data} = await supabase.from("master_contactout_profiles").select("revealed_phones").eq("linkedin_url", url).maybeSingle();
-        const np: TIRevealedPhone[] = data?.revealed_phones??[];
-        if(np.length>0){ clearInterval(pollRef.current!);pollRef.current=null;setPhonePending(false);setPhones(np);onRevealDone(emails,np); }
+        const { data } = await supabase.from("master_contactout_profiles").select("revealed_phones").eq("linkedin_url", url).maybeSingle();
+        const np: TIRevealedPhone[] = data?.revealed_phones ?? [];
+        if (np.length > 0) {
+          clearInterval(pollRef.current!); pollRef.current = null;
+          setPhonePending(false); setPhones(np); onRevealDone(emails, np);
+        }
       } catch {}
     }, 3000);
   };
-
-  const handleAddToWaterfall = async () => {
-    if (!organizationId || !profile.linkedin_url) return;
-    try {
-      await supabase.from("candidate_waterfall").upsert({
-        organization_id:     organizationId,
-        requested_by:        userId,
-        linkedin_url:        profile.linkedin_url,
-        full_name:           profile.full_name,
-        title:               profile.title,
-        company_name:        profile.company_name,
-        profile_picture_url: profile.profile_picture_url,
-        status:              "pending",
-      }, { onConflict: "linkedin_url,organization_id", ignoreDuplicates: true });
-      setWaterfallInQueue(true);
-
-      // Realtime — auto-update when superadmin resolves
-      if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
-      waterfallChannelRef.current = supabase
-        .channel(`wf-profile-${profile.id}`)
-        .on("postgres_changes", {
-          event: "UPDATE", schema: "public", table: "candidate_waterfall",
-          filter: `linkedin_url=eq.${profile.linkedin_url}`,
-        }, (payload: any) => {
-          if (payload.new?.status === "found" && payload.new.found_email) {
-            const newEmail = { email: payload.new.found_email, type: "personal", is_primary: true } as TIRevealedEmail;
-            const newPhones = payload.new.found_phone
-              ? [{ number: payload.new.found_phone, type: "mobile", recommended: true } as TIRevealedPhone]
-              : phones;
-            setEmails([newEmail]); setPhones(newPhones);
-            setWaterfallDone(true); setWaterfallInQueue(false);
-            onRevealDone([newEmail], newPhones);
-            if (waterfallChannelRef.current) supabase.removeChannel(waterfallChannelRef.current);
-          }
-        })
-        .subscribe();
-    } catch (e: any) { console.error("[wf-profile]", e?.message); }
-  };
-
-  const reveal = async (revealType: "email"|"phone") => {
+ 
+  // CHANGE 1: Use ti-reveal (not ti-reveal-contact)
+  // CHANGE 3: Always callable — no contact_availability gate
+  const reveal = async (revealType: "email" | "phone") => {
     if (!organizationId) return;
-    const setLoad = revealType==="email"?setEmailLoad:setPhoneLoad;
-    const setErr  = revealType==="email"?setEmailErr:setPhoneErr;
+    const setLoad = revealType === "email" ? setEmailLoad : setPhoneLoad;
+    const setErr  = revealType === "email" ? setEmailErr  : setPhoneErr;
     setLoad(true); setErr(null);
     try {
-      const {data,error:fnErr} = await supabase.functions.invoke("ti-reveal-contact", {
-        body:{linkedinUrl:profile.linkedin_url,revealType,organizationId,userId},
+      const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal-v1", {
+        body: {
+          linkedinUrl:     profile.linkedin_url,
+          revealType,
+          organizationId,
+          userId,
+          snapshotName:    profile.full_name,
+          snapshotTitle:   profile.title,
+          snapshotCompany: profile.company_name,
+        },
       });
-      if(fnErr||(data?.error&&!data?.phonePending)){ const msg=data?.message??data?.error??fnErr?.message??"Reveal failed"; setErr(msg); return; }
-      if(data?.phonePending){ setPhonePending(true); startPhonePolling(profile.linkedin_url); return; }
-      const ne: TIRevealedEmail[]=data.allEmails??[], np: TIRevealedPhone[]=data.allPhones??[];
-      const mergedE=revealType==="email"?ne:emails, mergedP=revealType==="phone"?np:phones;
-      setEmails(mergedE); setPhones(mergedP); onRevealDone(mergedE,mergedP);
-    } catch(e:any){ setErr(e?.message??"Reveal failed."); }
-    finally{ setLoad(false); }
+ 
+      if (fnErr || (data?.error && !data?.phonePending && !data?.addedToWaterfall)) {
+        const msg = data?.message ?? data?.error ?? fnErr?.message ?? "Reveal failed";
+        setErr(msg);
+        return;
+      }
+ 
+      // CHANGE 2: Auto-waterfall response handling
+      if (data?.addedToWaterfall || data?.waterfallPending) {
+        setWaterfallInQueue(true);
+        subscribeToWaterfall();
+        return;
+      }
+ 
+      if (data?.phonePending) {
+        setPhonePending(true);
+        startPhonePolling(profile.linkedin_url);
+        return;
+      }
+ 
+      const ne: TIRevealedEmail[] = data.allEmails ?? [];
+      const np: TIRevealedPhone[] = data.allPhones ?? [];
+      const mergedE = revealType === "email" ? ne : emails;
+      const mergedP = revealType === "phone" ? np : phones;
+      setEmails(mergedE); setPhones(mergedP);
+      onRevealDone(mergedE, mergedP);
+    } catch (e: any) {
+      setErr(e?.message ?? "Reveal failed.");
+    } finally {
+      setLoad(false);
+    }
   };
-
-  const ca = profile.contact_availability;
-  const canPersonalEmail = !!ca?.personal_email, canPhone = !!ca?.phone;
-  const personalEmails = emails.filter(isPersonalEmail);
-  const emailWasRevealed = emails.length > 0, hasPersonal = personalEmails.length > 0;
-  const noPersonalFound  = emailWasRevealed && !hasPersonal;  // reveal ran, professional-only result
-
+ 
+  const personalEmails  = emails.filter(isPersonalEmail);
+  const emailWasRevealed = emails.length > 0;
+  const hasPersonal      = personalEmails.length > 0;
+  const noPersonalFound  = emailWasRevealed && !hasPersonal;
+  const primaryPersonal  = personalEmails[0] ?? null;
+  const pp               = phones[0] ?? null;
+ 
   return (
     <div className="space-y-3">
-      {canPersonalEmail && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <Mail size={13} className="text-violet-500"/>
-              <span className="text-xs font-semibold text-slate-700">Email</span>
-              <span className="text-[9px] text-slate-400">(personal)</span>
-            </div>
-            {!emailWasRevealed && !emailLoad && (
-              <button onClick={()=>reveal("email")} className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[11px] rounded-lg font-medium hover:bg-violet-700 transition-colors">
-                <Eye size={10}/> Reveal
-              </button>
-            )}
-            {emailLoad && <span className="flex items-center gap-1 text-[11px] text-violet-600"><Loader2 size={10} className="animate-spin"/> Revealing…</span>}
+ 
+      {/* ── Email block — CHANGE 3: Always show (removed canPersonalEmail gate) ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Mail size={13} className="text-violet-500" />
+            <span className="text-xs font-semibold text-slate-700">Email</span>
+            <span className="text-[9px] text-slate-400">(personal)</span>
           </div>
-
-          {emailErr && <p className="text-xs text-red-500 mb-1">{emailErr}</p>}
-
-          {hasPersonal ? (
-            <div className="space-y-2">
-              {personalEmails.map((e,i)=>(
-                <div key={i} className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <a href={`mailto:${e.email}`} className="text-sm text-violet-700 font-medium hover:underline truncate block">{e.email}</a>
-                    <span className="text-[10px] text-slate-400">personal{e.is_primary?" · primary":""}</span>
-                  </div>
-                  <button onClick={()=>copy(e.email)} className="p-1.5 text-slate-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
-                    {copied===e.email?<Check size={13} className="text-green-500"/>:<Copy size={13}/>}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : noPersonalFound ? (
-            <div className="space-y-2">
-              <p className="text-[11px] text-amber-600">No personal email found for this profile</p>
-
-              {/* Waterfall — only when org has it enabled */}
-              {waterfallEnabled && (
-                waterfallDone ? (
-                  <div className="flex items-center gap-2 px-2.5 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-700 font-medium">
-                    <Check size={11}/> Email found — see above
-                  </div>
-                ) : waterfallInQueue ? (
-                  <div className="flex items-center gap-2 px-2.5 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-700 font-medium cursor-default">
-                    <Loader2 size={10} className="animate-spin flex-shrink-0"/> In Waterfall Queue (24–48h)
-                  </div>
-                ) : (
-                  <button onClick={handleAddToWaterfall}
-                    title="We'll source this personal email within 24–48 hours"
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[11px] font-semibold transition-colors">
-                    <Clock size={11}/> Add to Waterfall (24–48h)
-                  </button>
-                )
-              )}
-            </div>
-          ) : (
-            !emailLoad && <p className="text-[11px] text-slate-400">Click Reveal to unlock personal email</p>
+          {/* Show Reveal button when: not yet revealed AND not in waterfall queue */}
+          {!emailWasRevealed && !emailLoad && !waterfallInQueue && !waterfallChecking && (
+            <button
+              onClick={() => reveal("email")}
+              className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[11px] rounded-lg font-medium hover:bg-violet-700 transition-colors">
+              <Eye size={10} /> Reveal
+            </button>
+          )}
+          {emailLoad && (
+            <span className="flex items-center gap-1 text-[11px] text-violet-600">
+              <Loader2 size={10} className="animate-spin" /> Revealing…
+            </span>
+          )}
+          {waterfallChecking && (
+            <span className="flex items-center gap-1 text-[11px] text-slate-400">
+              <Loader2 size={10} className="animate-spin" /> Checking…
+            </span>
           )}
         </div>
-      )}
-
-      {canPhone && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5"><Phone size={13} className="text-violet-500"/><span className="text-xs font-semibold text-slate-700">Phone</span></div>
-            {phones.length===0&&!phonePending&&<button onClick={()=>reveal("phone")} disabled={phoneLoad} className="flex items-center gap-1 px-3 py-1 border border-violet-300 text-violet-700 text-[11px] rounded-lg font-medium hover:bg-violet-50 disabled:opacity-60 transition-colors">{phoneLoad?<Loader2 size={10} className="animate-spin"/>:<Eye size={10}/>}{phoneLoad?"Revealing…":"Reveal"}</button>}
+ 
+        {emailErr && <p className="text-xs text-red-500 mb-1">{emailErr}</p>}
+ 
+        {/* Waterfall in-queue state */}
+        {waterfallInQueue && !waterfallDone && (
+          <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+            <Loader2 size={14} className="animate-spin text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[11px] font-semibold text-amber-700">Contact sourcing in progress</p>
+              {/* CHANGE 4: 30–180 min instead of 24–48h */}
+              <p className="text-[10px] text-amber-600 mt-0.5">Our team is sourcing this contact. Will appear here automatically within 30–180 minutes.</p>
+            </div>
           </div>
-          {phoneErr&&<p className="text-xs text-red-500 mb-1">{phoneErr}</p>}
-          {phones.length>0 ? (
-            <div className="space-y-2">
-              {phones.map((p,i)=>(
-                <div key={i} className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <a href={`tel:${p.number}`} className="text-sm text-violet-700 font-medium hover:underline">{p.number}</a>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {p.recommended&&<span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">recommended</span>}
-                      {p.type&&<span className="text-[10px] text-slate-400 capitalize">{p.type}</span>}
-                    </div>
-                  </div>
-                  <button onClick={()=>copy(p.number)} className="p-1.5 text-slate-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
-                    {copied===p.number?<Check size={13} className="text-green-500"/>:<Copy size={13}/>}
-                  </button>
+        )}
+ 
+        {/* Waterfall done — found */}
+        {waterfallDone && hasPersonal && (
+          <div className="space-y-2">
+            {personalEmails.map((e, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <a href={`mailto:${e.email}`} className="text-sm text-violet-700 font-medium hover:underline truncate block">{e.email}</a>
+                  <span className="text-[10px] text-slate-400">personal{e.is_primary ? " · primary" : ""}</span>
                 </div>
-              ))}
-            </div>
-          ) : phonePending ? (
-            <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
-              <Loader2 size={14} className="animate-spin text-amber-500 flex-shrink-0 mt-0.5"/>
-              <div><p className="text-[11px] font-semibold text-amber-700">Verifying phone number…</p><p className="text-[10px] text-amber-600 mt-0.5">Will appear here automatically within 1–2 minutes.</p></div>
-            </div>
-          ) : !phoneLoad && <p className="text-[11px] text-slate-400">Click Reveal to unlock phone</p>}
+                <button onClick={() => copy(e.email)} className="p-1.5 text-slate-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
+                  {copied === e.email ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+ 
+        {/* Normal reveal result — personal email found */}
+        {!waterfallInQueue && !waterfallDone && hasPersonal && (
+          <div className="space-y-2">
+            {personalEmails.map((e, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <a href={`mailto:${e.email}`} className="text-sm text-violet-700 font-medium hover:underline truncate block">{e.email}</a>
+                  <span className="text-[10px] text-slate-400">personal{e.is_primary ? " · primary" : ""}</span>
+                </div>
+                <button onClick={() => copy(e.email)} className="p-1.5 text-slate-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
+                  {copied === e.email ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+ 
+        {/* Revealed but no personal email (non-waterfall org) */}
+        {!waterfallInQueue && !waterfallDone && noPersonalFound && !waterfallEnabled && (
+          <p className="text-[11px] text-amber-600">No personal email found for this profile</p>
+        )}
+ 
+        {/* Not revealed yet — prompt text */}
+        {!emailWasRevealed && !emailLoad && !waterfallInQueue && !waterfallChecking && (
+          <p className="text-[11px] text-slate-400">Click Reveal to unlock personal email</p>
+        )}
+      </div>
+ 
+      {/* ── Phone block — CHANGE 3: Always show (removed canPhone gate) ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <Phone size={13} className="text-violet-500" />
+            <span className="text-xs font-semibold text-slate-700">Phone</span>
+          </div>
+          {phones.length === 0 && !phonePending && (
+            <button
+              onClick={() => reveal("phone")}
+              disabled={phoneLoad}
+              className="flex items-center gap-1 px-3 py-1 border border-violet-300 text-violet-700 text-[11px] rounded-lg font-medium hover:bg-violet-50 disabled:opacity-60 transition-colors">
+              {phoneLoad ? <Loader2 size={10} className="animate-spin" /> : <Eye size={10} />}
+              {phoneLoad ? "Revealing…" : "Reveal"}
+            </button>
+          )}
         </div>
-      )}
-
-      {!canPersonalEmail&&!canPhone&&<p className="text-xs text-slate-400 py-2">No contact info available for this profile</p>}
+ 
+        {phoneErr && <p className="text-xs text-red-500 mb-1">{phoneErr}</p>}
+ 
+        {pp ? (
+          <div className="space-y-2">
+            {phones.map((p, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <a href={`tel:${p.number}`} className="text-sm text-violet-700 font-medium hover:underline">{p.number}</a>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {p.recommended && <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">recommended</span>}
+                    {p.type && <span className="text-[10px] text-slate-400 capitalize">{p.type}</span>}
+                  </div>
+                </div>
+                <button onClick={() => copy(p.number)} className="p-1.5 text-slate-400 hover:text-violet-600 rounded-lg hover:bg-violet-50 transition-colors">
+                  {copied === p.number ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : phonePending ? (
+          <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+            <Loader2 size={14} className="animate-spin text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[11px] font-semibold text-amber-700">Verifying phone number…</p>
+              <p className="text-[10px] text-amber-600 mt-0.5">Will appear here automatically within 1–2 minutes.</p>
+            </div>
+          </div>
+        ) : !phoneLoad && (
+          <p className="text-[11px] text-slate-400">Click Reveal to unlock phone</p>
+        )}
+      </div>
+ 
     </div>
   );
 }

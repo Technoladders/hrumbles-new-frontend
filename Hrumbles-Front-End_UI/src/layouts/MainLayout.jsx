@@ -870,7 +870,7 @@ useEffect(() => {
 </MenuList>
           </Menu>
 
-          <RecruiterStatusToggle />
+          {/* <RecruiterStatusToggle /> */}
 
           {/* ── User menu ───────────────────────────────────────────────── */}
           <Menu>

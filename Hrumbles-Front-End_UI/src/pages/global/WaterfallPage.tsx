@@ -1,14 +1,15 @@
-// src/pages/GlobalSuperAdmin/WaterfallPage.tsx
-// Global superadmin view of all candidate_waterfall entries.
-// Superadmin can filter by status/org, click to resolve, enter found email/phone.
-// Route: /superadmin/waterfall  (add to global superadmin router)
+// src/pages/GlobalSuperAdmin/WaterfallPage.tsx — v2
+// Changes from v1:
+//   - Added "Settings" tab in header linking to /waterfall/settings
+//   - Auto-waterfall entries show sla_hours=3 (30-180 min) correctly in SLABadge
 
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 import {
-  Loader2, RefreshCw, Clock, Check, X, AlertCircle,
-  User, Building2, Linkedin, Search, Filter,
+  Loader2, RefreshCw, Clock, Check, AlertCircle,
+  User, Building2, Linkedin, Search, Settings,
 } from "lucide-react";
 import { WaterfallEntryModal, WaterfallEntry } from "@/components/global/WaterfallEntryModal";
 
@@ -30,11 +31,22 @@ function SLABadge({ entry }: { entry: WaterfallEntry }) {
   if (entry.status !== "pending") return null;
   const hoursLeft = (new Date(entry.expires_at).getTime() - Date.now()) / 3_600_000;
   const breached  = hoursLeft < 0;
-  const urgent    = !breached && hoursLeft < 8;
+  const urgent    = !breached && hoursLeft < 1; // urgent if less than 1h for 3h SLA entries
+
+  // Show minutes for short-SLA entries (auto-waterfall = 3h)
+  const isShortSLA = entry.sla_hours <= 3;
+  const timeLabel = isShortSLA
+    ? breached
+      ? `${Math.abs(Math.round(hoursLeft * 60))}m overdue`
+      : `${Math.round(hoursLeft * 60)}m left`
+    : breached
+      ? `${Math.abs(Math.round(hoursLeft))}h overdue`
+      : `${Math.round(hoursLeft)}h left`;
+
   return (
     <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
       breached ? "bg-red-100 text-red-600" : urgent ? "bg-orange-100 text-orange-600" : "bg-slate-100 text-slate-500")}>
-      {breached ? `${Math.abs(Math.round(hoursLeft))}h overdue` : `${Math.round(hoursLeft)}h left`}
+      {timeLabel}
     </span>
   );
 }
@@ -51,22 +63,21 @@ function Avatar({ entry }: { entry: WaterfallEntry }) {
 }
 
 export function WaterfallPage() {
-  const [entries,    setEntries]    = useState<WaterfallEntry[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [filter,     setFilter]     = useState<StatusFilter>("pending");
-  const [search,     setSearch]     = useState("");
-  const [resolving,  setResolving]  = useState<WaterfallEntry | null>(null);
+  const navigate = useNavigate();
+
+  const [entries,   setEntries]   = useState<WaterfallEntry[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+  const [filter,    setFilter]    = useState<StatusFilter>("pending");
+  const [search,    setSearch]    = useState("");
+  const [resolving, setResolving] = useState<WaterfallEntry | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       let q = supabase
         .from("candidate_waterfall")
-        .select(`
-          *,
-          hr_organizations ( name )
-        `)
+        .select(`*, hr_organizations ( name )`)
         .order("created_at", { ascending: false })
         .limit(200);
 
@@ -89,7 +100,6 @@ export function WaterfallPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Realtime updates for pending entries — reflect changes as superadmin resolves them
   useEffect(() => {
     const channel = supabase
       .channel("waterfall-admin")
@@ -125,14 +135,22 @@ export function WaterfallPage() {
             {counts["pending"] ?? 0} pending · {counts["found"] ?? 0} resolved · {counts["expired"] ?? 0} expired
           </p>
         </div>
-        <button onClick={load} title="Refresh" className="p-2 text-amber-100 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-          <RefreshCw size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/waterfall/settings")}
+            title="Notification settings"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-amber-100 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-[11px] font-medium border border-amber-400/40 hover:border-amber-300">
+            <Settings size={12} />
+            Settings
+          </button>
+          <button onClick={load} title="Refresh" className="p-2 text-amber-100 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex-shrink-0 flex items-center gap-3 px-5 py-2.5 bg-white border-b border-slate-100">
-        {/* Status tabs */}
         <div className="flex items-center gap-1">
           {(["all", "pending", "found", "not_found", "expired"] as StatusFilter[]).map(s => (
             <button key={s} onClick={() => setFilter(s)}
@@ -146,12 +164,14 @@ export function WaterfallPage() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          {/* Search */}
           <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-2.5 h-7 focus-within:border-amber-400 transition-colors w-52">
             <Search size={10} className="text-slate-400 flex-shrink-0" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               placeholder="Search name, org, company…"
-              className="flex-1 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 focus:outline-none" />
+              className="flex-1 bg-transparent text-[11px] text-slate-700 placeholder-slate-300 focus:outline-none"
+            />
           </div>
         </div>
       </div>
@@ -175,7 +195,7 @@ export function WaterfallPage() {
           <table className="w-full border-collapse" style={{ minWidth: 900 }}>
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                {["Profile", "Organisation", "Status / SLA", "Found Contact", "Requested", "Action"].map(h => (
+                {["Profile", "Organisation", "Status / SLA", "Found Contact", "SLA Type", "Requested", "Action"].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -193,12 +213,9 @@ export function WaterfallPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar entry={entry} />
                       <div className="min-w-0">
-                        <p className="text-[11px] font-semibold text-slate-800 truncate max-w-[160px]">
-                          {entry.full_name ?? "Unknown"}
-                        </p>
+                        <p className="text-[11px] font-semibold text-slate-800 truncate max-w-[160px]">{entry.full_name ?? "Unknown"}</p>
                         <p className="text-[9px] text-slate-500 truncate max-w-[160px]">
-                          {entry.title ?? ""}
-                          {entry.company_name ? ` · ${entry.company_name}` : ""}
+                          {entry.title ?? ""}{entry.company_name ? ` · ${entry.company_name}` : ""}
                         </p>
                         {entry.linkedin_url && (
                           <a href={entry.linkedin_url} target="_blank" rel="noreferrer"
@@ -231,16 +248,24 @@ export function WaterfallPage() {
                   <td className="px-4 py-2.5">
                     {entry.found_email || entry.found_phone ? (
                       <div className="space-y-0.5">
-                        {entry.found_email && (
-                          <p className="text-[10px] font-mono text-emerald-700 truncate max-w-[160px]">{entry.found_email}</p>
-                        )}
-                        {entry.found_phone && (
-                          <p className="text-[10px] font-mono text-slate-600">{entry.found_phone}</p>
-                        )}
+                        {entry.found_email && <p className="text-[10px] font-mono text-emerald-700 truncate max-w-[160px]">{entry.found_email}</p>}
+                        {entry.found_phone && <p className="text-[10px] font-mono text-slate-600">{entry.found_phone}</p>}
                       </div>
                     ) : (
                       <span className="text-[10px] text-slate-300">—</span>
                     )}
+                  </td>
+
+                  {/* SLA Type — shows if auto-added or manual */}
+                  <td className="px-4 py-2.5">
+                    <span className={cn(
+                      "text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
+                      entry.sla_hours <= 3
+                        ? "bg-violet-100 text-violet-700"
+                        : "bg-slate-100 text-slate-500"
+                    )}>
+                      {entry.sla_hours <= 3 ? "Auto (30–180 min)" : "Manual (48h)"}
+                    </span>
                   </td>
 
                   {/* Requested */}
@@ -271,7 +296,6 @@ export function WaterfallPage() {
         )}
       </div>
 
-      {/* Resolve modal */}
       {resolving && (
         <WaterfallEntryModal
           entry={resolving}
