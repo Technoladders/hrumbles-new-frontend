@@ -27,6 +27,7 @@ import ZiveXHeroSection from '@/components/candidates/zive-x/ZiveXHeroSection';
 // ← CORRECT IMPORT PATHS (from ZiveXResultsPage original)
 import InviteCandidateModal from '@/components/jobs/job/invite/InviteCandidateModal';
 import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/job/invite/BulkInviteReviewModal';
+import ZiveXGroupedResults from '@/components/candidates/zive-x/ZiveXGroupedResults';
 
 import { LayoutGrid, List, Send, Briefcase, Search, X, RefreshCw } from 'lucide-react';
 
@@ -500,29 +501,19 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
               </div>
             </div>
 
-            {/* Results list — display:flex+flexDirection:column is required for
-                inner scroll (ZiveXCardList/ZiveXResultsTable use flex:1 internally) */}
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {viewMode === 'card' ? (
-                <ZiveXCardList
-                  results={results}
-                  isLoading={isSearching}
-                  highlightTerms={highlightTerms}
-                  selectedIds={selectedIds}
-                  onToggleSelect={handleToggleSelect}
-                  onInvite={handleSingleInvite}
-                />
-              ) : (
-                <ZiveXResultsTable
-                  results={results}
-                  isLoading={isSearching}
-                  highlightTerms={highlightTerms}
-                  selectedIds={selectedIds}
-                  onToggleSelect={handleToggleSelect}
-                  onInvite={handleSingleInvite}
-                />
-              )}
-            </div>
+   {/* Results list — grouped (matched + suggested) */}
+   <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+     <ZiveXGroupedResults
+       results={results}
+       filters={filters}
+       isLoading={isSearching}
+       highlightTerms={highlightTerms}
+       selectedIds={selectedIds}
+       onToggleSelect={handleToggleSelect}
+       onInvite={handleSingleInvite}
+       viewMode={viewMode}
+     />
+   </div>
           </>
         )}
       </div>

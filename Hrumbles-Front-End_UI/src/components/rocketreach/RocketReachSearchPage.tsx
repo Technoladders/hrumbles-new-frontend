@@ -188,7 +188,7 @@ function decodeState(p: URLSearchParams): PageState {
 
 function countFilters(f: RRFilters): number {
   return [
-    f.keyword, f.name, f.companyRevenue, f.yearsExperience,
+    f.linkedinUrl, f.keyword, f.name, f.companyRevenue, f.yearsExperience,
     f.emailGrade, f.jobChangeSignal, f.newsSignal, f.jobPostingSignal,
     f.yearsInCurrentRole,
   ].filter(v => v?.trim()).length

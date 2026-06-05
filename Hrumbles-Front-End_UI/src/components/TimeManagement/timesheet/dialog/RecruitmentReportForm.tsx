@@ -88,18 +88,64 @@ export const RecruitmentReportForm = ({ data, onChange, errors = {} }: any) => {
         <h5 className="flex items-center gap-2 text-sm font-bold mb-3">
           {icon} {label}
         </h5>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mb-3"
-          onClick={() => addToStatus(status)}
-        >
-          <Plus className="w-4 h-4 mr-1" /> Add Candidate
-        </Button>
+<Button
+  variant="outline"
+  size="sm"
+  className="mb-3"
+  onClick={() => addToStatus(status)}
+>
+  <Plus className="w-4 h-4 mr-1" /> Add Candidate
+</Button>
+<div className="flex items-center gap-2 mb-3">
+  <Checkbox
+    checked={
+      data.candidateStatus?.[
+        status === "paid"
+          ? "noPaidActivity"
+          : status === "unpaid"
+          ? "noUnpaidActivity"
+          : status === "linedUp"
+          ? "noLinedUpActivity"
+          : "noOnFieldActivity"
+      ] || false
+    }
+    onCheckedChange={(v) =>
+      onChange({
+        ...data,
+        candidateStatus: {
+          ...data.candidateStatus,
+          [
+            status === "paid"
+              ? "noPaidActivity"
+              : status === "unpaid"
+              ? "noUnpaidActivity"
+              : status === "linedUp"
+              ? "noLinedUpActivity"
+              : "noOnFieldActivity"
+          ]: !!v,
+        },
+      })
+    }
+  />
 
-        {(getStatusArray(status).length === 0) && (
-          <p className="text-xs text-muted-foreground">No candidates added.</p>
-        )}
+  <Label className="text-sm text-muted-foreground">
+    No activity today
+  </Label>
+</div>
+
+{getStatusArray(status).length === 0 && (
+  <p
+    className={`text-xs ${
+      errors[`candidateStatus.${status}`]
+        ? "text-red-500 font-semibold"
+        : "text-muted-foreground"
+    }`}
+  >
+    {errors[`candidateStatus.${status}`]
+      ? "Please add at least one candidate."
+      : "No candidates added."}
+  </p>
+)}
 
         <div className="space-y-3">
           {getStatusArray(status).map((c: any, i: number) => (
@@ -276,9 +322,19 @@ export const RecruitmentReportForm = ({ data, onChange, errors = {} }: any) => {
           <Plus className="w-4 h-4 mr-1" /> Add Candidate
         </Button>
       </div>
-      {getActivityCandidates().length === 0 && (
-        <p className="text-xs text-muted-foreground">No call activity added.</p>
-      )}
+{getActivityCandidates().length === 0 && (
+  <p
+    className={`text-xs ${
+      errors["activitySummary.candidates"]
+        ? "text-red-500 font-semibold"
+        : "text-muted-foreground"
+    }`}
+  >
+    {errors["activitySummary.candidates"]
+      ? "Please add at least one candidate."
+      : "No call activity added."}
+  </p>
+)}
       {getActivityCandidates().map((c: any, i: number) => (
         <motion.div
           key={i}
@@ -370,12 +426,22 @@ export const RecruitmentReportForm = ({ data, onChange, errors = {} }: any) => {
 
   const renderSchedules = () => (
     <div className="space-y-3">
-      <Button variant="outline" size="sm" className="mb-3" onClick={addSchedule}>
+      <Button variant="outline" size="sm" className="mb-3" onClick={addSchedule}> 
         <Plus className="w-4 h-4 mr-1" /> Add Candidate Scheduled for Tomorrow
       </Button>
-      {getSchedules().length === 0 && (
-        <p className="text-xs text-muted-foreground">No scheduling entries added.</p>
-      )}
+{getSchedules().length === 0 && (
+  <p
+    className={`text-xs ${
+      errors["scheduling"]
+        ? "text-red-500 font-semibold"
+        : "text-muted-foreground"
+    }`}
+  >
+    {errors["scheduling"]
+      ? "Please add at least one scheduled candidate."
+      : "No scheduling entries added."}
+  </p>
+)}
       {getSchedules().map((sch: any, i: number) => (
         <motion.div
           key={i}
@@ -552,12 +618,39 @@ export const RecruitmentReportForm = ({ data, onChange, errors = {} }: any) => {
           value={data.activitySummary?.totalCalls || 0}
           onChange={(v: any) => update("activitySummary", "totalCalls", v)}
         />
+        <div className="flex items-center gap-2">
+  <Checkbox
+    checked={data.activitySummary?.noActivity || false}
+    onCheckedChange={(v) =>
+      onChange({
+        ...data,
+        activitySummary: {
+          ...data.activitySummary,
+          noActivity: !!v,
+        },
+      })
+    }
+  />
+  <Label>No call activity today</Label>
+</div>
         {renderActivityCandidates()}
       </motion.div>
 
       {/* 5️⃣ Scheduling & Follow-Ups */}
       <motion.div variants={itemVariants} className="p-5 bg-yellow-50/50 rounded-xl shadow-sm border border-yellow-100">
         <Label className="font-bold text-yellow-700">5️⃣ Scheduling & Follow-Ups</Label>
+        <div className="flex items-center gap-2 mb-3">
+  <Checkbox
+    checked={data.noScheduling || false}
+    onCheckedChange={(v) =>
+      onChange({
+        ...data,
+        noScheduling: !!v,
+      })
+    }
+  />
+  <Label>No scheduling for tomorrow</Label>
+</div>
         {renderSchedules()}
       </motion.div>
 

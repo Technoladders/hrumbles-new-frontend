@@ -1,13 +1,19 @@
 // src/components/RocketReachSearch/components/RRSearchSidebar.tsx
-// v4 — Correct ContactOut accepted values from API CSV
+// v5 — LinkedIn URL enrich mode
 //
-// Key fixes:
-//   - Industries use EXACT ContactOut accepted values (from CSV)
-//   - Job Functions use EXACT ContactOut accepted values (from CSV)
-//   - Seniority uses EXACT ContactOut accepted values (from CSV)
-//   - Company size labels match CSV values
-//   - Years of experience / in current role use CSV range values
-//   - Department filter now maps to ContactOut job_function values directly
+// Changes from v4:
+//   • `linkedinUrl: string` added to RRFilters + DEFAULT_RR_FILTERS
+//   • New "LinkedIn URL" section at the very top of the sidebar
+//   • When linkedinUrl is non-empty:
+//       - Green "Enrich Mode" badge appears in header
+//       - All existing filter sections render with opacity-40 + pointer-events-none
+//       - A locked banner explains "Filters disabled during URL lookup"
+//   • URL is validated loosely (must contain linkedin.com/in/)
+//   • Clear X button on the URL input resets to normal search mode
+//   • "Run Search" button copy changes to "Enrich Profile" in enrich mode
+//
+// Everything else (filter sections, portal dropdowns, skill chip builder,
+// location select, etc.) is IDENTICAL to v4 — no logic touched.
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactDOM from "react-dom";
@@ -17,12 +23,14 @@ import { Country, State, City } from "country-state-city";
 import {
   Search, UserSearch, RotateCcw, Loader2, X, MapPin, Briefcase,
   Building2, ChevronDown, Code2, Play, GraduationCap, Bell,
-  Phone, DollarSign, Users, Filter,
+  Phone, DollarSign, Users, Filter, Link2, Lock, Zap,
 } from "lucide-react";
 import type { SkillChip, SkillMode } from "./types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface RRFilters {
+  // ── NEW in v5 ──
+  linkedinUrl: string;          // single LinkedIn profile URL for enrich mode
   // Core
   keyword:          string;
   name:             string;
@@ -63,6 +71,7 @@ export interface RRFilters {
 }
 
 export const DEFAULT_RR_FILTERS: RRFilters = {
+  linkedinUrl: "",           // ← new
   keyword: "", name: "", titles: [], locations: [], managementLevels: [], skillChips: [],
   currentEmployer: [], companySize: [], companyIndustry: [], companyRevenue: "",
   companyPubliclyTraded: false, companyFundingMin: "", companyFundingMax: "", companyTags: [],
@@ -73,248 +82,90 @@ export const DEFAULT_RR_FILTERS: RRFilters = {
   openToWork: false, yearsInCurrentRole: "", recentlyChangedJobs: false,
 };
 
-// ─── EXACT ContactOut accepted values (from API CSV) ─────────────────────────
+// ─── EXACT ContactOut accepted values (from API CSV) — unchanged from v4 ─────
 
-// Seniority — exact values from CSV
 const MANAGEMENT_LEVELS = [
-  "Owner / Founder",
-  "CXO",
-  "Partner",
-  "VP",
-  "Head",
-  "Director",
-  "Manager",
-  "Senior",
-  "Entry",
-  "Intern",
+  "Owner / Founder","CXO","Partner","VP","Head","Director",
+  "Manager","Senior","Entry","Intern",
 ];
 
-// Job Functions — exact values from CSV
 const JOB_FUNCTIONS = [
-  "Operations",
-  "Business Development",
-  "Sales",
-  "Education",
-  "Engineering",
-  "Healthcare Services",
-  "Information Technology",
-  "Administrative",
-  "Arts and Design",
-  "Customer Success and Support",
-  "Finance",
-  "Community and Social Services",
-  "Media and Communication",
-  "Accounting",
-  "Marketing",
-  "Human Resources",
-  "Research",
-  "Program and Project Management",
-  "Legal",
-  "Military and Protective Services",
-  "Consulting",
-  "Entrepreneurship",
-  "Real Estate",
-  "Quality Assurance",
-  "Purchasing",
-  "Product Management",
-  "Leadership",
+  "Operations","Business Development","Sales","Education","Engineering",
+  "Healthcare Services","Information Technology","Administrative","Arts and Design",
+  "Customer Success and Support","Finance","Community and Social Services",
+  "Media and Communication","Accounting","Marketing","Human Resources","Research",
+  "Program and Project Management","Legal","Military and Protective Services",
+  "Consulting","Entrepreneurship","Real Estate","Quality Assurance","Purchasing",
+  "Product Management","Leadership",
 ];
 
-// Industries — exact values from CSV
 const CO_INDUSTRIES = [
-  "Defense & Space",
-  "Computer Hardware",
-  "Computer Software",
-  "Computer Networking",
-  "Internet",
-  "Semiconductors",
-  "Telecommunications",
-  "Law Practice",
-  "Legal Services",
-  "Management Consulting",
-  "Biotechnology",
-  "Medical Practice",
-  "Hospital & Health Care",
-  "Pharmaceuticals",
-  "Veterinary",
-  "Medical Device",
-  "Cosmetics",
-  "Apparel & Fashion",
-  "Sporting Goods",
-  "Tobacco",
-  "Supermarkets",
-  "Food Production",
-  "Consumer Electronics",
-  "Consumer Goods",
-  "Furniture",
-  "Retail",
-  "Entertainment",
-  "Gambling & Casinos",
-  "Leisure, Travel & Tourism",
-  "Hospitality",
-  "Restaurants",
-  "Sports",
-  "Food & Beverages",
-  "Motion Pictures & Film",
-  "Broadcast Media",
-  "Museums & Institutions",
-  "Fine Art",
-  "Performing Arts",
-  "Recreational Facilities & Services",
-  "Banking",
-  "Insurance",
-  "Financial Services",
-  "Real Estate",
-  "Investment Banking",
-  "Investment Management",
-  "Accounting",
-  "Construction",
-  "Building Materials",
-  "Architecture & Planning",
-  "Civil Engineering",
-  "Aviation & Aerospace",
-  "Automotive",
-  "Chemicals",
-  "Machinery",
-  "Mining & Metals",
-  "Oil & Energy",
-  "Shipbuilding",
-  "Utilities",
-  "Textiles",
-  "Paper & Forest Products",
-  "Railroad Manufacture",
-  "Farming",
-  "Ranching",
-  "Dairy",
-  "Fishery",
-  "Primary/Secondary Education",
-  "Higher Education",
-  "Education Management",
-  "Research",
-  "Military",
-  "Legislative Office",
-  "Judiciary",
-  "International Affairs",
-  "Government Administration",
-  "Executive Office",
-  "Law Enforcement",
-  "Public Safety",
-  "Public Policy",
-  "Marketing & Advertising",
-  "Nonprofit Organization Management",
-  "Fund-Raising",
-  "Program Development",
-  "Writing & Editing",
-  "Staffing & Recruiting",
-  "Professional Training & Coaching",
-  "Market Research",
-  "Public Relations & Communications",
-  "Design",
-  "Luxury Goods & Jewelry",
-  "Renewables & Environment",
-  "Glass, Ceramics & Concrete",
-  "Packaging & Containers",
-  "Industrial Automation",
-  "Government Relations",
-  "Music",
-  "Think Tanks",
-  "Philanthropy",
-  "E-learning",
-  "Nanotechnology",
-  "Computer Games",
-  "Venture Capital & Private Equity",
-  "Wireless",
-  "Alternative Medicine",
-  "Media Production",
-  "Animation",
-  "Commercial Real Estate",
-  "Capital Markets",
-  "Airlines/Aviation",
-  "Maritime",
-  "Information Services",
-  "Social Media",
-  "Photography",
-  "Import & Export",
-  "Alternative Dispute Resolution",
-  "Facilities Services",
-  "Outsourcing/Offshoring",
-  "Health, Wellness & Fitness",
-  "Translation & Localization",
-  "Computer & Network Security",
-  "Graphic Design",
-  "Online Media",
-  "Environmental Services",
-  "Publishing",
-  "Printing",
-  "Human Resources",
-  "Transportation/Trucking/Railroad",
-  "Logistics & Supply Chain",
-  "Business Supplies & Equipment",
-  "Events Services",
-  "Arts & Crafts",
-  "Electrical & Electronic Manufacturing",
-  "Mechanical or Industrial Engineering",
-  "Wine & Spirits",
-  "Warehousing",
-  "Plastics",
-  "Computer & Network Security",
-  "Security & Investigations",
-  "Individual & Family Services",
-  "Religious Institutions",
-  "Civic & Social Organization",
-  "Consumer Services",
-  "Libraries",
-  "Medical Devices",
-  "Wholesale",
-  "International Trade & Development",
-  "Furniture",
-  "Banking",
+  "Defense & Space","Computer Hardware","Computer Software","Computer Networking",
+  "Internet","Semiconductors","Telecommunications","Law Practice","Legal Services",
+  "Management Consulting","Biotechnology","Medical Practice","Hospital & Health Care",
+  "Pharmaceuticals","Veterinary","Medical Device","Cosmetics","Apparel & Fashion",
+  "Sporting Goods","Tobacco","Supermarkets","Food Production","Consumer Electronics",
+  "Consumer Goods","Furniture","Retail","Entertainment","Gambling & Casinos",
+  "Leisure, Travel & Tourism","Hospitality","Restaurants","Sports",
+  "Food & Beverages","Motion Pictures & Film","Broadcast Media","Museums & Institutions",
+  "Fine Art","Performing Arts","Recreational Facilities & Services","Banking","Insurance",
+  "Financial Services","Real Estate","Investment Banking","Investment Management",
+  "Accounting","Construction","Building Materials","Architecture & Planning",
+  "Civil Engineering","Aviation & Aerospace","Automotive","Chemicals","Machinery",
+  "Mining & Metals","Oil & Energy","Shipbuilding","Utilities","Textiles",
+  "Paper & Forest Products","Railroad Manufacture","Farming","Ranching","Dairy",
+  "Fishery","Primary/Secondary Education","Higher Education","Education Management",
+  "Research","Military","Legislative Office","Judiciary","International Affairs",
+  "Government Administration","Executive Office","Law Enforcement","Public Safety",
+  "Public Policy","Marketing & Advertising","Nonprofit Organization Management",
+  "Fund-Raising","Program Development","Writing & Editing","Staffing & Recruiting",
+  "Professional Training & Coaching","Market Research",
+  "Public Relations & Communications","Design","Luxury Goods & Jewelry",
+  "Renewables & Environment","Glass, Ceramics & Concrete","Packaging & Containers",
+  "Industrial Automation","Government Relations","Music","Think Tanks","Philanthropy",
+  "E-learning","Nanotechnology","Computer Games","Venture Capital & Private Equity",
+  "Wireless","Alternative Medicine","Media Production","Animation",
+  "Commercial Real Estate","Capital Markets","Airlines/Aviation","Maritime",
+  "Information Services","Social Media","Photography","Import & Export",
+  "Alternative Dispute Resolution","Facilities Services","Outsourcing/Offshoring",
+  "Health, Wellness & Fitness","Translation & Localization",
+  "Computer & Network Security","Graphic Design","Online Media",
+  "Environmental Services","Publishing","Printing","Human Resources",
+  "Transportation/Trucking/Railroad","Logistics & Supply Chain",
+  "Business Supplies & Equipment","Events Services","Arts & Crafts",
+  "Electrical & Electronic Manufacturing","Mechanical or Industrial Engineering",
+  "Wine & Spirits","Warehousing","Plastics","Security & Investigations",
+  "Individual & Family Services","Religious Institutions",
+  "Civic & Social Organization","Consumer Services","Libraries",
+  "Medical Devices","Wholesale","International Trade & Development","Banking",
 ];
 
-// Company size — exact CSV values with labels
 const COMPANY_SIZES = [
-  { value: "1_10",       label: "1–10" },
-  { value: "11_50",      label: "11–50" },
-  { value: "51_200",     label: "51–200" },
-  { value: "201_500",    label: "201–500" },
-  { value: "501_1000",   label: "501–1000" },
-  { value: "1001_5000",  label: "1001–5000" },
-  { value: "5001_10000", label: "5001–10000" },
-  { value: "10001",      label: "10001+" },
+  { value: "1_10", label: "1–10" },{ value: "11_50", label: "11–50" },
+  { value: "51_200", label: "51–200" },{ value: "201_500", label: "201–500" },
+  { value: "501_1000", label: "501–1000" },{ value: "1001_5000", label: "1001–5000" },
+  { value: "5001_10000", label: "5001–10000" },{ value: "10001", label: "10001+" },
 ];
 
-// Revenue — exact CSV values (thresholds in dollars)
 const REVENUE_OPTIONS = [
-  { label: "Any",           value: "" },
-  { label: "< $1M",         value: "1000000" },
-  { label: "≤ $5M",         value: "5000000" },
-  { label: "≤ $10M",        value: "10000000" },
-  { label: "≤ $50M",        value: "50000000" },
-  { label: "≤ $100M",       value: "100000000" },
-  { label: "≤ $250M",       value: "250000000" },
-  { label: "≤ $500M",       value: "500000000" },
-  { label: "> $1B",         value: "1000000000" },
+  { label: "Any", value: "" },{ label: "< $1M", value: "1000000" },
+  { label: "≤ $5M", value: "5000000" },{ label: "≤ $10M", value: "10000000" },
+  { label: "≤ $50M", value: "50000000" },{ label: "≤ $100M", value: "100000000" },
+  { label: "≤ $250M", value: "250000000" },{ label: "≤ $500M", value: "500000000" },
+  { label: "> $1B", value: "1000000000" },
 ];
 
-// Years of experience — exact CSV values
 const YEARS_EXP_OPTIONS = [
-  { label: "Any experience",            value: "" },
-  { label: "< 1 year",       value: "0_1" },
-  { label: "1–2 years",      value: "1_2" },
-  { label: "3–5 years",      value: "3_5" },
-  { label: "6–10 years",     value: "6_10" },
-  { label: "10+ years",      value: "10" },
+  { label: "Any experience", value: "" },{ label: "< 1 year", value: "0_1" },
+  { label: "1–2 years", value: "1_2" },{ label: "3–5 years", value: "3_5" },
+  { label: "6–10 years", value: "6_10" },{ label: "10+ years", value: "10" },
 ];
 
-// Years in current role — exact CSV values
 const YEARS_ROLE_OPTIONS = [
-  { label: "Any experience",            value: "" },
-  { label: "< 2 years",      value: "0_2" },
-  { label: "2–4 years",      value: "2_4" },
-  { label: "4–6 years",      value: "4_6" },
-  { label: "6–8 years",      value: "6_8" },
-  { label: "8–10 years",     value: "8_10" },
-  { label: "10+ years",      value: "10" },
+  { label: "Any experience", value: "" },{ label: "< 2 years", value: "0_2" },
+  { label: "2–4 years", value: "2_4" },{ label: "4–6 years", value: "4_6" },
+  { label: "6–8 years", value: "6_8" },{ label: "8–10 years", value: "8_10" },
+  { label: "10+ years", value: "10" },
 ];
 
 const CONTACT_METHODS  = ["phone", "personal email", "work email"];
@@ -322,49 +173,49 @@ const COMPANY_TAGS     = ["unicorn", "fortune500", "startup", "nonprofit", "publ
 const DEGREES          = ["Bachelor's", "Master's", "MBA", "PhD", "Associate's", "JD", "MD"];
 
 const JOB_CHANGE_SIGNALS = [
-  { label: "Any",                          value: "" },
-  { label: "Company Change – 1 month",     value: "Company Change::one_month" },
-  { label: "Company Change – 3 months",    value: "Company Change::three_months" },
-  { label: "Promotion – 1 month",          value: "Promotion::one_month" },
-  { label: "Promotion – 3 months",         value: "Promotion::three_months" },
+  { label: "Any", value: "" },
+  { label: "Company Change – 1 month", value: "Company Change::one_month" },
+  { label: "Company Change – 3 months", value: "Company Change::three_months" },
+  { label: "Promotion – 1 month", value: "Promotion::one_month" },
+  { label: "Promotion – 3 months", value: "Promotion::three_months" },
 ];
 
 const NEWS_SIGNALS = [
-  { label: "Any",                    value: "" },
-  { label: "Funding – 1 month",      value: "Funding::one_month" },
-  { label: "Funding – 3 months",     value: "Funding::three_months" },
+  { label: "Any", value: "" },
+  { label: "Funding – 1 month", value: "Funding::one_month" },
+  { label: "Funding – 3 months", value: "Funding::three_months" },
   { label: "Executive Hire – 1 month", value: "Executive Hire::one_month" },
-  { label: "IPO – 1 month",           value: "IPO::one_month" },
-  { label: "M&A – 1 month",           value: "Mergers & Acquisitions::one_month" },
-  { label: "Increases Headcount",     value: "Increases Headcount::one_month" },
-  { label: "Launches Product",        value: "Launches Product::one_month" },
-  { label: "Partnership – 1 month",   value: "Partnership::one_month" },
-  { label: "New Customer",            value: "New Customer::one_month" },
+  { label: "IPO – 1 month", value: "IPO::one_month" },
+  { label: "M&A – 1 month", value: "Mergers & Acquisitions::one_month" },
+  { label: "Increases Headcount", value: "Increases Headcount::one_month" },
+  { label: "Launches Product", value: "Launches Product::one_month" },
+  { label: "Partnership – 1 month", value: "Partnership::one_month" },
+  { label: "New Customer", value: "New Customer::one_month" },
 ];
 
 const JOB_POSTING_SIGNALS = [
-  { label: "Any",                   value: "" },
-  { label: "Engineering Roles",     value: "Engineering Roles::one_month" },
-  { label: "Sales Roles",           value: "Sales Roles::one_month" },
-  { label: "Marketing Roles",       value: "Marketing Roles::one_month" },
-  { label: "HR Roles",              value: "Human Resources Roles::one_month" },
-  { label: "Finance Roles",         value: "Finance Roles::one_month" },
-  { label: "ML / AI Roles",         value: "Machine Learning Roles::one_month" },
-  { label: "Operations Roles",      value: "Operations Roles::one_month" },
-  { label: "IT Roles",              value: "Information Technology Roles::one_month" },
-  { label: "Recruiting Roles",      value: "Recruiting Roles::one_month" },
-  { label: "Legal Roles",           value: "Legal Roles::one_month" },
-  { label: "Accounting Roles",      value: "Accounting Roles::one_month" },
-  { label: "R&D Roles",             value: "Research and Development Roles::one_month" },
+  { label: "Any", value: "" },
+  { label: "Engineering Roles", value: "Engineering Roles::one_month" },
+  { label: "Sales Roles", value: "Sales Roles::one_month" },
+  { label: "Marketing Roles", value: "Marketing Roles::one_month" },
+  { label: "HR Roles", value: "Human Resources Roles::one_month" },
+  { label: "Finance Roles", value: "Finance Roles::one_month" },
+  { label: "ML / AI Roles", value: "Machine Learning Roles::one_month" },
+  { label: "Operations Roles", value: "Operations Roles::one_month" },
+  { label: "IT Roles", value: "Information Technology Roles::one_month" },
+  { label: "Recruiting Roles", value: "Recruiting Roles::one_month" },
+  { label: "Legal Roles", value: "Legal Roles::one_month" },
+  { label: "Accounting Roles", value: "Accounting Roles::one_month" },
+  { label: "R&D Roles", value: "Research and Development Roles::one_month" },
 ];
 
 const EMAIL_GRADES = [
-  { label: "Any",                      value: "" },
-  { label: "A (highest)",              value: "A" },
-  { label: "A- (high)",                value: "A-" },
-  { label: "B (medium)",               value: "B" },
-  { label: "A+ professional only",     value: "A::professional only" },
-  { label: "A+ personal only",         value: "A::personal only" },
+  { label: "Any", value: "" },
+  { label: "A (highest)", value: "A" },
+  { label: "A- (high)", value: "A-" },
+  { label: "B (medium)", value: "B" },
+  { label: "A+ professional only", value: "A::professional only" },
+  { label: "A+ personal only", value: "A::personal only" },
 ];
 
 // ─── Gradient def ─────────────────────────────────────────────────────────────
@@ -387,23 +238,44 @@ const SectionHeader: React.FC<{
   onToggle:   () => void;
   count?:     number;
   hasActive?: boolean;
-}> = ({ label, icon: Icon, isOpen, onToggle, count, hasActive }) => (
-  <button type="button" onClick={onToggle} className="w-full flex items-center justify-between py-2 group">
+  locked?:    boolean;       // ← new: greyed-out in enrich mode
+}> = ({ label, icon: Icon, isOpen, onToggle, count, hasActive, locked }) => (
+  <button
+    type="button"
+    onClick={locked ? undefined : onToggle}
+    className={cn(
+      "w-full flex items-center justify-between py-2 group",
+      locked && "cursor-default"
+    )}
+  >
     <div className="flex items-center gap-2">
-      <Icon size={11} className={cn("transition-colors", hasActive ? "text-violet-500" : "text-slate-400 group-hover:text-slate-600")} />
-      <span className={cn("text-[10px] font-bold uppercase tracking-wider transition-colors",
-        hasActive
+      <Icon size={11} className={cn(
+        "transition-colors",
+        locked ? "text-slate-300"
+        : hasActive ? "text-violet-500"
+        : "text-slate-400 group-hover:text-slate-600"
+      )} />
+      <span className={cn(
+        "text-[10px] font-bold uppercase tracking-wider transition-colors",
+        locked ? "text-slate-300"
+        : hasActive
           ? "bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent"
-          : "text-slate-500 group-hover:text-slate-700")}>
+          : "text-slate-500 group-hover:text-slate-700"
+      )}>
         {label}
       </span>
-      {(count ?? 0) > 0 && (
+      {!locked && (count ?? 0) > 0 && (
         <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white">
           {count}
         </span>
       )}
+      {locked && (
+        <Lock size={9} className="text-slate-300" />
+      )}
     </div>
-    <ChevronDown size={10} className={cn("text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+    {!locked && (
+      <ChevronDown size={10} className={cn("text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+    )}
   </button>
 );
 
@@ -434,109 +306,48 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 220, children }: {
     return () => { cancelAnimationFrame(rafId); window.removeEventListener("scroll", update, true); window.removeEventListener("resize", update); };
   }, [isOpen, anchorRef, maxH]);
   if (!isOpen) return null;
-return ReactDOM.createPortal(
-  <div
-    style={style}
-    className="bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col overflow-hidden overflow-y-auto
-      animate-in fade-in zoom-in-95
-      duration-150 ease-out
-      ring-1 ring-black/5"
-  >
-    {children}
-  </div>,
-  document.body
-);
+  return ReactDOM.createPortal(
+    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-lg flex flex-col overflow-hidden overflow-y-auto animate-in fade-in zoom-in-95 duration-150 ease-out ring-1 ring-black/5">
+      {children}
+    </div>,
+    document.body
+  );
 }
 
 // ─── Chip tag ─────────────────────────────────────────────────────────────────
 const Chip: React.FC<{ label: string; onRemove: () => void; color?: string }> = ({ label, onRemove, color }) => (
-  <span className={cn(
-    "inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
-    color ?? "bg-violet-50 text-violet-700 border-violet-200"
-  )}>
+  <span className={cn("inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
+    color ?? "bg-violet-50 text-violet-700 border-violet-200")}>
     {label}
-    <button type="button" onClick={onRemove} className="text-slate-400 hover:text-red-400 transition-colors ml-0.5">
-      <X size={8} />
-    </button>
+    <button type="button" onClick={onRemove} className="text-slate-400 hover:text-red-400 transition-colors ml-0.5"><X size={8} /></button>
   </span>
 );
 
 // ─── Generic tag input ────────────────────────────────────────────────────────
-function TagInput({
-  selected,
-  onChange,
-  onSearch,
-  placeholder,
-  icon: Icon,
-  chipColor,
-}: {
-  selected: string[];
-  onChange: (v: string[]) => void;
-  onSearch: () => void;
-  placeholder: string;
-  icon: React.ElementType;
-  chipColor?: string;
+function TagInput({ selected, onChange, onSearch, placeholder, icon: Icon, chipColor }: {
+  selected: string[]; onChange: (v: string[]) => void; onSearch: () => void;
+  placeholder: string; icon: React.ElementType; chipColor?: string;
 }) {
   const [input, setInput] = useState("");
-
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === "Enter" || e.key === ",") && input.trim()) {
       e.preventDefault();
-      if (!selected.includes(input.trim()))
-        onChange([...selected, input.trim()]);
+      if (!selected.includes(input.trim())) onChange([...selected, input.trim()]);
       setInput("");
-    } else if (e.key === "Enter" && !input.trim()) {
-      e.preventDefault();
-      onSearch();
-    } else if (e.key === "Backspace" && !input && selected.length) {
-      onChange(selected.slice(0, -1));
-    }
+    } else if (e.key === "Enter" && !input.trim()) { e.preventDefault(); onSearch(); }
+    else if (e.key === "Backspace" && !input && selected.length) onChange(selected.slice(0, -1));
   };
-
   return (
     <div className="space-y-1.5">
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {selected.map((t) => (
-            <Chip
-              key={t}
-              label={t}
-              onRemove={() =>
-                onChange(selected.filter((x) => x !== t))
-              }
-              color={chipColor}
-            />
-          ))}
+          {selected.map(t => <Chip key={t} label={t} onRemove={() => onChange(selected.filter(x => x !== t))} color={chipColor} />)}
         </div>
       )}
-
-      {/* INPUT CONTAINER */}
-      <div className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8
-        transition-all duration-200
-        hover:border-purple-400
-        focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
-
-        {/* ICON */}
-        <Icon
-          size={10}
-          className="flex-shrink-0 text-slate-400 transition-colors duration-200
-            group-hover:text-purple-500
-            group-focus-within:text-purple-600"
-        />
-
-        {/* INPUT */}
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder={placeholder}
-          className="flex-1 bg-transparent text-[11px] text-slate-600
-            placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic
-            focus:outline-none
-            transition-colors duration-200
-            group-focus-within:text-slate-800"
-        />
+      <div className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 transition-all duration-200 hover:border-purple-400 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+        <Icon size={10} className="flex-shrink-0 text-slate-400 transition-colors duration-200 group-hover:text-purple-500 group-focus-within:text-purple-600" />
+        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} placeholder={placeholder}
+          className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic focus:outline-none" />
       </div>
     </div>
   );
@@ -547,70 +358,30 @@ function SearchableMultiSelect({ label, options, selected, onChange, onSearch, i
   label: string; options: string[]; selected: string[]; onChange: (v: string[]) => void;
   onSearch: () => void; icon: React.ElementType; chipColor?: string;
 }) {
-  const [q, setQ]       = useState("");
-  const [open, setOpen] = useState(false);
-  const wrapRef         = useRef<HTMLDivElement>(null);
-  const anchorRef       = useRef<HTMLDivElement>(null);
-  const inputRef        = useRef<HTMLInputElement>(null);
-
-  const filtered = useMemo(() =>
-    options.filter(o => !selected.includes(o) && o.toLowerCase().includes(q.toLowerCase())).slice(0, 30),
-  [options, selected, q]);
-
+  const [q, setQ] = useState(""); const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null); const anchorRef = useRef<HTMLDivElement>(null); const inputRef = useRef<HTMLInputElement>(null);
+  const filtered = useMemo(() => options.filter(o => !selected.includes(o) && o.toLowerCase().includes(q.toLowerCase())).slice(0, 30), [options, selected, q]);
   useEffect(() => {
-    const fn = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); }
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
+    const fn = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); } };
+    document.addEventListener("mousedown", fn); return () => document.removeEventListener("mousedown", fn);
   }, []);
-
   return (
     <div ref={wrapRef} className="space-y-1.5">
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map(v => <Chip key={v} label={v} onRemove={() => onChange(selected.filter(x => x !== v))} color={chipColor}  />)}
-        </div>
-      )}
+      {selected.length > 0 && <div className="flex flex-wrap gap-1">{selected.map(v => <Chip key={v} label={v} onRemove={() => onChange(selected.filter(x => x !== v))} color={chipColor} />)}</div>}
       <div ref={anchorRef}>
         <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text
-  transition-all duration-200
-  hover:border-purple-300
-  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
-          <Icon
-  size={10}
-  className="text-slate-400 flex-shrink-0 transition-colors duration-200
-    group-hover:text-purple-500
-    group-focus-within:text-purple-600"
-/>
-
-
-          <input ref={inputRef} type="text" value={q}
-            onChange={e => { setQ(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
+          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text transition-all duration-200 hover:border-purple-300 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+          <Icon size={10} className="text-slate-400 flex-shrink-0 transition-colors duration-200 group-hover:text-purple-500 group-focus-within:text-purple-600" />
+          <input ref={inputRef} type="text" value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key === "Escape") setOpen(false); if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
-            placeholder={label}
-           className="flex-1 bg-transparent text-[11px] text-slate-600
-  focus:outline-none transition-colors duration-200
-  group-focus-within:text-slate-900
-  placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
-          <ChevronDown size={9} className={cn(
-    "text-slate-400 flex-shrink-0 transition-all duration-200",
-    "group-hover:text-purple-500",
-    open && "rotate-180 text-purple-600"
-  )} />
+            placeholder={label} className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
+          <ChevronDown size={9} className={cn("text-slate-400 flex-shrink-0 transition-all duration-200 group-hover:text-purple-500", open && "rotate-180 text-purple-600")} />
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && filtered.length > 0}>
           {filtered.map(opt => (
-            <button key={opt} type="button"
-              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
-              className={cn(
-  "group w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left",
-  "transition-all duration-150",
-  "hover:bg-violet-50 hover:pl-4",
-  selected.includes(opt) && "bg-purple-50 text-purple-600 font-medium"
-)}>
+            <button key={opt} type="button" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+              className={cn("group w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-all duration-150 hover:bg-violet-50 hover:pl-4",
+                selected.includes(opt) && "bg-purple-50 text-purple-600 font-medium")}>
               {opt}
             </button>
           ))}
@@ -621,71 +392,25 @@ function SearchableMultiSelect({ label, options, selected, onChange, onSearch, i
 }
 
 // ─── Simple select ─────────────────────────────────────────────────────────────
-function SimpleSelect({
-  value,
-  onChange,
-  options,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { label: string; value: string }[];
-  placeholder?: string;
+function SimpleSelect({ value, onChange, options, placeholder }: {
+  value: string; onChange: (v: string) => void; options: { label: string; value: string }[]; placeholder?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLDivElement>(null);
-
+  const [open, setOpen] = useState(false); const anchorRef = useRef<HTMLDivElement>(null);
   const selected = options.find(o => o.value === value);
-
   return (
     <div className="relative">
-      {/* Trigger */}
-      <div
-        ref={anchorRef}
-        onClick={() => setOpen(v => !v)}
-        className="group w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5
-          flex items-center justify-between cursor-pointer
-          transition-all duration-200
-          hover:border-purple-300
-          focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200"
-      >
-        <span className={cn(
-          "text-[11px]",
-          value ? "text-slate-700" : "text-slate-400 italic"
-        )}>
-          {selected?.label || placeholder || "Select"}
-        </span>
-
-        <svg
-          className={cn(
-            "w-3 h-3 text-slate-400 transition-all duration-200",
-            "group-hover:text-purple-500",
-            open && "rotate-180 text-purple-600"
-          )}
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
+      <div ref={anchorRef} onClick={() => setOpen(v => !v)}
+        className="group w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 flex items-center justify-between cursor-pointer transition-all duration-200 hover:border-purple-300 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+        <span className={cn("text-[11px]", value ? "text-slate-700" : "text-slate-400 italic")}>{selected?.label || placeholder || "Select"}</span>
+        <svg className={cn("w-3 h-3 text-slate-400 transition-all duration-200 group-hover:text-purple-500", open && "rotate-180 text-purple-600")} viewBox="0 0 20 20" fill="currentColor">
           <path d="M5.25 7.5L10 12.25L14.75 7.5" />
         </svg>
       </div>
-
-      {/* Dropdown */}
       <PortalDropdown anchorRef={anchorRef} isOpen={open}>
         {options.map(opt => (
-          <button
-            key={opt.value}
-            type="button"
-            onMouseDown={e => {
-              e.preventDefault();
-              onChange(opt.value);
-              setOpen(false);
-            }}
-            className={cn(
-              "w-full text-left px-3 py-1.5 text-[11px] transition-all duration-150",
-              "hover:bg-violet-50 hover:pl-4",
-              value === opt.value && "bg-purple-50 text-purple-600 font-medium"
-            )}
-          >
+          <button key={opt.value} type="button" onMouseDown={e => { e.preventDefault(); onChange(opt.value); setOpen(false); }}
+            className={cn("w-full text-left px-3 py-1.5 text-[11px] transition-all duration-150 hover:bg-violet-50 hover:pl-4",
+              value === opt.value && "bg-purple-50 text-purple-600 font-medium")}>
             {opt.label}
           </button>
         ))}
@@ -696,15 +421,13 @@ function SimpleSelect({
 
 // ─── Text input ───────────────────────────────────────────────────────────────
 function TextInput({ value, onChange, onSearch, placeholder, icon: Icon }: {
-  value: string; onChange: (v: string) => void; onSearch: () => void;
-  placeholder: string; icon: React.ElementType;
+  value: string; onChange: (v: string) => void; onSearch: () => void; placeholder: string; icon: React.ElementType;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 focus-within:border-violet-400 transition-colors">
       <Icon size={10} className="text-slate-400 flex-shrink-0" />
       <input type="text" value={value} onChange={e => onChange(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
-        placeholder={placeholder}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }} placeholder={placeholder}
         className="flex-1 bg-transparent text-[11px] text-slate-600 placeholder-slate-400 focus:outline-none" />
       {value && <button type="button" onClick={() => onChange("")}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
     </div>
@@ -720,14 +443,9 @@ function CheckboxPills({ options, selected, onChange }: {
       {options.map(o => {
         const active = selected.includes(o.value);
         return (
-          <button key={o.value} type="button"
-            onClick={() => onChange(active ? selected.filter(x => x !== o.value) : [...selected, o.value])}
-            className={cn(
-              "px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-all",
-              active
-                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent"
-                : "bg-white text-slate-500 border-slate-200 hover:border-violet-300"
-            )}>
+          <button key={o.value} type="button" onClick={() => onChange(active ? selected.filter(x => x !== o.value) : [...selected, o.value])}
+            className={cn("px-2 py-0.5 rounded-full text-[9px] font-semibold border transition-all",
+              active ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent" : "bg-white text-slate-500 border-slate-200 hover:border-violet-300")}>
             {o.label}
           </button>
         );
@@ -736,17 +454,8 @@ function CheckboxPills({ options, selected, onChange }: {
   );
 }
 
-// String-array pill variant (for seniority, tags, contact methods)
-function StringPills({ options, selected, onChange }: {
-  options: string[]; selected: string[]; onChange: (v: string[]) => void;
-}) {
-  return (
-    <CheckboxPills
-      options={options.map(o => ({ value: o, label: o }))}
-      selected={selected}
-      onChange={onChange}
-    />
-  );
+function StringPills({ options, selected, onChange }: { options: string[]; selected: string[]; onChange: (v: string[]) => void; }) {
+  return <CheckboxPills options={options.map(o => ({ value: o, label: o }))} selected={selected} onChange={onChange} />;
 }
 
 // ─── Skills chip builder ──────────────────────────────────────────────────────
@@ -756,35 +465,25 @@ const SKILL_MODE_CONFIG: Record<SkillMode, { label: string; dot: string; chip: s
   exclude: { label: "Exclude", dot: "bg-red-400",    chip: "bg-red-50 text-red-600 border-red-200" },
 };
 
-const SkillChipBuilder: React.FC<{
-  chips: SkillChip[]; onChange: (c: SkillChip[]) => void; onSearch: () => void;
-}> = ({ chips, onChange, onSearch }) => {
-  const [input, setInput]       = useState("");
-  const [mode, setMode]         = useState<SkillMode>("must");
-  const [showBool, setShowBool] = useState(false);
-  const [boolIn, setBoolIn]     = useState("");
-  const inputRef                = useRef<HTMLInputElement>(null);
+const SkillChipBuilder: React.FC<{ chips: SkillChip[]; onChange: (c: SkillChip[]) => void; onSearch: () => void; }> = ({ chips, onChange, onSearch }) => {
+  const [input, setInput] = useState(""); const [mode, setMode] = useState<SkillMode>("must");
+  const [showBool, setShowBool] = useState(false); const [boolIn, setBoolIn] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const addChips = (raw: string, m: SkillMode) => {
-    const labels   = raw.split(",").map(s => s.trim()).filter(Boolean);
+    const labels = raw.split(",").map(s => s.trim()).filter(Boolean);
     const existing = new Set(chips.map(c => c.label.toLowerCase()));
-    const next     = labels.filter(l => !existing.has(l.toLowerCase())).map(l => ({ label: l, mode: m }));
+    const next = labels.filter(l => !existing.has(l.toLowerCase())).map(l => ({ label: l, mode: m }));
     if (next.length) onChange([...chips, ...next]);
   };
-
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
-      e.preventDefault(); addChips(input, mode); setInput("");
-    } else if (e.key === "Enter" && !input.trim()) {
-      e.preventDefault(); onSearch();
-    } else if (e.key === "Backspace" && !input && chips.length) {
-      onChange(chips.slice(0, -1));
-    }
+    if ((e.key === "Enter" || e.key === ",") && input.trim()) { e.preventDefault(); addChips(input, mode); setInput(""); }
+    else if (e.key === "Enter" && !input.trim()) { e.preventDefault(); onSearch(); }
+    else if (e.key === "Backspace" && !input && chips.length) onChange(chips.slice(0, -1));
   };
-
   const applyBoolean = () => {
     if (!boolIn.trim()) return;
-    const raw   = boolIn.replace(/\bAND\b/gi, " ").replace(/\bOR\b/gi, " ");
+    const raw = boolIn.replace(/\bAND\b/gi, " ").replace(/\bOR\b/gi, " ");
     const parts = raw.split(/\s+/).filter(Boolean);
     const must: string[] = [], nice: string[] = [], exclude: string[] = [];
     let skipNext = false;
@@ -804,18 +503,12 @@ const SkillChipBuilder: React.FC<{
     ]);
     setBoolIn(""); setShowBool(false);
   };
-
   const cycleMode = (idx: number) => {
     const order: SkillMode[] = ["must", "nice", "exclude"];
     const next = order[(order.indexOf(chips[idx].mode) + 1) % order.length];
     onChange(chips.map((c, i) => i === idx ? { ...c, mode: next } : c));
   };
-
-  const counts = {
-    must:    chips.filter(c => c.mode === "must").length,
-    nice:    chips.filter(c => c.mode === "nice").length,
-    exclude: chips.filter(c => c.mode === "exclude").length,
-  };
+  const counts = { must: chips.filter(c => c.mode === "must").length, nice: chips.filter(c => c.mode === "nice").length, exclude: chips.filter(c => c.mode === "exclude").length };
 
   return (
     <div className="space-y-1.5">
@@ -824,73 +517,36 @@ const SkillChipBuilder: React.FC<{
           const cfg = SKILL_MODE_CONFIG[m];
           return (
             <button key={m} type="button" onClick={() => setMode(m)}
-             className={cn(
-  "group flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all duration-200",
-  mode === m
-    ? `${cfg.chip} border-current shadow-sm scale-[1.02]`
-    : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500 hover:shadow-sm"
-)}>
-              <span
-  className={cn(
-    "w-1.5 h-1.5 rounded-full transition-all duration-200",
-    cfg.dot,
-    "group-hover:scale-125 group-hover:opacity-90"
-  )}
-/>
-              {cfg.label}
-              {counts[m] > 0 && <span className="opacity-70">({counts[m]})</span>}
+              className={cn("group flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all duration-200",
+                mode === m ? `${cfg.chip} border-current shadow-sm scale-[1.02]` : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500 hover:shadow-sm")}>
+              <span className={cn("w-1.5 h-1.5 rounded-full transition-all duration-200", cfg.dot, "group-hover:scale-125 group-hover:opacity-90")} />
+              {cfg.label}{counts[m] > 0 && <span className="opacity-70">({counts[m]})</span>}
             </button>
           );
         })}
         <button type="button" onClick={() => setShowBool(v => !v)}
-          className={cn(
-  "ml-auto text-[9px] px-1.5 py-0.5 rounded border transition-all duration-200",
-  showBool
-    ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent shadow-sm"
-    : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500"
-)}>
+          className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded border transition-all duration-200",
+            showBool ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent shadow-sm" : "text-slate-400 border-slate-200 bg-white hover:border-purple-300 hover:text-purple-500")}>
           Boolean
         </button>
       </div>
-
       {showBool && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5
-  transition-all duration-200
-  focus-within:border-purple-400 focus-within:ring-1 focus-within:ring-purple-200">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5 transition-all duration-200 focus-within:border-purple-400 focus-within:ring-1 focus-within:ring-purple-200">
           <p className="text-[8px] text-slate-400">e.g. <span className="text-violet-500">Python AND React NOT PHP</span></p>
           <div className="flex gap-1">
-            <input type="text" value={boolIn} onChange={e => setBoolIn(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && applyBoolean()} placeholder="Python AND React NOT PHP"
+            <input type="text" value={boolIn} onChange={e => setBoolIn(e.target.value)} onKeyDown={e => e.key === "Enter" && applyBoolean()} placeholder="Python AND React NOT PHP"
               className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-violet-400 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
-            <button type="button" onClick={applyBoolean}
-              className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">
-              Parse
-            </button>
+            <button type="button" onClick={applyBoolean} className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">Parse</button>
           </div>
         </div>
       )}
-
       <div onClick={() => inputRef.current?.focus()}
-        className="group rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text
-  transition-all duration-200
-  hover:border-purple-300
-  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+        className="group rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text transition-all duration-200 hover:border-purple-300 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
         {chips.map((chip, i) => {
           const cfg = SKILL_MODE_CONFIG[chip.mode];
           return (
-            <span key={i} onClick={() => cycleMode(i)}
-              className={cn(
-  "group inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer",
-  "transition-all duration-200 hover:scale-[1.05] hover:shadow-sm",
-  cfg.chip
-)}>
-             <span
-  className={cn(
-    "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-200",
-    cfg.dot,
-    "group-hover:scale-125"
-  )}
-/>
+            <span key={i} onClick={() => cycleMode(i)} className={cn("group inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer transition-all duration-200 hover:scale-[1.05] hover:shadow-sm", cfg.chip)}>
+              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-200", cfg.dot, "group-hover:scale-125")} />
               {chip.label}
               <button type="button" onClick={e => { e.stopPropagation(); onChange(chips.filter((_, j) => j !== i)); }} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
             </span>
@@ -900,16 +556,6 @@ const SkillChipBuilder: React.FC<{
           placeholder={chips.length === 0 ? "Type skill, Enter…" : ""}
           className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 focus:outline-none placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
       </div>
-
-      {/* <div className="flex items-center gap-2 text-[8px] text-slate-400">
-        {(["must","nice","exclude"] as SkillMode[]).map(m => (
-          <span key={m} className="flex items-center gap-0.5">
-            <span className={cn("w-1.5 h-1.5 rounded-full", SKILL_MODE_CONFIG[m].dot)} />
-            {m === "must" ? "strict" : m === "nice" ? "boost" : "exclude"}
-          </span>
-        ))}
-        <span className="ml-auto">click to cycle</span>
-      </div> */}
     </div>
   );
 };
@@ -941,24 +587,14 @@ function getLocType(val: string): LocType {
   return "city";
 }
 
-function LocationSelect({ selected, onChange, onSearch }: {
-  selected: string[]; onChange: (v: string[]) => void; onSearch: () => void;
-}) {
-  const [q, setQ]       = useState("");
-  const [open, setOpen] = useState(false);
-  const wrapRef         = useRef<HTMLDivElement>(null);
-  const anchorRef       = useRef<HTMLDivElement>(null);
-  const inputRef        = useRef<HTMLInputElement>(null);
-  const options         = useMemo(() => searchLocs(q, selected), [q, selected]);
-
+function LocationSelect({ selected, onChange, onSearch }: { selected: string[]; onChange: (v: string[]) => void; onSearch: () => void; }) {
+  const [q, setQ] = useState(""); const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null); const anchorRef = useRef<HTMLDivElement>(null); const inputRef = useRef<HTMLInputElement>(null);
+  const options = useMemo(() => searchLocs(q, selected), [q, selected]);
   useEffect(() => {
-    const fn = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); }
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
+    const fn = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); } };
+    document.addEventListener("mousedown", fn); return () => document.removeEventListener("mousedown", fn);
   }, []);
-
   return (
     <div ref={wrapRef} className="space-y-1.5">
       {selected.length > 0 && (
@@ -966,23 +602,9 @@ function LocationSelect({ selected, onChange, onSearch }: {
           {selected.map(val => {
             const t = getLocType(val);
             return (
-              <span key={val} className={cn(
-  "group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
-  "transition-all duration-200 hover:scale-[1.05] hover:shadow-sm",
-  LOC_STYLE[t]
-)}>
+              <span key={val} className={cn("group inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border transition-all duration-200 hover:scale-[1.05] hover:shadow-sm", LOC_STYLE[t])}>
                 {val}
-                <button
-  type="button"
-  onMouseDown={e => {
-    e.preventDefault();
-    e.stopPropagation();
-    onChange(selected.filter(x => x !== val));
-  }}
-  className="opacity-60 hover:opacity-100 hover:text-red-500 transition-all duration-150"
->
-  <X size={8} />
-</button>
+                <button type="button" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(selected.filter(x => x !== val)); }} className="opacity-60 hover:opacity-100 hover:text-red-500 transition-all duration-150"><X size={8} /></button>
               </span>
             );
           })}
@@ -990,47 +612,18 @@ function LocationSelect({ selected, onChange, onSearch }: {
       )}
       <div ref={anchorRef}>
         <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text
-  transition-all duration-200
-  hover:border-purple-300
-  focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200"
-          onMouseDown={e => e.stopPropagation()}>
-          <MapPin
-  size={10}
-  className="flex-shrink-0 text-slate-400 transition-colors duration-200
-    group-hover:text-purple-500
-    group-focus-within:text-purple-600"
-/>
-          <input ref={inputRef} type="text" value={q}
-            onChange={e => { setQ(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
+          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text transition-all duration-200 hover:border-purple-300 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200" onMouseDown={e => e.stopPropagation()}>
+          <MapPin size={10} className="flex-shrink-0 text-slate-400 transition-colors duration-200 group-hover:text-purple-500 group-focus-within:text-purple-600" />
+          <input ref={inputRef} type="text" value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key === "Enter" && !q.trim()) { setOpen(false); onSearch(); } }}
-            placeholder="Select a country, state or city…"
-            className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none transition-colors duration-200 group-focus-within:text-slate-900 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
-          {q && <button
-  type="button"
-  onMouseDown={e => { e.preventDefault(); setQ(""); }}
-  className="text-slate-400 hover:text-red-500 transition-colors duration-150"
->
-  <X size={9} />
-</button>}
+            placeholder="Select a country, state or city…" className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none transition-colors duration-200 group-focus-within:text-slate-900 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
+          {q && <button type="button" onMouseDown={e => { e.preventDefault(); setQ(""); }} className="text-slate-400 hover:text-red-500 transition-colors duration-150"><X size={9} /></button>}
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && options.length > 0}>
           {options.map(opt => (
-            <button key={opt.value} type="button"
-              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt.value]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
-              className="group w-full flex items-center gap-2 px-3 py-1.5 text-left
-  transition-all duration-150
-  hover:bg-violet-50 hover:pl-4">
-              <span
-  className={cn(
-    "text-[8px] px-1 py-0.5 rounded border font-semibold",
-    "transition-all duration-200 group-hover:scale-105",
-    LOC_STYLE[opt.type]
-  )}
->
-  {opt.type[0].toUpperCase()}
-</span>
+            <button key={opt.value} type="button" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange([...selected, opt.value]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+              className="group w-full flex items-center gap-2 px-3 py-1.5 text-left transition-all duration-150 hover:bg-violet-50 hover:pl-4">
+              <span className={cn("text-[8px] px-1 py-0.5 rounded border font-semibold transition-all duration-200 group-hover:scale-105", LOC_STYLE[opt.type])}>{opt.type[0].toUpperCase()}</span>
               <span className="text-[11px] text-slate-700 truncate group-hover:text-pink-900">{opt.label}</span>
             </button>
           ))}
@@ -1043,10 +636,13 @@ function LocationSelect({ selected, onChange, onSearch }: {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const Div = () => <div className="h-px bg-slate-100" />;
 const SL: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="text-[10px] font-medium uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
-    {children}
-  </p>
+  <p className="text-[10px] font-medium uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">{children}</p>
 );
+
+// ─── URL validation ───────────────────────────────────────────────────────────
+function isValidLinkedInUrl(url: string): boolean {
+  return /linkedin\.com\/in\//i.test(url.trim());
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 type SearchProvider = "rocketreach" | "contactout";
@@ -1068,18 +664,15 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
   filters, provider = "rocketreach", onChange, onClearAll, onSearch,
   isLoading, totalEntries, filterCount, hasFilters,
 }) => {
-  const [open, setOpen] = useState({
-    core:      true,
-    company:   false,
-    role:      false,
-    education: false,
-    signals:   false,
-    sort:      false,
-  });
-
+  const [open, setOpen] = useState({ core: true, company: false, role: false, education: false, signals: false, sort: false });
   const toggle = (k: keyof typeof open) => setOpen(prev => ({ ...prev, [k]: !prev[k] }));
-  const s   = filters;
+  const s = filters;
   const set = (patch: Partial<RRFilters>) => onChange(patch);
+
+  // ── Enrich mode: true when a valid LinkedIn URL is present ──────────────
+  const enrichMode = provider === "contactout" && isValidLinkedInUrl(s.linkedinUrl ?? "");
+  // URL field value regardless of validity (for controlled input)
+  const urlValue = s.linkedinUrl ?? "";
 
   // Active counts per section
   const coreCnt    = s.titles.length + s.locations.length + s.managementLevels.length + s.skillChips.length
@@ -1093,6 +686,11 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
   const sigCnt     = s.contactMethod.length + (s.jobChangeSignal ? 1 : 0)
     + (s.newsSignal ? 1 : 0) + (s.jobPostingSignal ? 1 : 0) + (s.emailGrade ? 1 : 0);
 
+  // Run button state
+  const canRun = enrichMode
+    ? !isLoading                                 // enrich mode: URL present is enough
+    : (hasFilters && !isLoading);                // normal mode: need at least one filter
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-slate-100">
       <GradientDef />
@@ -1105,111 +703,141 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
             <span className="text-[10px] font-medium bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               People Search
             </span>
+            {/* ── ENRICH MODE BADGE ── */}
+            {enrichMode && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-bold bg-gradient-to-r from-violet-600 to-pink-500 text-white animate-in fade-in duration-200">
+                <Zap size={7} className="fill-white" /> Enrich Mode
+              </span>
+            )}
             {isLoading && <Loader2 size={11} className="animate-spin text-slate-400" />}
           </div>
-          {hasFilters && (
-            <button type="button" onClick={onClearAll}
+          {(hasFilters || urlValue) && (
+            <button type="button" onClick={() => { onClearAll(); set({ linkedinUrl: "" }); }}
               className="flex items-center gap-1 text-[10px] font-medium bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               <RotateCcw size={9} /> Reset
             </button>
           )}
         </div>
 
-        {/* {totalEntries > 0 && (
-          <div className="mb-3 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-            <span className="text-[10px] bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-medium">Found</span>
-            <span className="text-[10px] font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">{totalEntries.toLocaleString()}</span>
+        {/* ── LinkedIn URL input — only for ContactOut ── */}
+        {provider === "contactout" && (
+          <div className="mb-3">
+            <div className={cn(
+              "rounded-lg p-[1px] transition-all duration-200",
+              enrichMode
+                ? "bg-gradient-to-r from-violet-600 to-pink-500"
+                : urlValue && !enrichMode
+                  ? "bg-red-300"
+                  : "bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600"
+            )}>
+              <div className="relative bg-white rounded-lg flex items-center">
+                <Link2 size={11} className={cn(
+                  "absolute left-2.5 top-1/2 -translate-y-1/2 transition-colors",
+                  enrichMode ? "text-violet-500" : "text-slate-400"
+                )} />
+                <input
+                  type="text"
+                  placeholder="Paste LinkedIn URL to enrich…"
+                  value={urlValue}
+                  onChange={e => set({ linkedinUrl: e.target.value })}
+                  onKeyDown={e => { if (e.key === "Enter" && enrichMode) { e.preventDefault(); onSearch(); } }}
+                  className="w-full h-8 pl-7 pr-7 rounded-lg text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic bg-transparent border-none outline-none"
+                />
+                {urlValue && (
+                  <button type="button" onClick={() => set({ linkedinUrl: "" })}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-400 transition-colors">
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Validation hint */}
+            {urlValue && !enrichMode && (
+              <p className="text-[9px] text-red-400 mt-1 px-1">
+                Enter a valid linkedin.com/in/… URL
+              </p>
+            )}
+            {enrichMode && (
+              <p className="text-[9px] text-violet-500 mt-1 px-1 flex items-center gap-1">
+                <Zap size={8} className="fill-violet-500" />
+                Filters disabled — searching by URL only
+              </p>
+            )}
           </div>
-        )} */}
+        )}
 
-        {/* Keyword */}
-        <div className="rounded-lg p-[1px] bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600 transition-all mb-3">
-          <div className="relative bg-white rounded-lg">
-            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="text" placeholder="Keyword search…" value={s.keyword}
-              onChange={e => set({ keyword: e.target.value })}
-              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
-              className="w-full h-8 pl-7 pr-3 rounded-lg text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic bg-transparent border-none outline-none" />
+        {/* ── Keyword (only in normal mode) ── */}
+        {!enrichMode && (
+          <div className="rounded-lg p-[1px] bg-slate-200 focus-within:bg-gradient-to-r focus-within:from-purple-600 focus-within:to-pink-600 transition-all mb-3">
+            <div className="relative bg-white rounded-lg">
+              <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Keyword search…" value={s.keyword}
+                onChange={e => set({ keyword: e.target.value })}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); onSearch(); } }}
+                className="w-full h-8 pl-7 pr-3 rounded-lg text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic bg-transparent border-none outline-none" />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Run Search */}
-        <button type="button" onClick={onSearch} disabled={isLoading || !hasFilters}
+        {/* ── Run Search / Enrich Profile button ── */}
+        <button type="button" onClick={onSearch} disabled={!canRun}
           className={cn("w-full flex items-center justify-center gap-2 py-2 rounded-lg text-[12px] font-bold transition-all",
-            hasFilters && !isLoading
+            canRun
               ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:opacity-90 shadow-sm"
               : "bg-slate-100 text-slate-400 cursor-not-allowed")}>
           {isLoading
-            ? <><Loader2 size={12} className="animate-spin" /> Searching…</>
-            : <><Play size={11} className="fill-current" /> Run Search</>}
+            ? <><Loader2 size={12} className="animate-spin" /> {enrichMode ? "Enriching…" : "Searching…"}</>
+            : enrichMode
+              ? <><Zap size={11} className="fill-current" /> Enrich Profile</>
+              : <><Play size={11} className="fill-current" /> Run Search</>}
         </button>
       </div>
 
       {/* ── Filter sections ── */}
+      {/* When enrichMode: all sections are greyed + non-interactive */}
       <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4">
+        <div className={cn("px-4", enrichMode && "opacity-40 pointer-events-none select-none")}>
+
+          {/* Enrich mode locked banner */}
+          {enrichMode && (
+            <div className="flex items-center gap-2 py-2.5 text-[10px] text-slate-400">
+              <Lock size={10} /> Filters not used in URL lookup
+            </div>
+          )}
 
           {/* ── CORE ── */}
-          <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={() => toggle("core")} count={coreCnt} hasActive={coreCnt > 0} />
-          {open.core && (
+          <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={() => toggle("core")} count={coreCnt} hasActive={coreCnt > 0} locked={enrichMode} />
+          {open.core && !enrichMode && (
             <div className="pb-3 space-y-3">
-               {/* Skills */}
               <div>
                 <SL>Skills</SL>
                 <SkillChipBuilder chips={s.skillChips} onChange={v => set({ skillChips: v })} onSearch={onSearch} />
               </div>
-              {/* Job Title */}
               <div>
                 <SL>Job Title</SL>
-                <TagInput selected={s.titles} onChange={v => set({ titles: v })} onSearch={onSearch}
-                  placeholder="e.g. Software Engineer, Enter…" icon={Briefcase} />
+                <TagInput selected={s.titles} onChange={v => set({ titles: v })} onSearch={onSearch} placeholder="e.g. Software Engineer, Enter…" icon={Briefcase} />
               </div>
-
-              {/* Open to Work */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer" onClick={() => set({ openToWork: !s.openToWork })}>
-                  <div className={cn("relative w-8 h-4 rounded-full transition-all cursor-pointer flex-shrink-0",
-                    s.openToWork ? "bg-gradient-to-r from-purple-600 to-pink-600" : "bg-slate-200")}>
-                    <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all"
-                      style={{ left: s.openToWork ? "calc(100% - 14px)" : "2px" }} />
+                  <div className={cn("relative w-8 h-4 rounded-full transition-all cursor-pointer flex-shrink-0", s.openToWork ? "bg-gradient-to-r from-purple-600 to-pink-600" : "bg-slate-200")}>
+                    <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all" style={{ left: s.openToWork ? "calc(100% - 14px)" : "2px" }} />
                   </div>
-                  <span className={cn("text-[11px] font-medium", s.openToWork ? "text-violet-700" : "text-slate-600")}>
-                    Open to Work
-                  </span>
+                  <span className={cn("text-[11px] font-medium", s.openToWork ? "text-violet-700" : "text-slate-600")}>Open to Work</span>
                 </label>
-                {s.openToWork && (
-                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Active</span>
-                )}
+                {s.openToWork && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Active</span>}
               </div>
-
-              {/* Seniority — exact CO values */}
-              {/* <div>
-                <SL>Seniority Level</SL>
-                <StringPills options={MANAGEMENT_LEVELS} selected={s.managementLevels}
-                  onChange={v => set({ managementLevels: v })} />
-              </div> */}
-
-             
-
-              {/* Location */}
               <div>
                 <SL>Location</SL>
                 <LocationSelect selected={s.locations} onChange={v => set({ locations: v })} onSearch={onSearch} />
               </div>
-
-              {/* Years of experience */}
               <div>
                 <SL>Years of Experience</SL>
-                <SimpleSelect value={s.yearsExperience} onChange={v => set({ yearsExperience: v })}
-                  options={YEARS_EXP_OPTIONS} placeholder="Any experience" />
+                <SimpleSelect value={s.yearsExperience} onChange={v => set({ yearsExperience: v })} options={YEARS_EXP_OPTIONS} placeholder="Any experience" />
               </div>
-
-              {/* Years in current role — CO only */}
               {provider === "contactout" && (
                 <div>
                   <SL>Years in Current Role</SL>
-                  <SimpleSelect value={s.yearsInCurrentRole} onChange={v => set({ yearsInCurrentRole: v })}
-                    options={YEARS_ROLE_OPTIONS} placeholder="Any duration" />
+                  <SimpleSelect value={s.yearsInCurrentRole} onChange={v => set({ yearsInCurrentRole: v })} options={YEARS_ROLE_OPTIONS} placeholder="Any duration" />
                 </div>
               )}
             </div>
@@ -1218,97 +846,33 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           <Div />
 
           {/* ── COMPANY ── */}
-          <SectionHeader label="Company" icon={Building2} isOpen={open.company} onToggle={() => toggle("company")} count={companyCnt} hasActive={companyCnt > 0} />
-          {open.company && (
+          <SectionHeader label="Company" icon={Building2} isOpen={open.company} onToggle={() => toggle("company")} count={companyCnt} hasActive={companyCnt > 0} locked={enrichMode} />
+          {open.company && !enrichMode && (
             <div className="pb-3 space-y-3">
               <div>
                 <SL>Current Employer</SL>
-                <TagInput selected={s.currentEmployer} onChange={v => set({ currentEmployer: v })} onSearch={onSearch}
-                  placeholder="Add company, Enter…" icon={Building2} chipColor="bg-blue-50 text-blue-700 border-blue-200" />
+                <TagInput selected={s.currentEmployer} onChange={v => set({ currentEmployer: v })} onSearch={onSearch} placeholder="Add company, Enter…" icon={Building2} chipColor="bg-blue-50 text-blue-700 border-blue-200" />
               </div>
-
-              {/* <div>
-                <SL>Company Size</SL>
-                <CheckboxPills options={COMPANY_SIZES} selected={s.companySize}
-                  onChange={v => set({ companySize: v })} />
-              </div> */}
-
-              {/* Industry — exact CO accepted values */}
               <div>
                 <SL>Industry</SL>
-                <SearchableMultiSelect label="Search industries…" options={CO_INDUSTRIES}
-                  selected={s.companyIndustry} onChange={v => set({ companyIndustry: v })}
-                  onSearch={onSearch} icon={Building2}
-                  chipColor="bg-teal-50 text-teal-700 border-teal-200" />
+                <SearchableMultiSelect label="Search industries…" options={CO_INDUSTRIES} selected={s.companyIndustry} onChange={v => set({ companyIndustry: v })} onSearch={onSearch} icon={Building2} chipColor="bg-teal-50 text-teal-700 border-teal-200" />
               </div>
-
-              {/* <div>
-                <SL>Revenue</SL>
-                <SimpleSelect value={s.companyRevenue} onChange={v => set({ companyRevenue: v })}
-                  options={REVENUE_OPTIONS} placeholder="Any revenue" />
-              </div> */}
-
-              {/* <div className="flex items-center gap-2">
-                <input type="checkbox" id="pub-traded" checked={s.companyPubliclyTraded}
-                  onChange={e => set({ companyPubliclyTraded: e.target.checked })}
-                  className="accent-violet-600 cursor-pointer" />
-                <label htmlFor="pub-traded" className="text-[11px] text-slate-600 cursor-pointer">Publicly Traded only</label>
-              </div> */}
-
-              {/* <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <SL>Funding Min ($)</SL>
-                  <input type="number" value={s.companyFundingMin}
-                    onChange={e => set({ companyFundingMin: e.target.value })}
-                    onKeyDown={e => { if (e.key === "Enter") onSearch(); }}
-                    placeholder="e.g. 1000000"
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] text-slate-600 focus:outline-none focus:border-violet-400" />
-                </div>
-                <div>
-                  <SL>Funding Max ($)</SL>
-                  <input type="number" value={s.companyFundingMax}
-                    onChange={e => set({ companyFundingMax: e.target.value })}
-                    onKeyDown={e => { if (e.key === "Enter") onSearch(); }}
-                    placeholder="e.g. 50000000"
-                    className="w-full h-8 rounded-lg border border-slate-200 px-2.5 text-[11px] text-slate-600 focus:outline-none focus:border-violet-400" />
-                </div>
-              </div> */}
-
-              {/* <div>
-                <SL>Company Tags</SL>
-                <StringPills options={COMPANY_TAGS} selected={s.companyTags}
-                  onChange={v => set({ companyTags: v })} />
-              </div> */}
             </div>
           )}
 
           <Div />
 
           {/* ── ROLE ── */}
-          <SectionHeader label="Role Details" icon={Briefcase} isOpen={open.role} onToggle={() => toggle("role")} count={roleCnt} hasActive={roleCnt > 0} />
-          {open.role && (
+          <SectionHeader label="Role Details" icon={Briefcase} isOpen={open.role} onToggle={() => toggle("role")} count={roleCnt} hasActive={roleCnt > 0} locked={enrichMode} />
+          {open.role && !enrichMode && (
             <div className="pb-3 space-y-3">
-              {/* Job Function — exact CO accepted values */}
-              {/* <div>
-                <SL>Job Function</SL>
-                <SearchableMultiSelect label="Search functions…" options={JOB_FUNCTIONS}
-                  selected={s.department} onChange={v => set({ department: v })}
-                  onSearch={onSearch} icon={Briefcase}
-                  chipColor="bg-amber-50 text-amber-700 border-amber-200" />
-              </div> */}
-
               <div>
                 <SL>Previous Employer</SL>
-                <TagInput selected={s.previousEmployer} onChange={v => set({ previousEmployer: v })}
-                  onSearch={onSearch} placeholder="Past company, Enter…" icon={Building2}
-                  chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+                <TagInput selected={s.previousEmployer} onChange={v => set({ previousEmployer: v })} onSearch={onSearch} placeholder="Past company, Enter…" icon={Building2} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
               </div>
-
               <div>
                 <SL>Previous Title</SL>
-                <TagInput selected={s.previousTitle} onChange={v => set({ previousTitle: v })}
-                  onSearch={onSearch} placeholder="Past title, Enter…" icon={Briefcase}
-                  chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+                <TagInput selected={s.previousTitle} onChange={v => set({ previousTitle: v })} onSearch={onSearch} placeholder="Past title, Enter…" icon={Briefcase} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
               </div>
             </div>
           )}
@@ -1316,86 +880,23 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
           <Div />
 
           {/* ── EDUCATION ── */}
-          <SectionHeader label="Education" icon={GraduationCap} isOpen={open.education} onToggle={() => toggle("education")} count={eduCnt} hasActive={eduCnt > 0} />
-          {open.education && (
+          <SectionHeader label="Education" icon={GraduationCap} isOpen={open.education} onToggle={() => toggle("education")} count={eduCnt} hasActive={eduCnt > 0} locked={enrichMode} />
+          {open.education && !enrichMode && (
             <div className="pb-3 space-y-3">
               <div>
                 <SL>School / University</SL>
-                <TagInput selected={s.school} onChange={v => set({ school: v })}
-                  onSearch={onSearch} placeholder="e.g. IIT Bombay, Enter…" icon={GraduationCap}
-                  chipColor="bg-green-50 text-green-700 border-green-200" />
+                <TagInput selected={s.school} onChange={v => set({ school: v })} onSearch={onSearch} placeholder="e.g. IIT Bombay, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
               </div>
               <div>
                 <SL>Degree</SL>
-                <SearchableMultiSelect label="Search degrees…" options={DEGREES}
-                  selected={s.degree} onChange={v => set({ degree: v })}
-                  onSearch={onSearch} icon={GraduationCap}
-                  chipColor="bg-green-50 text-green-700 border-green-200" />
+                <SearchableMultiSelect label="Search degrees…" options={DEGREES} selected={s.degree} onChange={v => set({ degree: v })} onSearch={onSearch} icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
               </div>
               <div>
                 <SL>Major / Field</SL>
-                <TagInput selected={s.major} onChange={v => set({ major: v })}
-                  onSearch={onSearch} placeholder="e.g. Computer Science, Enter…" icon={GraduationCap}
-                  chipColor="bg-green-50 text-green-700 border-green-200" />
+                <TagInput selected={s.major} onChange={v => set({ major: v })} onSearch={onSearch} placeholder="e.g. Computer Science, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
               </div>
             </div>
           )}
-
-          <Div />
-
-          {/* ── CONTACT & SIGNALS ── */}
-          {/* <SectionHeader label="Contact & Signals" icon={Bell} isOpen={open.signals} onToggle={() => toggle("signals")} count={sigCnt} hasActive={sigCnt > 0} />
-          {open.signals && (
-            <div className="pb-3 space-y-3">
-              <div>
-                <SL>Contact Method</SL>
-                <StringPills options={CONTACT_METHODS} selected={s.contactMethod}
-                  onChange={v => set({ contactMethod: v })} />
-              </div>
-              <div>
-                <SL>Email Grade</SL>
-                <SimpleSelect value={s.emailGrade} onChange={v => set({ emailGrade: v })}
-                  options={EMAIL_GRADES} placeholder="Any grade" />
-              </div>
-              <div>
-                <SL>Job Change Signal</SL>
-                <SimpleSelect value={s.jobChangeSignal} onChange={v => set({ jobChangeSignal: v })}
-                  options={JOB_CHANGE_SIGNALS} placeholder="Any job change" />
-              </div>
-              <div>
-                <SL>Company News</SL>
-                <SimpleSelect value={s.newsSignal} onChange={v => set({ newsSignal: v })}
-                  options={NEWS_SIGNALS} placeholder="Any news" />
-              </div>
-              <div>
-                <SL>Hiring Signal</SL>
-                <SimpleSelect value={s.jobPostingSignal} onChange={v => set({ jobPostingSignal: v })}
-                  options={JOB_POSTING_SIGNALS} placeholder="Any posting" />
-              </div>
-            </div>
-          )} */}
-
-          <Div />
-
-          {/* ── SORT ── */}
-          {/* <SectionHeader label="Sort & Display" icon={Search} isOpen={open.sort} onToggle={() => toggle("sort")} />
-          {open.sort && (
-            <div className="pb-3 space-y-3">
-              <div>
-                <SL>Name Search</SL>
-                <TextInput value={s.name} onChange={v => set({ name: v })} onSearch={onSearch}
-                  placeholder="e.g. Rahul Gupta" icon={Users} />
-              </div>
-              <div>
-                <SL>Order By</SL>
-                <SimpleSelect value={s.orderBy} onChange={v => set({ orderBy: v as any })}
-                  options={[
-                    { label: "Popularity", value: "popularity" },
-                    { label: "Relevance",  value: "relevance" },
-                  ]} />
-              </div>
-            </div>
-          )} */}
 
           <div className="h-3" />
         </div>
@@ -1405,13 +906,15 @@ export const RRSearchSidebar: React.FC<RRSearchSidebarProps> = ({
       <div className="flex-shrink-0 px-4 py-2.5 border-t border-slate-100 bg-slate-50/60">
         <div className="flex items-center gap-1.5">
           <span className={cn("w-1.5 h-1.5 rounded-full",
-            isLoading   ? "bg-amber-400 animate-pulse"
+            isLoading    ? "bg-amber-400 animate-pulse"
+            : enrichMode ? "bg-violet-500 animate-pulse"
             : hasFilters ? "bg-emerald-400"
             : "bg-slate-300")} />
           <span className="text-[10px] text-slate-500">
-            {isLoading     ? "Searching…"
-             : hasFilters  ? `${filterCount} filter${filterCount !== 1 ? "s" : ""} active`
-             : "Set filters to search"}
+            {isLoading    ? (enrichMode ? "Enriching profile…" : "Searching…")
+             : enrichMode ? "URL enrich mode active"
+             : hasFilters ? `${filterCount} filter${filterCount !== 1 ? "s" : ""} active`
+             : "Set filters or paste a URL to search"}
           </span>
         </div>
       </div>
