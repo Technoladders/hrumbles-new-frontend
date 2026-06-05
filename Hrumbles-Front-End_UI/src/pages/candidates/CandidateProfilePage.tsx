@@ -128,17 +128,26 @@ const CandidateProfilePage = () => {
 
   const organizationId = useSelector((state: any) => state.auth.organization_id);
 
-  const highlightQuery = useMemo(() => {
-    const stripQ = (v: string) => v.replace(/^"|"$/g, "").trim();
-    const terms: string[] = [];
-    for (const key of ["keywords","skills","companies","educations","locations"]) {
-      [...(searchParams.get(`mandatory_${key}`)?.split(",") || []), ...(searchParams.get(`optional_${key}`)?.split(",") ||[])].filter(Boolean).forEach(v => terms.push(stripQ(v)));
-    }
-    const lk = searchParams.get("keywords"); if (lk) lk.split(",").filter(Boolean).forEach(v => terms.push(stripQ(v)));
-    const cc = searchParams.get("current_company"); if (cc) terms.push(cc);
-    const cd = searchParams.get("current_designation"); if (cd) terms.push(cd);
-    return [...new Set(terms.filter(Boolean))];
-  }, [searchParams]);
+const highlightQuery = useMemo(() => {
+  const stripQ = (v: string) => v.replace(/^"|"$/g, "").trim();
+  const terms: string[] = [];
+  for (const key of ["keywords","skills","companies","educations","locations"]) {
+    [...(searchParams.get(`mandatory_${key}`)?.split(",") || []),
+     ...(searchParams.get(`optional_${key}`)?.split(",") || [])]
+      .filter(Boolean).forEach(v => terms.push(stripQ(v)));
+  }
+  const lk = searchParams.get("keywords");
+  if (lk) lk.split(",").filter(Boolean).forEach(v => terms.push(stripQ(v)));
+  const cc = searchParams.get("current_company");
+  if (cc) terms.push(cc);
+  const cd = searchParams.get("current_designation");
+  if (cd) terms.push(cd);
+  // ← ADD THIS BLOCK:
+  const h = searchParams.get("highlight");
+  if (h) h.split(",").filter(Boolean).forEach(v => terms.push(v.trim()));
+  // ← END ADD
+  return [...new Set(terms.filter(Boolean))];
+}, [searchParams]);
 
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],

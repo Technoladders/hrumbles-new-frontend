@@ -1,511 +1,1253 @@
-// src/components/candidates/zive-x/ZiveXSearchSidebar.tsx
-// TISearchSidebar-style compact sidebar for Zive-X
-// Accordion sections, MandatoryTagSelector for keywords/skills,
-// LocationSelect (country-state-city), Search button at bottom.
+// src/components/candidates/zive-x/ZiveXSearchSidebar.tsx  v4
+// CHANGES vs v3:
+//  • SearchableMultiPopover — replaces AcText for: CurrentTitle, CurrentCompany,
+//    PreviousTitles, PreviousCompanies, Qualification, Institution
+//  • All those fields are now true multi-select tag arrays (SearchTag[])
+//  • Education normalization via canonicalizeEdu before suggestion matching
+//  • onSearch passes arrays for current_designation[] / current_company[]
+//  • SkillBuilder, LocIn, TagIn, keyword handling unchanged
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import ReactDOM from 'react-dom';
-import { Country, State, City } from 'country-state-city';
-import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Search, RotateCcw, MapPin, Briefcase, Building2, ChevronDown,
-  Filter, X, GraduationCap, Database, Sparkles, Loader2, Info,
+  FC, useState, useEffect, useRef, KeyboardEvent, useMemo, useCallback,
+  ReactNode,
+} from 'react';
+import {
+  ChevronDown, ChevronUp, Search, RotateCcw, X, MapPin, Info, Plus,
 } from 'lucide-react';
-import { SearchFilters, SearchTag } from '@/types/candidateSearch';
-import { MandatoryTagSelector } from '@/components/candidates/zive-x/MandatoryTagSelector';
+import { Country, State, City } from 'country-state-city';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery } from '@tanstack/react-query';
+import { SearchFilters, SearchTag } from '@/types/candidateSearch';
+import { canonicalizeEdu, normalizeEduToken } from '@/utils/eduNormalize';
 
-// ── Gradient def ──────────────────────────────────────────────
-const GradientDef = () => (
-  <svg width="0" height="0" style={{ position:'absolute' }}>
-    <defs>
-      <linearGradient id="zx-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stopColor="#7c3aed" />
-        <stop offset="100%" stopColor="#a855f7" />
-      </linearGradient>
-    </defs>
-  </svg>
-);
+// ── Types ─────────────────────────────────────────────────────────────────────
+type SkillMode = 'must' | 'nice' | 'exclude';
+interface ZxSkillChip { label: string; mode: SkillMode; }
 
-// ── Portal dropdown ───────────────────────────────────────────
-function PortalDropdown({ anchorRef, isOpen, maxH=220, children }: {
-  anchorRef: React.RefObject<HTMLDivElement>; isOpen: boolean; maxH?: number; children: React.ReactNode;
-}) {
-  const [style, setStyle] = useState<React.CSSProperties>({});
-  useEffect(() => {
-    if (!isOpen || !anchorRef.current) return;
-    let rid: number;
-    const update = () => {
-      rid = requestAnimationFrame(() => {
-        if (!anchorRef.current) return;
-        const r = anchorRef.current.getBoundingClientRect();
-        const w = Math.max(r.width, 200);
-        const l = Math.min(r.left, window.innerWidth - w - 8);
-        const up = window.innerHeight - r.bottom < maxH && r.top > maxH;
-        setStyle({ position:'fixed', left:Math.max(4,l), width:w, zIndex:99999, maxHeight:maxH,
-          ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }) });
-      });
-    };
-    update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
-    return () => { cancelAnimationFrame(rid); window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
-  }, [isOpen, anchorRef, maxH]);
-  if (!isOpen) return null;
-  return ReactDOM.createPortal(
-    <div style={style} className="bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-y-auto ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150">
-      {children}
-    </div>, document.body
-  );
-}
-
-// ── Section header ────────────────────────────────────────────
-function SectionHeader({ label, icon:Icon, isOpen, onToggle, count }: {
-  label:string; icon:React.ElementType; isOpen:boolean; onToggle:()=>void; count?:number;
-}) {
-  const active = (count ?? 0) > 0;
-  return (
-    <button type="button" onClick={onToggle} className="w-full flex items-center justify-between py-2.5 group">
-      <div className="flex items-center gap-2">
-        <Icon size={11} className={cn('transition-colors', active ? 'text-violet-500' : 'text-slate-400 group-hover:text-slate-600')} />
-        <span className={cn('text-[10px] font-bold uppercase tracking-wider transition-colors',
-          active ? 'bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent' : 'text-slate-500 group-hover:text-slate-700')}>
-          {label}
-        </span>
-        {active && <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 to-pink-500 text-white">{count}</span>}
-      </div>
-      <ChevronDown size={10} className={cn('text-slate-400 transition-transform duration-200', isOpen && 'rotate-180')} />
-    </button>
-  );
-}
-
-const Divider = () => <div className="h-px bg-slate-100 my-0.5" />;
-const SL = ({ children }: { children:React.ReactNode }) => (
-  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{children}</p>
-);
-
-// ── Chip ──────────────────────────────────────────────────────
-const Chip = ({ label, onRemove, color }: { label:string; onRemove:()=>void; color?:string }) => (
-  <span className={cn('inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border',
-    color ?? 'bg-violet-50 text-violet-700 border-violet-200')}>
-    {label}
-    <button type="button" onClick={onRemove} className="text-slate-400 hover:text-red-400 transition-colors"><X size={8} /></button>
-  </span>
-);
-
-// ── Plain text input ──────────────────────────────────────────
-function TextInput({ value, onChange, placeholder, icon:Icon }: {
-  value:string; onChange:(v:string)=>void; placeholder:string; icon:React.ElementType;
-}) {
-  return (
-    <div className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 transition-all hover:border-violet-300 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-200">
-      <Icon size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors" />
-      <input type="text" value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
-      {value && <button type="button" onClick={()=>onChange('')}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
-    </div>
-  );
-}
-
-// ── Exp range selects ─────────────────────────────────────────
-function ExpRange({ min, max, onMin, onMax }: {
-  min:string; max:string; onMin:(v:string)=>void; onMax:(v:string)=>void;
-}) {
-  const [openMin, setOpenMin] = useState(false);
-  const [openMax, setOpenMax] = useState(false);
-  const refMin = useRef<HTMLDivElement>(null);
-  const refMax = useRef<HTMLDivElement>(null);
-  const opts = Array.from({length:31},(_,i)=>i.toString());
-
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {[
-        { label:'Min yrs', value:min, set:onMin, open:openMin, setOpen:setOpenMin, ref:refMin },
-        { label:'Max yrs', value:max, set:onMax, open:openMax, setOpen:setOpenMax, ref:refMax },
-      ].map(({ label, value, set, open, setOpen, ref }) => (
-        <div key={label} ref={ref} className="relative">
-          <div onClick={()=>setOpen(v=>!v)}
-            className="group w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 flex items-center justify-between cursor-pointer hover:border-violet-300 transition-all">
-            <span className={cn('text-[11px]', value ? 'text-slate-700' : 'text-slate-400 italic')}>{value ? `${value} yr` : label}</span>
-            <ChevronDown size={9} className={cn('text-slate-400 transition-transform', open && 'rotate-180')} />
-          </div>
-          <PortalDropdown anchorRef={ref} isOpen={open} maxH={180}>
-            {opts.map(o => (
-              <button key={o} type="button" onMouseDown={e=>{e.preventDefault();set(o);setOpen(false);}}
-                className={cn('w-full text-left px-3 py-1.5 text-[11px] hover:bg-violet-50 transition-all', value===o && 'bg-violet-50 text-violet-700 font-medium')}>
-                {o === '0' ? 'Any' : `${o} yr`}
-              </button>
-            ))}
-          </PortalDropdown>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Notice period chips ───────────────────────────────────────
-const NOTICE_OPTIONS = ['Immediate', '15 Days', '1 Month', '2 Months', '3 Months+'];
-function NoticePeriodChips({ value, onChange }: { value:string[]; onChange:(v:string[])=>void }) {
-  const toggle = (p:string) => onChange(value.includes(p) ? value.filter(x=>x!==p) : [...value, p]);
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {NOTICE_OPTIONS.map(p => (
-        <button key={p} type="button" onClick={()=>toggle(p)}
-          className={cn('px-2.5 py-1 rounded-full text-[10px] font-medium border transition-all',
-            value.includes(p)
-              ? 'bg-violet-50 border-violet-500 text-violet-700 font-semibold'
-              : 'border-slate-200 text-slate-500 bg-white hover:border-violet-300 hover:text-violet-600')}>
-          {p}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── CTC range inputs ──────────────────────────────────────────
-function CTCRange({ minLabel, maxLabel, min, max, onMin, onMax }: {
-  minLabel:string; maxLabel:string; min:string; max:string; onMin:(v:string)=>void; onMax:(v:string)=>void;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <input type="number" placeholder={minLabel} value={min} onChange={e=>onMin(e.target.value)}
-        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 placeholder:text-slate-400 placeholder:text-[10px] placeholder:italic transition-all" />
-      <input type="number" placeholder={maxLabel} value={max} onChange={e=>onMax(e.target.value)}
-        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-200 placeholder:text-slate-400 placeholder:text-[10px] placeholder:italic transition-all" />
-    </div>
-  );
-}
-
-// ── LocationSelect (country-state-city) ───────────────────────
-type LocType = 'country'|'state'|'city';
-const LOC_STYLE: Record<LocType,string> = {
-  country: 'bg-blue-50 text-blue-700 border-blue-200',
-  state:   'bg-orange-50 text-orange-700 border-orange-200',
-  city:    'bg-violet-50 text-violet-700 border-violet-200',
+// ── Constants ─────────────────────────────────────────────────────────────────
+const NOTICE_OPTIONS = ['Immediate', '15 Days', '30 Days', '45 Days', '60 Days', '90 Days'];
+const CO_COUNT_OPTIONS = [
+  { value: '', label: 'Any' }, { value: '1', label: '1 company' },
+  { value: '2-3', label: '2–3 companies' }, { value: '4-5', label: '4–5 companies' },
+  { value: '5+', label: '5+ companies' },
+];
+const EXP_OPTIONS = [
+  { value: '', label: 'Any' },
+  ...Array.from({ length: 21 }, (_, i) => ({ value: String(i), label: `${i}y` })),
+];
+const CHIP_STYLES: Record<SkillMode, React.CSSProperties> = {
+  must:    { background: '#FEE2E2', color: '#991B1B', borderColor: '#FECACA' },
+  nice:    { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' },
+  exclude: { background: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', textDecoration: 'line-through' },
 };
-const ALL_COUNTRIES = Country.getAllCountries().map(c => ({ value:c.name, label:`${c.flag??''} ${c.name}`.trim(), type:'country' as LocType }));
-const ALL_STATES    = State.getAllStates().map(s => ({ value:s.name, label:s.name, type:'state' as LocType }));
-const POPULAR = ['India','United States','United Kingdom','Canada','Australia','Germany','Singapore','UAE','France'];
+const CHIP_ICONS: Record<SkillMode, string> = { must: '✓', nice: '~', exclude: '✕' };
+const SKILL_CYCLE: SkillMode[] = ['must', 'nice', 'exclude'];
 
-function searchLocs(q:string, selectedVals:string[]) {
-  const lq = q.toLowerCase().trim();
-  if (!lq) return ALL_COUNTRIES.filter(c=>POPULAR.includes(c.value)&&!selectedVals.includes(c.value)).slice(0,10);
-  const out: {value:string;label:string;type:LocType}[] = [];
-  ALL_COUNTRIES.filter(c=>c.value.toLowerCase().includes(lq)&&!selectedVals.includes(c.value)).slice(0,4).forEach(c=>out.push(c));
-  ALL_STATES.filter(s=>s.value.toLowerCase().includes(lq)&&!selectedVals.includes(s.value)).slice(0,3).forEach(s=>out.push({...s,type:'state'}));
-  if (lq.length>=3) City.getAllCities().filter(c=>c.name.toLowerCase().includes(lq)&&!selectedVals.includes(c.name)).slice(0,5).forEach(c=>out.push({value:c.name,label:c.name,type:'city'}));
-  return out.slice(0,15);
+function parseCoCount(v: string) {
+  if (!v) return {};
+  if (v === '1')   return { min: 1, max: 1 };
+  if (v === '2-3') return { min: 2, max: 3 };
+  if (v === '4-5') return { min: 4, max: 5 };
+  if (v === '5+')  return { min: 5 };
+  return {};
 }
 
-function getLocType(v:string): LocType {
-  if (ALL_COUNTRIES.some(c=>c.value===v)) return 'country';
-  if (ALL_STATES.some(s=>s.value===v)) return 'state';
-  return 'city';
+// ── DB autocomplete hook ──────────────────────────────────────────────────────
+function useDBSuggestions(rpcName: string, orgId: string, query: string, minLen = 1) {
+  const [suggs, setSuggs] = useState<string[]>([]);
+  const cache = useRef<Map<string, string[]>>(new Map());
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (query.length < minLen) { setSuggs([]); return; }
+    const k = `${rpcName}:${query.toLowerCase()}`;
+    if (cache.current.has(k)) { setSuggs(cache.current.get(k)!); return; }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc(rpcName, {
+          p_organization_id: orgId,
+          p_search_term: query,
+        });
+        if (!error && Array.isArray(data)) {
+          const res = data.map((item: any) =>
+            typeof item === 'string' ? item :
+              item.suggestion ?? item.skill ?? item.company ?? item.name ??
+              item.institution ?? item.location ?? Object.values(item)[0] ?? ''
+          ).filter(Boolean).slice(0, 30) as string[];
+          cache.current.set(k, res);
+          setSuggs(res);
+        }
+      } catch (_) { /* silent */ }
+    }, 280);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [query, rpcName, orgId, minLen]);
+
+  return suggs;
 }
 
-function LocationTagInput({ selected, onChange }: { selected:SearchTag[]; onChange:(v:SearchTag[])=>void }) {
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const wrapRef   = useRef<HTMLDivElement>(null);
-  const anchorRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const selectedVals = selected.map(t=>t.value);
-  const opts = useMemo(()=>searchLocs(q, selectedVals),[q, selectedVals.join(',')]);
-
-  useEffect(()=>{
-    const fn=(e:MouseEvent)=>{if(wrapRef.current&&!wrapRef.current.contains(e.target as Node)){setOpen(false);setQ('');}};
-    document.addEventListener('mousedown',fn); return ()=>document.removeEventListener('mousedown',fn);
-  },[]);
-
-  const add = (val:string, mandatory:boolean=false) => {
-    if (!selectedVals.includes(val)) onChange([...selected,{value:val,mandatory}]);
-    setQ(''); setTimeout(()=>inputRef.current?.focus(),50);
-  };
-
-  const toggleMandatory = (i:number) => {
-    const next=[...selected]; next[i]={...next[i],mandatory:!next[i].mandatory}; onChange(next);
-  };
-
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const Tip: FC<{ text: string }> = ({ text }) => {
+  const [show, setShow] = useState(false);
   return (
-    <div ref={wrapRef} className="space-y-1.5">
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map((t,i)=>{
-            const lt = getLocType(t.value);
-            return (
-              <span key={t.value} onClick={()=>toggleMandatory(i)}
-                className={cn('inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border cursor-pointer transition-all',
-                  t.mandatory
-                    ? 'bg-red-50 text-red-700 border-red-300 ring-1 ring-red-200'
-                    : LOC_STYLE[lt])}>
-                {t.mandatory && <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"/>}
-                {t.value}
-                <button type="button" onMouseDown={e=>{e.preventDefault();e.stopPropagation();onChange(selected.filter((_,j)=>j!==i));}}
-                  className="opacity-60 hover:opacity-100 hover:text-red-500 transition-all"><X size={8}/></button>
-              </span>
-            );
-          })}
+    <span
+      style={{ position: 'relative', display: 'inline-flex', verticalAlign: 'middle', cursor: 'help' }}
+      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}
+    >
+      <Info size={9} style={{ color: '#C4B5FD' }} />
+      {show && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 5px)', left: '50%',
+          transform: 'translateX(-50%)', background: '#1E293B', color: '#E2E8F0',
+          padding: '6px 9px', borderRadius: 6, fontSize: 9, lineHeight: 1.55,
+          zIndex: 300, width: 195, pointerEvents: 'none',
+          boxShadow: '0 4px 14px rgba(0,0,0,.35)', whiteSpace: 'normal',
+          textTransform: 'none', fontWeight: 400, letterSpacing: 0,
+        }}>
+          {text}
+          <div style={{
+            position: 'absolute', top: '100%', left: '50%',
+            transform: 'translateX(-50%)', width: 0, height: 0,
+            borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+            borderTop: '5px solid #1E293B',
+          }} />
         </div>
       )}
-      <div ref={anchorRef}>
-        <div onClick={()=>{setOpen(true);inputRef.current?.focus();}}
-          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text transition-all hover:border-violet-300 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-200">
-          <MapPin size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors"/>
-          <input ref={inputRef} type="text" value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)}
-            onKeyDown={e=>{if(e.key==='Escape')setOpen(false); if(e.key==='Enter'&&q.trim()&&!open){add(q.trim());} }}
-            placeholder="Country, state or city…"
-            className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
-          {q && <button type="button" onMouseDown={e=>{e.preventDefault();setQ('');}}><X size={9} className="text-slate-400 hover:text-red-400"/></button>}
-        </div>
-        <PortalDropdown anchorRef={anchorRef} isOpen={open&&opts.length>0}>
-          {opts.map(opt=>(
-            <button key={`${opt.type}-${opt.value}`} type="button"
-              onMouseDown={e=>{e.preventDefault();add(opt.value);setOpen(false);}}
-              className="group w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-violet-50 hover:pl-4 transition-all duration-150">
-              <span className={cn('text-[8px] px-1 py-0.5 rounded border font-bold uppercase',LOC_STYLE[opt.type])}>{opt.type[0]}</span>
-              <span className="text-[11px] text-slate-700 truncate">{opt.label}</span>
-            </button>
-          ))}
-        </PortalDropdown>
-      </div>
-      <p className="text-[9px] text-slate-400 italic">Click a tag to toggle mandatory (red)</p>
-    </div>
+    </span>
   );
+};
+
+// ── Section header ────────────────────────────────────────────────────────────
+const SectionHeader: FC<{ label: string; count?: number; open: boolean; onToggle: () => void }> = ({
+  label, count, open, onToggle,
+}) => (
+  <button
+    onClick={onToggle}
+    style={{
+      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      background: open ? '#F5F3FF' : '#F8FAFC', border: 'none',
+      borderTop: '1px solid #E2E8F0', padding: '7px 12px',
+      cursor: 'pointer', userSelect: 'none',
+    }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.6px',
+        textTransform: 'uppercase', color: open ? '#6D28D9' : '#64748B',
+      }}>
+        {label}
+      </span>
+      {(count ?? 0) > 0 && (
+        <span style={{
+          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99,
+          background: '#6D28D9', color: 'white',
+        }}>
+          {count}
+        </span>
+      )}
+    </div>
+    {open
+      ? <ChevronUp size={11} style={{ color: '#6D28D9' }} />
+      : <ChevronDown size={11} style={{ color: '#94A3B8' }} />
+    }
+  </button>
+);
+
+// ── Field label row ───────────────────────────────────────────────────────────
+const FL: FC<{ children: ReactNode; tip?: string }> = ({ children, tip }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+    <span style={{
+      fontSize: 9, fontWeight: 700, letterSpacing: '0.5px',
+      textTransform: 'uppercase', color: '#94A3B8',
+    }}>
+      {children}
+    </span>
+    {tip && <Tip text={tip} />}
+  </div>
+);
+
+// ── Chip style helpers ────────────────────────────────────────────────────────
+function chipStyle(mandatory: boolean): React.CSSProperties {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    padding: '2px 5px', borderRadius: 4, fontSize: 9, fontWeight: 600, border: '1px solid',
+    ...(mandatory
+      ? { background: '#FFF9C4', color: '#92400E', borderColor: '#FCD34D' }
+      : { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' }),
+  };
 }
 
-// ── Props ─────────────────────────────────────────────────────
-interface ZiveXSearchSidebarProps {
-  onSearch:      (filters: SearchFilters) => void;
-  isSearching:   boolean;
-  initialFilters?: Partial<SearchFilters>;
-  organizationId:  string;
+// ── Simple tag chips (no mandatory toggle — for popover results) ──────────────
+function plainChipStyle(): React.CSSProperties {
+  return {
+    display: 'inline-flex', alignItems: 'center', gap: 3,
+    padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+    border: '1px solid #C4B5FD', background: '#EDE9FE', color: '#5B21B6',
+  };
 }
 
-// ── Main sidebar ──────────────────────────────────────────────
-const ZiveXSearchSidebar: React.FC<ZiveXSearchSidebarProps> = ({
-  onSearch, isSearching, initialFilters={}, organizationId,
+// ── DropList ──────────────────────────────────────────────────────────────────
+const DropList: FC<{ items: string[]; onPick: (s: string) => void }> = ({ items, onPick }) => (
+  <div style={{
+    position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 2,
+    background: 'white', border: '1px solid #E2E8F0', borderRadius: 7,
+    boxShadow: '0 4px 14px rgba(0,0,0,.09)', zIndex: 100,
+    maxHeight: 160, overflowY: 'auto',
+  }}>
+    {items.map(s => (
+      <button
+        key={s} type="button" onMouseDown={e => { e.preventDefault(); onPick(s); }}
+        style={{
+          display: 'block', width: '100%', padding: '5px 10px', border: 'none',
+          background: 'none', textAlign: 'left', cursor: 'pointer',
+          fontSize: 10, color: '#0F172A', lineHeight: 1.4,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+      >
+        {s}
+      </button>
+    ))}
+  </div>
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SearchableMultiPopover
+// A field that shows selected chips inline.
+// Clicking the field (or the + button) opens a floating popover with a search
+// box + scrollable list.  Supports mandatory star toggle.
+// ══════════════════════════════════════════════════════════════════════════════
+interface SearchableMultiPopoverProps {
+  tags:        SearchTag[];
+  onChange:    (t: SearchTag[]) => void;
+  placeholder: string;
+  suggs:       string[];
+  onQ:         (q: string) => void;         // fires as user types in the popover
+  allowM?:     boolean;                      // show ★/☆ toggle
+  /** optional: custom filter fn for the suggestion list (e.g. edu normalization) */
+  filterSuggs?: (suggs: string[], q: string) => string[];
+}
+
+const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
+  tags, onChange, placeholder, suggs, onQ, allowM = false, filterSuggs,
 }) => {
-  // ── State ──────────────────────────────────────────────────
-  const [keywords,     setKeywords]     = useState<SearchTag[]>(initialFilters.keywords     || []);
-  const [skills,       setSkills]       = useState<SearchTag[]>(initialFilters.skills       || []);
-  const [locations,    setLocations]    = useState<SearchTag[]>(initialFilters.locations    || []);
-  const [companies,    setCompanies]    = useState<SearchTag[]>(initialFilters.companies    || []);
-  const [educations,   setEducations]   = useState<SearchTag[]>(initialFilters.educations   || []);
-  const [currentCompany,    setCurrentCompany]    = useState(initialFilters.current_company    || '');
-  const [currentDesignation,setCurrentDesignation]= useState(initialFilters.current_designation|| '');
-  const [minExp,       setMinExp]       = useState(initialFilters.min_exp?.toString()        || '');
-  const [maxExp,       setMaxExp]       = useState(initialFilters.max_exp?.toString()        || '');
-  const [noticePeriod, setNoticePeriod] = useState<string[]>(initialFilters.notice_periods  || []);
-  const [minCurrCTC,   setMinCurrCTC]   = useState(initialFilters.min_current_salary?.toString()  || '');
-  const [maxCurrCTC,   setMaxCurrCTC]   = useState(initialFilters.max_current_salary?.toString()  || '');
-  const [minExpCTC,    setMinExpCTC]    = useState(initialFilters.min_expected_salary?.toString() || '');
-  const [maxExpCTC,    setMaxExpCTC]    = useState(initialFilters.max_expected_salary?.toString() || '');
+  const [open,   setOpen]   = useState(false);
+  const [q,      setQ]      = useState('');
+  const wrapRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Re-populate when initialFilters changes (history select from parent)
+  // close on outside click
   useEffect(() => {
-    setKeywords(initialFilters.keywords     || []);
-    setSkills(  initialFilters.skills       || []);
-    setLocations(initialFilters.locations   || []);
-    setCompanies(initialFilters.companies   || []);
-    setEducations(initialFilters.educations || []);
-    setCurrentCompany(    initialFilters.current_company     || '');
-    setCurrentDesignation(initialFilters.current_designation || '');
-    setMinExp(initialFilters.min_exp?.toString() || '');
-    setMaxExp(initialFilters.max_exp?.toString() || '');
-    setNoticePeriod(initialFilters.notice_periods || []);
-    setMinCurrCTC(initialFilters.min_current_salary?.toString()  || '');
-    setMaxCurrCTC(initialFilters.max_current_salary?.toString()  || '');
-    setMinExpCTC( initialFilters.min_expected_salary?.toString() || '');
-    setMaxExpCTC( initialFilters.max_expected_salary?.toString() || '');
-  }, [initialFilters]);
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQ('');
+        onQ('');
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [onQ]);
 
-  // Accordion state
-  const [open, setOpen] = useState({ core:true, employment:false, education:false, compensation:false });
-  const tog = (k: keyof typeof open) => setOpen(p=>({...p,[k]:!p[k]}));
+  // focus inner input when popover opens
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
 
-  // Section counts (for badge)
-  const coreCnt = keywords.length + locations.length + (minExp?1:0) + (maxExp?1:0);
-  const empCnt  = skills.length + (currentCompany?1:0) + (currentDesignation?1:0) + companies.length + noticePeriod.length;
-  const eduCnt  = educations.length;
-  const ctcCnt  = (minCurrCTC||maxCurrCTC?1:0) + (minExpCTC||maxExpCTC?1:0);
-  const hasAny  = !!(coreCnt+empCnt+eduCnt+ctcCnt);
+  const displaySuggs = useMemo(() => {
+    // filter out already selected (by canonical key for edu)
+    const already = new Set(tags.map(t => t.value.toLowerCase()));
+    const base = suggs.filter(s => !already.has(s.toLowerCase()));
+    if (!q.trim()) return base.slice(0, 40);
+    if (filterSuggs) return filterSuggs(base, q);
+    return base.filter(s => s.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
+  }, [suggs, tags, q, filterSuggs]);
 
-  // Autocomplete suggestion fetchers
-  const fetchGeneric = useCallback((rpc:string) => async (q:string) => {
-    if (q.length < 2) return [];
-    const { data, error } = await supabase.rpc(rpc, { p_organization_id: organizationId, p_search_term: q });
-    if (error) return [];
-    return (data||[]).map((item:any) => item.suggestion || item.skill || item.location || '').filter(Boolean);
-  }, [organizationId]);
+  const add = useCallback((v: string) => {
+    const val = v.trim();
+    if (!val || tags.some(t => t.value.toLowerCase() === val.toLowerCase())) return;
+    onChange([...tags, { value: val, mandatory: false }]);
+  }, [tags, onChange]);
 
-  const fetchSkillSuggestions   = fetchGeneric('get_org_skills_by_search');
-  const fetchCompanySuggestions = fetchGeneric('get_company_suggestions');
-  const fetchEduSuggestions     = fetchGeneric('get_education_suggestions');
-
-  const reset = () => {
-    setKeywords([]); setSkills([]); setLocations([]); setCompanies([]); setEducations([]);
-    setCurrentCompany(''); setCurrentDesignation(''); setMinExp(''); setMaxExp('');
-    setNoticePeriod([]); setMinCurrCTC(''); setMaxCurrCTC(''); setMinExpCTC(''); setMaxExpCTC('');
+  const addAndKeepOpen = (v: string) => {
+    add(v);
+    // keep popover open but clear query
+    setQ('');
+    onQ('');
+    setTimeout(() => inputRef.current?.focus(), 30);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSearch({
-      keywords, skills, locations, companies, educations,
-      current_company:     currentCompany,
-      current_designation: currentDesignation,
-      min_exp:  minExp  ? parseInt(minExp)  : null,
-      max_exp:  maxExp  ? parseInt(maxExp)  : null,
-      notice_periods: noticePeriod,
-      min_current_salary:  minCurrCTC ? parseFloat(minCurrCTC) : null,
-      max_current_salary:  maxCurrCTC ? parseFloat(maxCurrCTC) : null,
-      min_expected_salary: minExpCTC  ? parseFloat(minExpCTC)  : null,
-      max_expected_salary: maxExpCTC  ? parseFloat(maxExpCTC)  : null,
-    });
+  const removeTag = (i: number) => onChange(tags.filter((_, idx) => idx !== i));
+  const toggleM   = (i: number) => {
+    if (!allowM) return;
+    onChange(tags.map((t, idx) => idx === i ? { ...t, mandatory: !t.mandatory } : t));
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') { setOpen(false); setQ(''); onQ(''); }
+    if (e.key === 'Enter' && q.trim()) {
+      e.preventDefault();
+      // if there's a highlighted suggestion, pick it; otherwise free-type
+      if (displaySuggs.length > 0) {
+        addAndKeepOpen(displaySuggs[0]);
+      } else {
+        addAndKeepOpen(q.trim());
+      }
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-white">
-      <GradientDef />
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      {/* ── Chips row ── */}
+      {tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 5 }}>
+          {tags.map((t, i) => (
+            <span key={i} style={chipStyle(t.mandatory)}>
+              {allowM && (
+                <button
+                  type="button" onClick={() => toggleM(i)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
+                >
+                  {t.mandatory ? '★' : '☆'}
+                </button>
+              )}
+              <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>
+                {t.value}
+              </span>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); removeTag(i); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
+              >
+                <X size={8} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
-      {/* ── HEADER ── */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-2.5 border-b border-slate-100" style={{ position:'relative' }}>
-        {/* Animated gradient top strip */}
-        <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:'linear-gradient(90deg,#7c3aed,#a855f7,#7c3aed)', backgroundSize:'200% 100%', animation:'zxsb-shim 3s linear infinite' }} />
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <Database size={12} style={{ stroke:'url(#zx-grad)' }} />
-            <span className="text-[11px] font-bold text-violet-700">Zive-X Filters</span>
+      {/* ── Trigger ── */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          height: 30, border: '1px solid #E2E8F0', borderRadius: 6,
+          background: open ? '#F5F3FF' : '#FAFAFA',
+          padding: '0 8px', cursor: 'pointer',
+          fontSize: 10, color: tags.length ? '#6D28D9' : '#94A3B8',
+          fontWeight: tags.length ? 600 : 400,
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Search size={10} style={{ color: '#C4B5FD', flexShrink: 0 }} />
+          {tags.length > 0 ? `${tags.length} selected — click to add more` : placeholder}
+        </span>
+        <Plus size={10} style={{ color: '#C4B5FD' }} />
+      </button>
+
+      {/* ── Popover panel ── */}
+      {open && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
+          background: 'white', border: '1px solid #C4B5FD',
+          borderRadius: 10, boxShadow: '0 8px 28px rgba(109,28,217,0.12)',
+          zIndex: 200, overflow: 'hidden',
+        }}>
+          {/* search box */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 10px', borderBottom: '1px solid #F3F4F6',
+            background: '#FAFAFE',
+          }}>
+            <Search size={11} style={{ color: '#A78BFA', flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              value={q}
+              onChange={e => { setQ(e.target.value); onQ(e.target.value); }}
+              onKeyDown={onKey}
+              placeholder="Search or type to add…"
+              style={{
+                flex: 1, border: 'none', background: 'none', outline: 'none',
+                fontSize: 11, color: '#0F172A',
+              }}
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => { setQ(''); onQ(''); inputRef.current?.focus(); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}
+              >
+                <X size={10} />
+              </button>
+            )}
           </div>
-          {hasAny && (
-            <button type="button" onClick={reset} className="flex items-center gap-1 text-[10px] font-semibold text-violet-600 hover:text-violet-800 transition-colors">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-              Reset
+
+          {/* suggestions list */}
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {displaySuggs.length === 0 && (
+              <div style={{ padding: '10px 12px', fontSize: 10, color: '#94A3B8', textAlign: 'center' }}>
+                {q.length > 0
+                  ? <span>No match — press <strong>Enter</strong> to add <em>"{q}"</em></span>
+                  : 'Start typing to search…'}
+              </div>
+            )}
+            {displaySuggs.map(s => {
+              const already = tags.some(t => t.value.toLowerCase() === s.toLowerCase());
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); if (!already) addAndKeepOpen(s); }}
+                  disabled={already}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', padding: '6px 12px', border: 'none',
+                    background: already ? '#F5F3FF' : 'none',
+                    textAlign: 'left', cursor: already ? 'default' : 'pointer',
+                    fontSize: 10, color: already ? '#7C3AED' : '#0F172A', lineHeight: 1.4,
+                  }}
+                  onMouseEnter={e => { if (!already) (e.currentTarget as HTMLElement).style.background = '#F5F3FF'; }}
+                  onMouseLeave={e => { if (!already) (e.currentTarget as HTMLElement).style.background = 'none'; }}
+                >
+                  <span>{s}</span>
+                  {already && <span style={{ fontSize: 8, color: '#7C3AED', fontWeight: 700 }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* footer hint */}
+          <div style={{
+            padding: '5px 12px', borderTop: '1px solid #F3F4F6',
+            fontSize: 8, color: '#94A3B8', background: '#FAFAFE',
+            display: 'flex', justifyContent: 'space-between',
+          }}>
+            <span>Click to select · Enter to add typed</span>
+            <button
+              type="button" onClick={() => { setOpen(false); setQ(''); onQ(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Multi-value tag input with suggestions and ★ (keywords / misc) ────────────
+const TagIn: FC<{
+  tags: SearchTag[];
+  onChange: (t: SearchTag[]) => void;
+  placeholder: string;
+  allowM?: boolean;
+  suggs?: string[];
+  onQ?: (q: string) => void;
+}> = ({ tags, onChange, placeholder, allowM = false, suggs = [], onQ }) => {
+  const [inp, setInp] = useState('');
+  const [show, setShow] = useState(false);
+  const wrapRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShow(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const add = useCallback((v: string) => {
+    const val = v.trim();
+    if (!val || tags.some(t => t.value.toLowerCase() === val.toLowerCase())) {
+      setInp(''); onQ?.(''); setShow(false); return;
+    }
+    onChange([...tags, { value: val, mandatory: false }]);
+    setInp(''); onQ?.(''); setShow(false);
+  }, [tags, onChange, onQ]);
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === ',') && inp) { e.preventDefault(); add(inp); }
+    if (e.key === 'Backspace' && !inp && tags.length) onChange(tags.slice(0, -1));
+    if (e.key === 'Escape') setShow(false);
+  };
+
+  const toggleM = (i: number) => {
+    if (!allowM) return;
+    onChange(tags.map((t, idx) => idx === i ? { ...t, mandatory: !t.mandatory } : t));
+  };
+
+  const filtered = suggs.filter(s => !tags.some(t => t.value.toLowerCase() === s.toLowerCase()));
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <div
+        style={{
+          display: 'flex', flexWrap: 'wrap', gap: 3, padding: '5px 8px',
+          border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA',
+          minHeight: 32, cursor: 'text', alignItems: 'center',
+        }}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {tags.map((t, i) => (
+          <span key={i} style={chipStyle(t.mandatory)}>
+            {allowM && (
+              <button
+                type="button" onClick={() => toggleM(i)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
+              >
+                {t.mandatory ? '★' : '☆'}
+              </button>
+            )}
+            <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>
+              {t.value}
+            </span>
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onChange(tags.filter((_, idx) => idx !== i)); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
+            >
+              <X size={8} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef} value={inp}
+          onChange={e => { setInp(e.target.value); onQ?.(e.target.value); setShow(true); }}
+          onKeyDown={onKey}
+          onFocus={() => { if (filtered.length > 0) setShow(true); }}
+          placeholder={tags.length ? '' : placeholder}
+          style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
+        />
+      </div>
+      {show && filtered.length > 0 && <DropList items={filtered} onPick={add} />}
+    </div>
+  );
+};
+
+// ── SkillChipBuilder ──────────────────────────────────────────────────────────
+const SkillBuilder: FC<{
+  chips:    ZxSkillChip[];
+  onChange: (c: ZxSkillChip[]) => void;
+  suggs:    string[];
+  onQ:      (q: string) => void;
+}> = ({ chips, onChange, suggs, onQ }) => {
+  const [activeMode, setActiveMode] = useState<SkillMode>('must');
+  const [inp,        setInp]        = useState('');
+  const [open,       setOpen]       = useState(false);
+  const wrapRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const add = useCallback((v: string, m = activeMode) => {
+    const val = v.trim();
+    if (!val || chips.some(c => c.label.toLowerCase() === val.toLowerCase())) {
+      setInp(''); onQ(''); setOpen(false); return;
+    }
+    onChange([...chips, { label: val, mode: m }]);
+    setInp(''); onQ('');
+    // keep popover open so recruiter can keep adding skills
+    setTimeout(() => inputRef.current?.focus(), 30);
+  }, [chips, onChange, onQ, activeMode]);
+
+  const cycleMode = (i: number) => {
+    const next = SKILL_CYCLE[(SKILL_CYCLE.indexOf(chips[i].mode) + 1) % 3];
+    onChange(chips.map((c, idx) => idx === i ? { ...c, mode: next } : c));
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === ',') && inp) {
+      e.preventDefault();
+      // if there's a suggestion visible, pick first; otherwise free-type
+      const filtered = suggs.filter(s =>
+        !chips.some(c => c.label.toLowerCase() === s.toLowerCase()) &&
+        s.toLowerCase().includes(inp.toLowerCase())
+      );
+      add(filtered.length > 0 ? filtered[0] : inp);
+    }
+    if (e.key === 'Backspace' && !inp && chips.length) onChange(chips.slice(0, -1));
+    if (e.key === 'Escape') { setOpen(false); }
+  };
+
+  const filtered = suggs.filter(
+    s => !chips.some(c => c.label.toLowerCase() === s.toLowerCase()) &&
+         (inp.length === 0 || s.toLowerCase().includes(inp.toLowerCase()))
+  ).slice(0, 40);
+
+  const counts = {
+    must:    chips.filter(c => c.mode === 'must').length,
+    nice:    chips.filter(c => c.mode === 'nice').length,
+    exclude: chips.filter(c => c.mode === 'exclude').length,
+  };
+
+  return (
+    <div>
+      {/* ── Mode legend ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 8, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>New as:</span>
+        {SKILL_CYCLE.map(m => (
+          <button
+            key={m} type="button" onClick={() => setActiveMode(m)}
+            title={`New chips will be added as "${m}"`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+              border: '1.5px solid', cursor: 'pointer', transition: 'all 0.12s',
+              outline: activeMode === m ? '2px solid' : 'none',
+              outlineOffset: 2, outlineColor: 'currentColor',
+              opacity: activeMode === m ? 1 : 0.45, ...CHIP_STYLES[m],
+            }}
+          >
+            {CHIP_ICONS[m]} {m === 'must' ? 'Must' : m === 'nice' ? 'Nice' : 'Excl'}
+            {activeMode === m && <span style={{ fontSize: 7 }}>◀</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Chip display + input ── */}
+      <div
+        style={{
+          display: 'flex', flexWrap: 'wrap', gap: 3, padding: '5px 8px',
+          border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA',
+          minHeight: 32, cursor: 'text', alignItems: 'center',
+        }}
+        onClick={() => { inputRef.current?.focus(); setOpen(true); }}
+      >
+        {chips.map((c, i) => (
+          <span
+            key={i}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+              border: '1px solid', cursor: 'pointer', userSelect: 'none', ...CHIP_STYLES[c.mode],
+            }}
+            onClick={e => { e.stopPropagation(); cycleMode(i); }}
+            title={`${c.mode} — click to cycle`}
+          >
+            <span style={{ fontSize: 8 }}>{CHIP_ICONS[c.mode]}</span>
+            <span>{c.label}</span>
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onChange(chips.filter((_, idx) => idx !== i)); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
+            >
+              <X size={8} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef} value={inp}
+          onChange={e => { setInp(e.target.value); onQ(e.target.value); setOpen(true); }}
+          onKeyDown={onKey}
+          onFocus={() => setOpen(true)}
+          placeholder={chips.length ? '' : 'Type skill + Enter  (click legend to set mode)'}
+          style={{ flex: 1, minWidth: 80, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
+        />
+      </div>
+
+      {/* ── Popover suggestions (same style as SearchableMultiPopover) ── */}
+      {open && (
+        <div
+          ref={wrapRef}
+          style={{
+            background: 'white', border: '1px solid #C4B5FD',
+            borderRadius: 10, boxShadow: '0 8px 28px rgba(109,28,217,0.12)',
+            overflow: 'hidden', marginTop: 2,
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div style={{ padding: '8px 12px', fontSize: 10, color: '#94A3B8', textAlign: 'center' }}>
+              {inp.length > 0
+                ? <span>No match — press <strong>Enter</strong> to add <em>"{inp}"</em> as {activeMode}</span>
+                : 'Start typing to search skills…'}
+            </div>
+          ) : (
+            <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+              {filtered.map(s => (
+                <button
+                  key={s} type="button"
+                  onMouseDown={e => { e.preventDefault(); add(s, activeMode); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', padding: '5px 12px', border: 'none',
+                    background: 'none', textAlign: 'left', cursor: 'pointer',
+                    fontSize: 10, color: '#0F172A',
+                  }}
+                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#F5F3FF')}
+                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}
+                >
+                  <span>{s}</span>
+                  {/* preview the mode badge */}
+                  <span style={{
+                    fontSize: 8, fontWeight: 700, padding: '1px 4px',
+                    borderRadius: 3, ...CHIP_STYLES[activeMode],
+                  }}>
+                    {CHIP_ICONS[activeMode]} {activeMode}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{
+            padding: '4px 12px', borderTop: '1px solid #F3F4F6',
+            fontSize: 8, color: '#94A3B8', background: '#FAFAFE',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          }}>
+            <span>Click or Enter to add · click chip to cycle mode</span>
+            <button
+              type="button" onClick={() => { setOpen(false); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Counts summary ── */}
+      {chips.length > 0 && (
+        <div style={{ marginTop: 5, fontSize: 9, color: '#94A3B8', display: 'flex', gap: 6 }}>
+          {counts.must > 0 && (
+            <span style={{ color: '#991B1B', fontWeight: 600 }}>✓ {counts.must} must</span>
+          )}
+          {counts.nice > 0 && (
+            <span style={{ color: '#5B21B6', fontWeight: 600 }}>~ {counts.nice} nice</span>
+          )}
+          {counts.exclude > 0 && (
+            <span style={{ color: '#64748B', fontWeight: 600 }}>✕ {counts.exclude} excl</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+// ── Location input ────────────────────────────────────────────────────────────
+const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ tags, onChange }) => {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const wrapRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const sel = tags.map(t => t.value);
+  const suggs = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    if (!ql) return [];
+    const res: { v: string; t: 'C' | 'S' | 'T' }[] = [];
+    Country.getAllCountries().filter(c => c.name.toLowerCase().includes(ql) && !sel.includes(c.name)).slice(0, 3).forEach(c => res.push({ v: c.name, t: 'C' }));
+    State.getAllStates().filter(s => s.name.toLowerCase().includes(ql) && !sel.includes(s.name)).slice(0, 3).forEach(s => res.push({ v: s.name, t: 'S' }));
+    if (ql.length >= 3) City.getAllCities().filter(c => c.name.toLowerCase().includes(ql) && !sel.includes(c.name)).slice(0, 4).forEach(c => res.push({ v: c.name, t: 'T' }));
+    return res.slice(0, 10);
+  }, [q, sel.join(',')]);
+
+  const add = (v: string) => {
+    if (!sel.includes(v)) onChange([...tags, { value: v, mandatory: false }]);
+    setQ(''); setOpen(false); setTimeout(() => inputRef.current?.focus(), 50);
+  };
+  const tM = (i: number) => { const n = [...tags]; n[i] = { ...n[i], mandatory: !n[i].mandatory }; onChange(n); };
+  const rm = (i: number) => onChange(tags.filter((_, idx) => idx !== i));
+  const TC = { C: '#1D4ED8', S: '#C2410C', T: '#6D28D9' };
+  const TB = { C: '#EFF6FF', S: '#FFF7ED', T: '#F5F3FF' };
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      {tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 4 }}>
+          {tags.map((t, i) => (
+            <span key={i} style={chipStyle(t.mandatory)}>
+              <button
+                type="button" onClick={() => tM(i)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
+              >
+                {t.mandatory ? '★' : '☆'}
+              </button>
+              <span onClick={() => tM(i)} style={{ cursor: 'pointer' }}>{t.value}</span>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); rm(i); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
+              >
+                <X size={8} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div
+        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA', minHeight: 32, cursor: 'text' }}
+      >
+        <MapPin size={10} style={{ color: '#94A3B8', flexShrink: 0 }} />
+        <input
+          ref={inputRef} value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setOpen(false);
+            if (e.key === 'Enter' && q.trim()) {
+              e.preventDefault();
+              suggs.length > 0 ? add(suggs[0].v) : add(q.trim());
+            }
+          }}
+          placeholder="Country, state or city…"
+          style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
+        />
+        {q && (
+          <button
+            type="button" onClick={() => setQ('')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+          >
+            <X size={9} style={{ color: '#94A3B8' }} />
+          </button>
+        )}
+      </div>
+      {open && suggs.length > 0 && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 2,
+          background: 'white', border: '1px solid #E2E8F0', borderRadius: 7,
+          boxShadow: '0 4px 14px rgba(0,0,0,.09)', zIndex: 100, maxHeight: 180, overflowY: 'auto',
+        }}>
+          {suggs.map(s => (
+            <button
+              key={s.v} type="button" onMouseDown={e => { e.preventDefault(); add(s.v); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '5px 10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}
+              onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#F5F3FF')}
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}
+            >
+              <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, color: TC[s.t], background: TB[s.t] }}>{s.t}</span>
+              {s.v}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── Numeric selects ───────────────────────────────────────────────────────────
+const ExpSel: FC<{ v: string; onChange: (v: string) => void; label: string }> = ({ v, onChange, label }) => (
+  <div style={{ flex: 1 }}>
+    <FL>{label}</FL>
+    <select
+      value={v} onChange={e => onChange(e.target.value)}
+      style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}
+    >
+      {EXP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const CtcIn: FC<{ v: string; onChange: (v: string) => void; label: string }> = ({ v, onChange, label }) => (
+  <div style={{ flex: 1 }}>
+    <FL>{label}</FL>
+    <div style={{ position: 'relative' }}>
+      <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#94A3B8' }}>₹</span>
+      <input
+        type="number" value={v} onChange={e => onChange(e.target.value)} placeholder="—"
+        style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', paddingLeft: 18, paddingRight: 6, outline: 'none', boxSizing: 'border-box' }}
+      />
+    </div>
+  </div>
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ZiveXSearchSidebar
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Education normalization filter for popover suggestions.
+ * When user types "mba", also match "Master of Business Administration" etc.
+ */
+function eduFilterSuggs(suggs: string[], q: string): string[] {
+  if (!q.trim()) return suggs.slice(0, 40);
+  const nQ = canonicalizeEdu(q);
+  const pQ = normalizeEduToken(q);
+  return suggs
+    .filter(s => {
+      const nS = canonicalizeEdu(s);
+      const pS = normalizeEduToken(s);
+      return (
+        nS.includes(nQ) || nQ.includes(nS) ||
+        pS.includes(pQ) || pQ.includes(pS) ||
+        s.toLowerCase().includes(q.toLowerCase())
+      );
+    })
+    .slice(0, 40);
+}
+
+interface ZiveXSearchSidebarProps {
+  onSearch:       (filters: SearchFilters) => void;
+  onReset?:       () => void;
+  isSearching?:   boolean;
+  initialFilters?: Partial<SearchFilters>;
+  organizationId: string;
+}
+
+const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
+  onSearch, onReset, isSearching, initialFilters = {}, organizationId,
+}) => {
+  // section open/close
+  const [open, setOpen] = useState<Record<string, boolean>>({
+    core: true, skills: false, past: false, edu: false, avail: false,
+  });
+  const tog = (k: string) => setOpen(s => ({ ...s, [k]: !s[k] }));
+
+  // ── Filter state ────────────────────────────────────────────────────────────
+  const [keywords,      setKeywords]      = useState<SearchTag[]>([]);
+  // multi-value arrays (now arrays, not single strings)
+  const [currTitles,    setCurrTitles]    = useState<SearchTag[]>([]);
+  const [currCompanies, setCurrCompanies] = useState<SearchTag[]>([]);
+  const [minExp,        setMinExp]        = useState('');
+  const [maxExp,        setMaxExp]        = useState('');
+  const [locations,     setLocations]     = useState<SearchTag[]>([]);
+  const [skillChips,    setSkillChips]    = useState<ZxSkillChip[]>([]);
+  const [prevTitles,    setPrevTitles]    = useState<SearchTag[]>([]);
+  const [prevCos,       setPrevCos]       = useState<SearchTag[]>([]);
+  const [coCount,       setCoCount]       = useState('');
+  const [degrees,       setDegrees]       = useState<SearchTag[]>([]);   // was single string
+  const [institutions,  setInstitutions]  = useState<SearchTag[]>([]);
+  const [noticePeriods, setNoticePeriods] = useState<string[]>([]);
+  const [minCCTC,       setMinCCTC]       = useState('');
+  const [maxCCTC,       setMaxCCTC]       = useState('');
+  const [minECTC,       setMinECTC]       = useState('');
+  const [maxECTC,       setMaxECTC]       = useState('');
+
+  // ── Autocomplete queries ─────────────────────────────────────────────────────
+  const [titleQ,   setTitleQ]   = useState('');
+  const [companyQ, setCompanyQ] = useState('');
+  const [skillQ,   setSkillQ]   = useState('');
+  const [prevTQ,   setPrevTQ]   = useState('');
+  const [prevCoQ,  setPrevCoQ]  = useState('');
+  const [degreeQ,  setDegreeQ]  = useState('');
+  const [instQ,    setInstQ]    = useState('');
+
+  const titleSugg   = useDBSuggestions('get_designation_suggestions',  organizationId, titleQ,   1);
+  const companySugg = useDBSuggestions('get_company_suggestions',       organizationId, companyQ, 1);
+  const skillSugg   = useDBSuggestions('get_org_skills_by_search',      organizationId, skillQ,   1);
+  const prevTSugg   = useDBSuggestions('get_designation_suggestions',  organizationId, prevTQ,   1);
+  const prevCoSugg  = useDBSuggestions('get_company_suggestions',       organizationId, prevCoQ,  1);
+  const degreeSugg  = useDBSuggestions('get_qualification_suggestions', organizationId, degreeQ,  1);
+  const instSugg    = useDBSuggestions('get_institution_suggestions',   organizationId, instQ,    1);
+
+  // ── Initialise from prop ────────────────────────────────────────────────────
+  useEffect(() => {
+    const f = initialFilters;
+    if (!f || !Object.keys(f).length) return;
+
+    if (f.keywords?.length)    setKeywords(f.keywords);
+
+    // current_designation / current_company may be single strings or arrays
+    if ((f as any).current_designations?.length) setCurrTitles((f as any).current_designations);
+    else if (f.current_designation) setCurrTitles([{ value: f.current_designation, mandatory: false }]);
+
+    if ((f as any).current_companies?.length) setCurrCompanies((f as any).current_companies);
+    else if (f.current_company) setCurrCompanies([{ value: f.current_company, mandatory: false }]);
+
+    if (f.min_exp != null)    setMinExp(String(f.min_exp));
+    if (f.max_exp != null)    setMaxExp(String(f.max_exp));
+    if (f.locations?.length)  setLocations(f.locations);
+
+    // skills / excluded
+    const must = (f.skills || []).filter(t =>  t.mandatory).map(t => ({ label: t.value, mode: 'must'  as SkillMode }));
+    const nice = (f.skills || []).filter(t => !t.mandatory).map(t => ({ label: t.value, mode: 'nice'  as SkillMode }));
+    const excl = (f.excluded_skills || []).map(v => ({ label: v, mode: 'exclude' as SkillMode }));
+    if (must.length || nice.length || excl.length) {
+      setSkillChips([...must, ...nice, ...excl]);
+      setOpen(s => ({ ...s, skills: true }));
+    }
+
+    if (f.previous_titles?.length)    { setPrevTitles(f.previous_titles);    setOpen(s => ({ ...s, past: true })); }
+    if (f.previous_companies?.length) { setPrevCos(f.previous_companies);    setOpen(s => ({ ...s, past: true })); }
+
+    if (f.companies_count_min != null || f.companies_count_max != null) {
+      const mn = f.companies_count_min, mx = f.companies_count_max;
+      if (mn === 1 && mx === 1) setCoCount('1');
+      else if (mn === 2 && mx === 3) setCoCount('2-3');
+      else if (mn === 4 && mx === 5) setCoCount('4-5');
+      else if (mn === 5) setCoCount('5+');
+    }
+
+    // degree: was single string, now multi-tag
+    if ((f as any).degrees?.length)   { setDegrees((f as any).degrees); setOpen(s => ({ ...s, edu: true })); }
+    else if (f.degree)                { setDegrees([{ value: f.degree, mandatory: false }]); setOpen(s => ({ ...s, edu: true })); }
+    if (f.institutions?.length)        { setInstitutions(f.institutions); setOpen(s => ({ ...s, edu: true })); }
+
+    if (f.notice_periods?.length)  { setNoticePeriods(f.notice_periods); setOpen(s => ({ ...s, avail: true })); }
+    if (f.min_current_salary  != null) setMinCCTC(String(f.min_current_salary));
+    if (f.max_current_salary  != null) setMaxCCTC(String(f.max_current_salary));
+    if (f.min_expected_salary != null) setMinECTC(String(f.min_expected_salary));
+    if (f.max_expected_salary != null) setMaxECTC(String(f.max_expected_salary));
+  }, [JSON.stringify(initialFilters)]);
+
+  // ── Active counts ────────────────────────────────────────────────────────────
+  const coreCount  = (keywords.length ? 1 : 0) + (currTitles.length ? 1 : 0) + (currCompanies.length ? 1 : 0) + ((minExp || maxExp) ? 1 : 0) + (locations.length ? 1 : 0);
+  const skillCount = skillChips.length;
+  const pastCount  = (prevTitles.length ? 1 : 0) + (prevCos.length ? 1 : 0) + (coCount ? 1 : 0);
+  const eduCount   = (degrees.length ? 1 : 0) + (institutions.length ? 1 : 0);
+  const availCount = (noticePeriods.length ? 1 : 0) + ((minCCTC || maxCCTC) ? 1 : 0) + ((minECTC || maxECTC) ? 1 : 0);
+  const totalActive = coreCount + skillCount + pastCount + eduCount + availCount;
+
+  // ── Reset ────────────────────────────────────────────────────────────────────
+  const resetAll = () => {
+    setKeywords([]); setCurrTitles([]); setCurrCompanies([]);
+    setMinExp(''); setMaxExp(''); setLocations([]);
+    setSkillChips([]); setSkillQ('');
+    setPrevTitles([]); setPrevCos([]); setCoCount('');
+    setDegrees([]); setInstitutions([]);
+    setNoticePeriods([]); setMinCCTC(''); setMaxCCTC(''); setMinECTC(''); setMaxECTC('');
+    setOpen({ core: true, skills: false, past: false, edu: false, avail: false });
+    onReset?.();
+  };
+
+  // ── Build + fire search ──────────────────────────────────────────────────────
+  const handleSearch = () => {
+    const mustS = skillChips.filter(c => c.mode === 'must').map(c => ({ value: c.label, mandatory: true  }));
+    const niceS = skillChips.filter(c => c.mode === 'nice').map(c => ({ value: c.label, mandatory: false }));
+    const exclS = skillChips.filter(c => c.mode === 'exclude').map(c => c.label);
+    const { min: ccMin, max: ccMax } = parseCoCount(coCount);
+
+    onSearch({
+      ...(keywords.length               && { keywords }),
+      // pass full arrays; backend/hook will use first value for DB compat or new RPC
+      ...(currTitles.length             && { current_designations: currTitles, current_designation: currTitles[0]?.value }),
+      ...(currCompanies.length          && { current_companies: currCompanies, current_company: currCompanies[0]?.value }),
+      ...(minExp                        && { min_exp: Number(minExp) }),
+      ...(maxExp                        && { max_exp: Number(maxExp) }),
+      ...(locations.length              && { locations }),
+      ...([...mustS, ...niceS].length   && { skills: [...mustS, ...niceS] }),
+      ...(exclS.length                  && { excluded_skills: exclS }),
+      ...(prevTitles.length             && { previous_titles: prevTitles }),
+      ...(prevCos.length                && { previous_companies: prevCos }),
+      ...(ccMin != null                 && { companies_count_min: ccMin }),
+      ...(ccMax != null                 && { companies_count_max: ccMax }),
+      // degrees: send full array + legacy single
+      ...(degrees.length                && { degrees, degree: degrees[0]?.value }),
+      ...(institutions.length           && { institutions }),
+      ...(noticePeriods.length          && { notice_periods: noticePeriods }),
+      ...(minCCTC                       && { min_current_salary:  Number(minCCTC) }),
+      ...(maxCCTC                       && { max_current_salary:  Number(maxCCTC) }),
+      ...(minECTC                       && { min_expected_salary: Number(minECTC) }),
+      ...(maxECTC                       && { max_expected_salary: Number(maxECTC) }),
+    } as SearchFilters);
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  return (
+    <div
+      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSearch(); }}
+      style={{ display: 'flex', flexDirection: 'column', width: 272, flexShrink: 0, background: 'white', borderRight: '1px solid #E2E8F0', height: '100%', overflow: 'hidden' }}
+    >
+      {/* ── Header ── */}
+      <div style={{ flexShrink: 0, padding: '11px 14px 9px', borderBottom: '1px solid #E2E8F0', background: 'linear-gradient(135deg,#1E1B4B,#312E81)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', color: 'white', textTransform: 'uppercase' }}>
+            Zive-X Filters
+            {totalActive > 0 && (
+              <span style={{ marginLeft: 6, fontSize: 9, padding: '1px 6px', borderRadius: 99, background: '#6D28D9', color: 'white' }}>
+                {totalActive}
+              </span>
+            )}
+          </span>
+          {totalActive > 0 && (
+            <button
+              onClick={resetAll}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A78BFA', display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 600, padding: 0 }}
+            >
+              <RotateCcw size={10} /> Reset
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className={cn('w-1.5 h-1.5 rounded-full', hasAny ? 'bg-violet-500 animate-pulse' : 'bg-slate-300')} />
-          <span className="text-[9px] text-slate-500">{hasAny ? `${coreCnt+empCnt+eduCnt+ctcCnt} filter${coreCnt+empCnt+eduCnt+ctcCnt!==1?'s':''} active` : 'No filters — showing all'}</span>
-        </div>
-      </div>
-
-      {/* ── SCROLL AREA ── */}
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="px-4">
-
-          {/* ── CORE FILTERS ── */}
-          <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={()=>tog('core')} count={coreCnt} />
-          {open.core && (
-            <div className="pb-3 space-y-3">
-              <div>
-                <SL>Keywords</SL>
-                <div className="rounded-lg border border-slate-200 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-200 transition-all overflow-visible">
-                  <MandatoryTagSelector value={keywords} onChange={setKeywords} placeholder="Skills, role, company…" disableSuggestions={true} />
-                </div>
-                <div className="flex items-start gap-1.5 mt-1.5 px-2 py-1.5 rounded bg-violet-50 border border-violet-100">
-                  <Info size={9} className="text-violet-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-[9px] text-violet-700 leading-snug">Red tag = must match. Yellow = rank boost.</p>
-                </div>
-              </div>
-              <div>
-                <SL>Experience</SL>
-                <ExpRange min={minExp} max={maxExp} onMin={setMinExp} onMax={setMaxExp} />
-              </div>
-              <div>
-                <SL>Location</SL>
-                <LocationTagInput selected={locations} onChange={setLocations} />
-              </div>
-            </div>
-          )}
-          <Divider />
-
-          {/* ── EMPLOYMENT ── */}
-          <SectionHeader label="Employment" icon={Briefcase} isOpen={open.employment} onToggle={()=>tog('employment')} count={empCnt} />
-          {open.employment && (
-            <div className="pb-3 space-y-3">
-              <div>
-                <SL>Skills</SL>
-                <div className="rounded-lg border border-slate-200 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-200 transition-all overflow-visible">
-                  <MandatoryTagSelector value={skills} onChange={setSkills} placeholder="Filter by skills…" fetchSuggestions={fetchSkillSuggestions} queryKey="zxSkills" />
-                </div>
-              </div>
-              <div>
-                <SL>Current Company</SL>
-                <TextInput value={currentCompany} onChange={setCurrentCompany} placeholder="e.g. Infosys, TCS…" icon={Building2} />
-              </div>
-              <div>
-                <SL>Current Designation</SL>
-                <TextInput value={currentDesignation} onChange={setCurrentDesignation} placeholder="e.g. Senior Engineer…" icon={Briefcase} />
-              </div>
-              <div>
-                <SL>Past Companies</SL>
-                <div className="rounded-lg border border-slate-200 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-200 transition-all overflow-visible">
-                  <MandatoryTagSelector value={companies} onChange={setCompanies} placeholder="e.g. Google, TCS…" fetchSuggestions={fetchCompanySuggestions} queryKey="zxCompanies" />
-                </div>
-              </div>
-              <div>
-                <SL>Notice Period</SL>
-                <NoticePeriodChips value={noticePeriod} onChange={setNoticePeriod} />
-              </div>
-            </div>
-          )}
-          <Divider />
-
-          {/* ── EDUCATION ── */}
-          <SectionHeader label="Education" icon={GraduationCap} isOpen={open.education} onToggle={()=>tog('education')} count={eduCnt} />
-          {open.education && (
-            <div className="pb-3">
-              <SL>Qualification</SL>
-              <div className="rounded-lg border border-slate-200 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-200 transition-all overflow-visible">
-                <MandatoryTagSelector value={educations} onChange={setEducations} placeholder="Degree, institution…" fetchSuggestions={fetchEduSuggestions} queryKey="zxEdu" />
-              </div>
-            </div>
-          )}
-          <Divider />
-
-          {/* ── COMPENSATION ── */}
-          <SectionHeader label="Compensation" icon={Database} isOpen={open.compensation} onToggle={()=>tog('compensation')} count={ctcCnt} />
-          {open.compensation && (
-            <div className="pb-3 space-y-3">
-              <div>
-                <SL>Current CTC (Lacs)</SL>
-                <CTCRange minLabel="Min" maxLabel="Max" min={minCurrCTC} max={maxCurrCTC} onMin={setMinCurrCTC} onMax={setMaxCurrCTC} />
-              </div>
-              <div>
-                <SL>Expected CTC (Lacs)</SL>
-                <CTCRange minLabel="Min" maxLabel="Max" min={minExpCTC} max={maxExpCTC} onMin={setMinExpCTC} onMax={setMaxExpCTC} />
-              </div>
-            </div>
-          )}
-
-          <div className="h-3" />
-        </div>
-      </ScrollArea>
-
-      {/* ── SEARCH BUTTON ── */}
-      <div className="flex-shrink-0 px-4 py-3 border-t border-slate-100 bg-white">
-        <button type="submit" disabled={isSearching}
-          className="w-full h-9 rounded-lg flex items-center justify-center gap-2 text-[12.5px] font-600 text-white transition-all"
-          style={{ background:'linear-gradient(135deg,#6C2BD9,#7C3AED)', boxShadow:'0 2px 8px rgba(108,43,217,0.3)', fontWeight:600, opacity:isSearching?0.7:1, cursor:isSearching?'not-allowed':'pointer' }}
-          onMouseEnter={e=>{ if(!isSearching)(e.currentTarget as HTMLElement).style.boxShadow='0 4px 14px rgba(108,43,217,0.45)'; }}
-          onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.boxShadow='0 2px 8px rgba(108,43,217,0.3)'; }}>
-          {isSearching
-            ? <><Loader2 size={13} style={{ animation:'spin 0.8s linear infinite' }} /> Searching…</>
-            : <><Sparkles size={13} /> Search Candidates</>
-          }
+        <button
+          onClick={handleSearch} disabled={isSearching}
+          style={{ width: '100%', height: 32, borderRadius: 7, border: 'none', background: isSearching ? '#4C1D95' : '#7C3AED', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+        >
+          <Search size={12} />{isSearching ? 'Searching…' : 'Search Candidates'}
         </button>
+        <div style={{ marginTop: 5, fontSize: 8, color: '#A78BFA', textAlign: 'center' }}>
+          Ctrl+Enter  ·  ★ required  ·  ☆ optional
+        </div>
       </div>
 
-      <style>{`
-        @keyframes zxsb-shim { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-      `}</style>
-    </form>
+      {/* ── Sections ── */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+
+        {/* CORE */}
+        <SectionHeader label="Core" count={coreCount} open={open.core} onToggle={() => tog('core')} />
+        {open.core && (
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            <div>
+              <FL tip="Full-text search across resume, title, skills. ★ = required in all results.">Keywords</FL>
+              <TagIn tags={keywords} onChange={setKeywords} placeholder="Type + Enter" allowM />
+            </div>
+
+            <div>
+              <FL tip="Current job title — select multiple, each treated as OR unless starred.">Current Title</FL>
+              <SearchableMultiPopover
+                tags={currTitles} onChange={setCurrTitles}
+                placeholder="Search titles…"
+                suggs={titleSugg} onQ={setTitleQ}
+                allowM
+              />
+            </div>
+
+            <div>
+              <FL tip="Current employer — select multiple, each treated as OR unless starred.">Current Company</FL>
+              <SearchableMultiPopover
+                tags={currCompanies} onChange={setCurrCompanies}
+                placeholder="Search companies…"
+                suggs={companySugg} onQ={setCompanyQ}
+                allowM
+              />
+            </div>
+
+            <div>
+              <FL tip="Filter by total years of experience.">Experience</FL>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <ExpSel v={minExp} onChange={setMinExp} label="Min" />
+                <ExpSel v={maxExp} onChange={setMaxExp} label="Max" />
+              </div>
+            </div>
+
+            <div>
+              <FL tip="Filter by city, state or country. ★ = required.">Location</FL>
+              <LocIn tags={locations} onChange={setLocations} />
+            </div>
+          </div>
+        )}
+
+        {/* SKILLS */}
+        <SectionHeader label="Skills" count={skillCount} open={open.skills} onToggle={() => tog('skills')} />
+        {open.skills && (
+          <div style={{ padding: '10px 12px' }}>
+            <FL tip="Click legend to set mode for new chips. Click existing chip to cycle mode. ✓ hard filter · ~ boosts score · ✕ removes from results.">
+              Skill Tags
+            </FL>
+            <SkillBuilder chips={skillChips} onChange={setSkillChips} suggs={skillSugg} onQ={setSkillQ} />
+          </div>
+        )}
+
+        {/* PAST EXPERIENCE */}
+        <SectionHeader label="Past Experience" count={pastCount} open={open.past} onToggle={() => tog('past')} />
+        {open.past && (
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FL tip="Search all previous job titles. ★ = must have held this title.">Previous Titles</FL>
+              <SearchableMultiPopover
+                tags={prevTitles} onChange={setPrevTitles}
+                placeholder="Search previous titles…"
+                suggs={prevTSugg} onQ={setPrevTQ}
+                allowM
+              />
+            </div>
+            <div>
+              <FL tip="Search previous employers. ★ = must have worked there.">Previous Companies</FL>
+              <SearchableMultiPopover
+                tags={prevCos} onChange={setPrevCos}
+                placeholder="Search companies…"
+                suggs={prevCoSugg} onQ={setPrevCoQ}
+                allowM
+              />
+            </div>
+            <div>
+              <FL tip="Filter by total number of distinct companies.">Companies Count</FL>
+              <select
+                value={coCount} onChange={e => setCoCount(e.target.value)}
+                style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}
+              >
+                {CO_COUNT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* EDUCATION */}
+        <SectionHeader label="Education" count={eduCount} open={open.edu} onToggle={() => tog('edu')} />
+        {open.edu && (
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FL tip="Search normalised — 'MBA', 'M.B.A', 'Master of Business Administration' all match. Multiple allowed.">
+                Qualification / Degree
+              </FL>
+              <SearchableMultiPopover
+                tags={degrees} onChange={setDegrees}
+                placeholder="Search qualifications…"
+                suggs={degreeSugg} onQ={setDegreeQ}
+                filterSuggs={eduFilterSuggs}
+              />
+            </div>
+            <div>
+              <FL tip="University or college — select multiple.">Institution</FL>
+              <SearchableMultiPopover
+                tags={institutions} onChange={setInstitutions}
+                placeholder="Search institutions…"
+                suggs={instSugg} onQ={setInstQ}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* AVAILABILITY */}
+        <SectionHeader label="Availability" count={availCount} open={open.avail} onToggle={() => tog('avail')} />
+        {open.avail && (
+          <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FL tip="How soon can the candidate join?">Notice Period</FL>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {NOTICE_OPTIONS.map(np => {
+                  const a = noticePeriods.includes(np);
+                  return (
+                    <button
+                      key={np} type="button"
+                      onClick={() => setNoticePeriods(prev => a ? prev.filter(p => p !== np) : [...prev, np])}
+                      style={{ padding: '3px 9px', borderRadius: 99, fontSize: 9, fontWeight: 600, border: '1px solid', cursor: 'pointer', ...(a ? { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' } : { background: 'white', color: '#64748B', borderColor: '#E2E8F0' }) }}
+                    >
+                      {np}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <FL tip="Current salary in lakhs. 5 = ₹5L per annum.">Current CTC (₹L)</FL>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <CtcIn v={minCCTC} onChange={setMinCCTC} label="Min" />
+                <CtcIn v={maxCCTC} onChange={setMaxCCTC} label="Max" />
+              </div>
+            </div>
+            <div>
+              <FL tip="Expected salary in lakhs.">Expected CTC (₹L)</FL>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <CtcIn v={minECTC} onChange={setMinECTC} label="Min" />
+                <CtcIn v={maxECTC} onChange={setMaxECTC} label="Max" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: 16 }} />
+      </div>
+    </div>
   );
 };
 
 export default ZiveXSearchSidebar;
-// 

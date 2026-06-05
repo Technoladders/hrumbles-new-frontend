@@ -115,9 +115,30 @@ const [additionalRecipients, setAdditionalRecipients] = useState<string[]>([]);
   const [recruitmentReport, setRecruitmentReport] = useState<any>({
   workStatus: { profilesWorkedOn: '', profilesUploaded: 0 },
   atsReport: { resumesATS: 0, resumesTalentPool: 0 },
-  candidateStatus: { paidSheet: 0, unpaidSheet: 0, linedUp: 0, onField: 0 },
-  activitySummary: { contacted: 0, totalCalls: 0, connected: 0, notConnected: 0, callBack: 0, proofNote: '' },
-  scheduling: [],
+candidateStatus: {
+  paid: [],
+  unpaid: [],
+  linedUp: [],
+  onField: [],
+  noPaidActivity: false,
+  noUnpaidActivity: false,
+  noLinedUpActivity: false,
+  noOnFieldActivity: false,
+},
+
+activitySummary: {
+  contacted: 0,
+  totalCalls: 0,
+  connected: 0,
+  notConnected: 0,
+  callBack: 0,
+  proofNote: '',
+  candidates: [],
+  noActivity: false,
+},
+
+scheduling: [],
+noScheduling: false,
   walkIns: { expected: 0, proofAttached: false, reminderNeeded: false },
   qualityCheck: { reviewedCount: 0, candidateNames: '' },
   targets: { source: 0, calls: 0, lineups: 0, closures: 0 }
@@ -267,6 +288,12 @@ const validateRecruiterReport = (report: any) => {
 // NEW: Add validateAndSubmit function
 const validateAndSubmit = async () => {
   const errors: Record<string, boolean> = {};
+
+  const isEmpty = (v: any) =>
+  v === null ||
+  v === undefined ||
+  v === "" ||
+  (typeof v === "string" && v.trim() === "");
  
   // Basic validation checks (integrate with existing validateForm for non-recruiter fields)
   const baseValidation = validateForm({
@@ -295,14 +322,50 @@ const validateAndSubmit = async () => {
         if (!recruitmentReport.targets?.[k]) errors[`targets.${k}`] = true;
     });
     // Validate Status Arrays
-    ['paid', 'unpaid', 'linedUp', 'onField'].forEach(status => {
-        (recruitmentReport.candidateStatus?.[status] || []).forEach((c: any, i: number) => {
-            if (!c.name) errors[`candidateStatus.${status}.${i}.name`] = true;
-            if (!c.mobile) errors[`candidateStatus.${status}.${i}.mobile`] = true;
-            if (!c.date) errors[`candidateStatus.${status}.${i}.date`] = true;
-            if (status === 'onField' && !c.status) errors[`candidateStatus.${status}.${i}.status`] = true;
-        });
+if (
+  (recruitmentReport.candidateStatus?.paid || []).length === 0 &&
+  !recruitmentReport.candidateStatus?.noPaidActivity
+)
+  errors["candidateStatus.paid"] = true;
+
+if (
+  (recruitmentReport.candidateStatus?.unpaid || []).length === 0 &&
+  !recruitmentReport.candidateStatus?.noUnpaidActivity
+)
+  errors["candidateStatus.unpaid"] = true;
+
+if (
+  (recruitmentReport.candidateStatus?.linedUp || []).length === 0 &&
+  !recruitmentReport.candidateStatus?.noLinedUpActivity
+)
+  errors["candidateStatus.linedUp"] = true;
+
+if (
+  (recruitmentReport.candidateStatus?.onField || []).length === 0 &&
+  !recruitmentReport.candidateStatus?.noOnFieldActivity
+)
+  errors["candidateStatus.onField"] = true;
+
+// Validate every field
+['paid', 'unpaid', 'linedUp', 'onField'].forEach(status => {
+    (recruitmentReport.candidateStatus?.[status] || []).forEach((c: any, i: number) => {
+
+        if (isEmpty(c.name))
+            errors[`candidateStatus.${status}.${i}.name`] = true;
+
+        if (isEmpty(c.mobile))
+            errors[`candidateStatus.${status}.${i}.mobile`] = true;
+
+        if (isEmpty(c.date))
+            errors[`candidateStatus.${status}.${i}.date`] = true;
+
+        if (isEmpty(c.notes))
+            errors[`candidateStatus.${status}.${i}.notes`] = true;
+
+        if (status === "onField" && isEmpty(c.status))
+            errors[`candidateStatus.${status}.${i}.status`] = true;
     });
+});
 
     // Walkins validation (added for completeness based on existing validateRecruiterReport)
     if (!recruitmentReport.walkIns?.expected) errors['walkIns.expected'] = true;
@@ -311,6 +374,51 @@ const validateAndSubmit = async () => {
     if (!recruitmentReport.qualityCheck?.reviewedCount) errors['qualityCheck.reviewedCount'] = true;
     if (!recruitmentReport.qualityCheck?.candidateNames) errors['qualityCheck.candidateNames'] = true;
   }
+
+  // Activity Summary
+if (
+  (recruitmentReport.activitySummary?.candidates || []).length === 0 &&
+  !recruitmentReport.activitySummary?.noActivity
+)
+  errors["activitySummary.candidates"] = true;
+
+(recruitmentReport.activitySummary?.candidates || []).forEach((c: any, i: number) => {
+    if (isEmpty(c.name))
+        errors[`activitySummary.candidates.${i}.name`] = true;
+
+    if (isEmpty(c.mobile))
+        errors[`activitySummary.candidates.${i}.mobile`] = true;
+
+    if (isEmpty(c.callStatus))
+        errors[`activitySummary.candidates.${i}.callStatus`] = true;
+});
+ 
+// Scheduling
+if (
+  (recruitmentReport.scheduling || []).length === 0 &&
+  !recruitmentReport.noScheduling
+)
+  errors["scheduling"] = true;
+
+(recruitmentReport.scheduling || []).forEach((s: any, i: number) => {
+    if (isEmpty(s.name))
+        errors[`scheduling.${i}.name`] = true;
+
+    if (isEmpty(s.mobile))
+        errors[`scheduling.${i}.mobile`] = true;
+
+    if (isEmpty(s.position))
+        errors[`scheduling.${i}.position`] = true;
+
+    if (isEmpty(s.confirmationProof))
+        errors[`scheduling.${i}.confirmationProof`] = true;
+
+    if (isEmpty(s.timeShared))
+        errors[`scheduling.${i}.timeShared`] = true;
+
+    if (isEmpty(s.jdShared))
+        errors[`scheduling.${i}.jdShared`] = true;
+});
   
   setFormErrors(errors);
   if (Object.keys(errors).length > 0) {

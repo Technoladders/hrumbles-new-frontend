@@ -730,12 +730,12 @@ const TableTab: FC<{
       let q = supabase.from('hr_talent_pool')
         .select(`id,candidate_name,email,phone,suggested_title,created_at,current_salary,current_location,total_experience,current_company,current_designation,notice_period,highest_education,work_experience,created_by:hr_employees!hr_talent_pool_created_by_fkey(first_name,last_name),parsed_experience_years,parsed_current_ctc,source_platform,top_skills,top_skills_lower,resume_text,resume_path`, { count: 'exact' });
       if (organizationId) q = q.eq('organization_id', organizationId);
-      const TASKUP = '0e4318d8-b1a5-4606-b311-c56d7eec47ce';
-      if (user?.id) {
-        if (organizationId === TASKUP && role === 'employee') q = q.eq('created_by', user.id);
-        else if (filterCreator === 'my') q = q.eq('created_by', user.id);
-        else if (filterCreator !== 'all') q = q.eq('created_by', filterCreator);
-      }
+if (user?.id) {
+  if (filterCreator === 'my')
+    q = q.eq('created_by', user.id);
+  else if (filterCreator !== 'all')
+    q = q.eq('created_by', filterCreator);
+}
       if (debouncedSearchTerm) { const s = `%${debouncedSearchTerm}%`; q = q.or(`candidate_name.ilike.${s},email.ilike.${s},phone.ilike.${s}`); }
       if (filterExp === 'fresher') q = q.or('total_experience.ilike.%Fresher%,parsed_experience_years.eq.0');
       else if (filterExp === '1-3') q = q.gte('parsed_experience_years', 1).lte('parsed_experience_years', 3);

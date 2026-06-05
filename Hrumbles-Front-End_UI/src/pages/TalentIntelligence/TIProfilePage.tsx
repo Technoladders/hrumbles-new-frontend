@@ -186,7 +186,7 @@ export function RevealBlock({ profile, waterfallEnabled, onRevealDone }: RevealB
     const setErr  = revealType === "email" ? setEmailErr  : setPhoneErr;
     setLoad(true); setErr(null);
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal-v1", {
+      const { data, error: fnErr } = await supabase.functions.invoke("ti-reveal", {
         body: {
           linkedinUrl:     profile.linkedin_url,
           revealType,

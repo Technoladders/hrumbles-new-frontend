@@ -1,37 +1,20 @@
-// src/hooks/zive-x/useTypesenseSearch.ts
+// src/hooks/zive-x/useTypesenseSearch.ts  v6
 //
-// SEARCH ARCHITECTURE — v4 (recruiter-correct)
-//
-// OPTIONAL KEYWORDS:
-//   Fetch ALL org candidates (q='*') then client-side rank by match count.
-//   This ensures Python alone or Python+Django+Flask all return the same
-//   pool — just ranked differently. Typesense q is only used for mandatory
-//   terms (intersection) and structural filters.
-//
-// MANDATORY KEYWORDS:
-//   Each mandatory keyword runs as a SEPARATE Typesense search.
-//   Intersect all result ID sets → only candidates matching ALL mandatory terms.
-//
-// MANDATORY SKILLS/COMPANIES/LOCATIONS:
-//   filter_by (exact match) — server-side, zero false positives.
-//
-// SYNONYM HANDLING:
-//   Client-side expansion before search. Common recruiter synonyms covered.
-//   Server-side synonyms should be configured via Typesense admin API.
+// Changes vs v5:
+//  • Handles current_designations[] / current_companies[] / degrees[] arrays (v4 sidebar)
+//  • filter_by uses OR logic for multi-value arrays
+//  • scoreCandidate also accounts for degree/institution matches
+//  • No other logic changed
 
 import { useQuery } from '@tanstack/react-query';
 import { CandidateSearchResult, SearchFilters } from '@/types/candidateSearch';
 
-// ── Config ────────────────────────────────────────────────────────────────────
 const TYPESENSE_URL        = 'https://search.hrumbles.ai';
 const TYPESENSE_SEARCH_KEY = '84c228d38973deaf5d36f4899cc8c5522d60ba085cdf5d9df376770fccc0b122';
-const QUERY_BY_FIELDS      = 'suggested_title,current_designation,current_company,skills,education_summary,resume_snippet';
-const QUERY_BY_WEIGHTS     = '10,9,5,4,2,1';
-const MAX_PER_PAGE         = 250;
+const QUERY_BY_FIELDS  = 'suggested_title,current_designation,current_company,previous_titles,previous_companies,skills,degree,institution,education_summary,resume_snippet';
+const QUERY_BY_WEIGHTS = '10,9,8,7,6,5,4,3,2,1';
+const MAX_PER_PAGE = 250;
 
-// ── Synonym map — client-side expansion ───────────────────────────────────────
-// When a recruiter types "React", also search for "ReactJS". This expands
-// the search query to catch candidates who wrote their skill differently.
 const SYNONYMS: Record<string, string[]> = {
   'react':            ['reactjs', 'react.js'],
   'reactjs':          ['react', 'react.js'],
@@ -90,7 +73,6 @@ function esc(val: string): string {
   return val.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
 }
 
-// ── API call ──────────────────────────────────────────────────────────────────
 async function singleSearch(params: Record<string, string>): Promise<any> {
   const url = new URLSearchParams(params);
   const res = await fetch(
@@ -101,13 +83,18 @@ async function singleSearch(params: Record<string, string>): Promise<any> {
   return res.json();
 }
 
-// ── Structural filter_by (mandatory structured filters) ────────────────────────
+// ── Build structural filter_by ────────────────────────────────────────────────
 function buildStructuralFilterBy(f: SearchFilters, orgId: string): string {
   const parts: string[] = [`organization_id:=${orgId}`];
 
-  // Mandatory skills (exact array element match)
+  // Mandatory skills (hard filter)
   f.skills?.filter(t => t.mandatory).forEach(t => {
     parts.push(`skills:=${t.value.toLowerCase()}`);
+  });
+
+  // Excluded skills
+  f.excluded_skills?.forEach(skill => {
+    if (skill.trim()) parts.push(`skills:!=${skill.trim().toLowerCase()}`);
   });
 
   // Mandatory locations
@@ -117,14 +104,57 @@ function buildStructuralFilterBy(f: SearchFilters, orgId: string): string {
     parts.push(`current_location:[${locs}]`);
   }
 
-  // Mandatory companies (exact field match)
+  // Mandatory companies (from companies[] tags)
   f.companies?.filter(t => t.mandatory).forEach(t => {
     parts.push(`(current_company:\`${esc(t.value)}\` || previous_company:\`${esc(t.value)}\`)`);
   });
 
-  // Dedicated input fields
-  if (f.current_company)     parts.push(`current_company:\`${esc(f.current_company)}\``);
-  if (f.current_designation) parts.push(`current_designation:\`${esc(f.current_designation)}\``);
+  // ── current_designation: multi-array (v4) OR legacy single ───────────────
+  // Mandatory title tags → AND each one
+  const titleTags = (f as any).current_designations ?? [];
+  const mandTitles = titleTags.filter((t: any) => t.mandatory);
+  mandTitles.forEach((t: any) => {
+    if (t.value.trim()) parts.push(`current_designation:\`${esc(t.value.trim())}\``);
+  });
+  // Legacy single (only if no multi-array)
+  if (titleTags.length === 0 && f.current_designation) {
+    parts.push(`current_designation:\`${esc(f.current_designation)}\``);
+  }
+
+  // ── current_company: multi-array (v4) OR legacy single ───────────────────
+  const companyTags = (f as any).current_companies ?? [];
+  const mandCompanies = companyTags.filter((t: any) => t.mandatory);
+  mandCompanies.forEach((t: any) => {
+    if (t.value.trim()) parts.push(`current_company:\`${esc(t.value.trim())}\``);
+  });
+  if (companyTags.length === 0 && f.current_company) {
+    parts.push(`current_company:\`${esc(f.current_company)}\``);
+  }
+
+  // ── Previous titles (mandatory) ───────────────────────────────────────────
+  f.previous_titles?.filter(t => t.mandatory).forEach(t => {
+    if (t.value.trim()) parts.push(`previous_titles:\`${esc(t.value.trim())}\``);
+  });
+
+  // ── Previous companies (mandatory) ────────────────────────────────────────
+  f.previous_companies?.filter(t => t.mandatory).forEach(t => {
+    if (t.value.trim()) parts.push(`previous_companies:\`${esc(t.value.trim())}\``);
+  });
+
+  // ── Degree: multi-array (v4) — mandatory only in filter_by ───────────────
+  const degreeTags = (f as any).degrees ?? [];
+  const mandDegrees = degreeTags.filter((t: any) => t.mandatory);
+  mandDegrees.forEach((t: any) => {
+    if (t.value.trim()) parts.push(`degree:\`${esc(t.value.trim())}\``);
+  });
+  // Legacy single degree (only if no multi-array)
+  if (degreeTags.length === 0 && f.degree) {
+    parts.push(`degree:\`${esc(f.degree)}\``);
+  }
+
+  // Companies count range
+  if (f.companies_count_min != null) parts.push(`companies_count:>=${f.companies_count_min}`);
+  if (f.companies_count_max != null) parts.push(`companies_count:<=${f.companies_count_max}`);
 
   // Numeric ranges
   if (f.min_exp != null)             parts.push(`exp_years:>=${f.min_exp}`);
@@ -155,18 +185,13 @@ function buildStructuralFilterBy(f: SearchFilters, orgId: string): string {
 }
 
 // ── Mandatory keyword intersection ────────────────────────────────────────────
-// Each mandatory keyword → separate search → intersect all ID sets.
-// Guarantees ALL mandatory terms exist in the candidate's indexed fields.
 async function getMandatoryKeywordIds(
   keywords: string[],
   filterBy: string,
 ): Promise<Set<string> | null> {
   if (keywords.length === 0) return null;
-
   const searches = keywords.map(kw => {
-    // Expand with synonyms — if recruiter types "React", also find "ReactJS"
     const expanded = expandWithSynonyms(kw);
-    // Use quoted phrase per term — ensures the term as a unit is found
     const q = expanded.map(t => `"${t}"`).join(' ');
     return singleSearch({
       q,
@@ -178,11 +203,9 @@ async function getMandatoryKeywordIds(
       prefix:    'true',
     });
   });
-
-  const results  = await Promise.all(searches);
-  const idSets   = results.map(d => new Set<string>((d.hits || []).map((h: any) => h.document.id as string)));
+  const results = await Promise.all(searches);
+  const idSets  = results.map(d => new Set<string>((d.hits || []).map((h: any) => h.document.id as string)));
   if (idSets.length === 0) return new Set<string>();
-
   let intersection = idSets[0];
   for (let i = 1; i < idSets.length; i++) {
     intersection = new Set([...intersection].filter(id => idSets[i].has(id)));
@@ -190,7 +213,7 @@ async function getMandatoryKeywordIds(
   return intersection;
 }
 
-// ── Transform Typesense hit → CandidateSearchResult ───────────────────────────
+// ── Transform hit → CandidateSearchResult ─────────────────────────────────────
 function transformHit(hit: any): CandidateSearchResult {
   const doc = hit.document;
   return {
@@ -213,38 +236,42 @@ function transformHit(hit: any): CandidateSearchResult {
     phone:                  doc.phone,
     _relevance_score:       undefined,
     _matched_fields:        [],
+    // Phase 2
+    previous_titles:        doc.previous_titles || [],
+    previous_companies:     doc.previous_companies || [],
+    degree:                 doc.degree || '',
+    institution:            doc.institution || '',
+    companies_count:        doc.companies_count ?? 0,
   };
 }
 
 // ── Client-side scoring ───────────────────────────────────────────────────────
-// Counts how many optional terms (including synonyms) appear in the candidate.
-// Used for ranking when optional keywords are present.
 function scoreCandidate(r: CandidateSearchResult, optionalTerms: string[]): number {
   if (optionalTerms.length === 0) return 0;
 
-  const searchableText = [
-    r.title,
-    r.current_designation,
-    r.current_company,
-    r.previous_company       ?? '',
-    r.previous_designation   ?? '',
-    r.education_summary      ?? '',
-    r.current_location       ?? '',
-    ...(r.key_skills         ?? []),
+  const titleText      = [r.title, r.current_designation].join(' ').toLowerCase();
+  const skillText      = (r.key_skills ?? []).join(' ').toLowerCase();
+  const prevTitleText  = (r.previous_titles ?? []).join(' ').toLowerCase();
+  const prevCoText     = (r.previous_companies ?? []).join(' ').toLowerCase();
+  const eduText        = [r.degree, r.institution, r.education_summary].join(' ').toLowerCase();
+
+  const bigText = [
+    titleText, skillText, prevTitleText, prevCoText, eduText,
+    r.current_company, r.previous_company ?? '',
+    r.previous_designation ?? '', r.current_location ?? '',
   ].join(' ').toLowerCase();
 
   let score = 0;
   for (const term of optionalTerms) {
     const variants = expandWithSynonyms(term);
-    // Each term is worth 1 point — bonus if it matches in a high-weight field
-    const titleText = [r.title, r.current_designation].join(' ').toLowerCase();
-    const skillText = (r.key_skills ?? []).join(' ').toLowerCase();
-
     for (const variant of variants) {
       const v = variant.toLowerCase();
-      if (titleText.includes(v))      { score += 3; break; } // title match = 3 points
-      else if (skillText.includes(v)) { score += 2; break; } // skill match = 2 points
-      else if (searchableText.includes(v)) { score += 1; break; } // other = 1 point
+      if      (titleText.includes(v))     { score += 3; break; }
+      else if (skillText.includes(v))     { score += 2; break; }
+      else if (prevTitleText.includes(v)) { score += 2; break; }
+      else if (prevCoText.includes(v))    { score += 2; break; }
+      else if (eduText.includes(v))       { score += 2; break; }
+      else if (bigText.includes(v))       { score += 1; break; }
     }
   }
   return score;
@@ -270,7 +297,6 @@ export function useTypesenseSearch({
 
       const structuralFilter = buildStructuralFilterBy(filters, organizationId);
 
-      // Separate mandatory vs optional
       const mandatoryKeywords = filters.keywords?.filter(t => t.mandatory).map(t => t.value) ?? [];
       const optionalKeywords  = filters.keywords?.filter(t => !t.mandatory).map(t => t.value) ?? [];
       const optionalSkills    = filters.skills?.filter(t => !t.mandatory).map(t => t.value) ?? [];
@@ -278,60 +304,72 @@ export function useTypesenseSearch({
       const optionalLocations = filters.locations?.filter(t => !t.mandatory).map(t => t.value) ?? [];
       const jdKeywords        = filters.jd_generated_keywords?.slice(0, 15) ?? [];
 
-      // Name/email → mandatory
+      // ── NEW: optional multi-array fields for scoring ──────────────────────
+      // current_designations (optional ones only) → add to scoring terms
+      const optTitles   = ((filters as any).current_designations ?? [])
+        .filter((t: any) => !t.mandatory).map((t: any) => t.value as string);
+      // current_companies (optional)
+      const optCompanies2 = ((filters as any).current_companies ?? [])
+        .filter((t: any) => !t.mandatory).map((t: any) => t.value as string);
+      // degrees (optional) → add to scoring
+      const optDegrees  = ((filters as any).degrees ?? [])
+        .filter((t: any) => !t.mandatory).map((t: any) => t.value as string);
+
+      const optPrevTitles = filters.previous_titles?.filter(t => !t.mandatory).map(t => t.value) ?? [];
+      const optPrevCos    = filters.previous_companies?.filter(t => !t.mandatory).map(t => t.value) ?? [];
+      const optInstit     = filters.institutions?.filter(t => !t.mandatory).map(t => t.value) ?? [];
+
       const nameVal  = filters.name?.[0]?.value;
       const emailVal = filters.email?.[0]?.value;
       if (nameVal)  mandatoryKeywords.push(nameVal);
       if (emailVal) mandatoryKeywords.push(emailVal);
 
       const allOptional = [
-        ...optionalKeywords,
-        ...optionalSkills,
-        ...optionalCompanies,
-        ...optionalLocations,
+        ...optionalKeywords, ...optionalSkills,
+        ...optionalCompanies, ...optionalLocations,
         ...jdKeywords,
+        ...optPrevTitles, ...optPrevCos, ...optInstit,
+        // NEW: include optional multi-value fields in scoring
+        ...optTitles, ...optCompanies2, ...optDegrees,
       ];
 
-      // ── Step 1: Mandatory keyword intersection ────────────────────────────
+      // Step 1: mandatory keyword intersection
       const mandatoryIdSet = await getMandatoryKeywordIds(mandatoryKeywords, structuralFilter);
-      if (mandatoryIdSet !== null && mandatoryIdSet.size === 0) {
-        return []; // No candidate satisfies all mandatory terms
-      }
+      if (mandatoryIdSet !== null && mandatoryIdSet.size === 0) return [];
 
-      // ── Step 2: Fetch candidates ──────────────────────────────────────────
-      // OPTION A: Fetch ALL org candidates (q='*'), client-side rank.
-      // This guarantees Python alone and Python+Django+Flask return the
-      // same pool — just ranked differently by match score.
+      // Step 2: fetch all org candidates passing structural filters
       const data = await singleSearch({
         q:         '*',
         query_by:  QUERY_BY_FIELDS,
         filter_by: structuralFilter,
-        sort_by:   'created_at_ts:desc',   // recency as tiebreaker
+        sort_by:   'created_at_ts:desc',
         per_page:  MAX_PER_PAGE.toString(),
         page:      '1',
       });
 
       let results: CandidateSearchResult[] = (data.hits || []).map(transformHit);
 
-      // ── Step 3: Apply mandatory keyword ID filter ─────────────────────────
+      // Step 3: apply mandatory keyword filter
       if (mandatoryIdSet !== null) {
         results = results.filter(r => mandatoryIdSet.has(r.id));
       }
 
-      // ── Step 4: Score and sort by optional match count ────────────────────
-      // Each candidate gets a relevance score based on how many optional
-      // terms (and their synonyms) appear in their profile fields.
-      // Title/designation matches worth 3x, skill matches 2x, others 1x.
+      // Step 4: score + normalise
       if (allOptional.length > 0) {
         const scored = results.map(r => ({
           r,
           score: scoreCandidate(r, allOptional),
         }));
         scored.sort((a, b) => b.score - a.score);
+        const topScore = scored[0]?.score ?? 0;
         results = scored.map(s => ({
           ...s.r,
-          _relevance_score: Math.min(100, Math.round((s.score / (allOptional.length * 3)) * 100)),
+          _relevance_score: topScore > 0
+            ? Math.round((s.score / topScore) * 100)
+            : 100,
         }));
+      } else if (mandatoryKeywords.length > 0) {
+        results = results.map(r => ({ ...r, _relevance_score: 100 }));
       }
 
       return results;

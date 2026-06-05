@@ -1,10 +1,14 @@
-// hooks/useRRSearch.ts — v5
+// hooks/useRRSearch.ts — v6
 //
-// Changes from v4:
-//   1. Handles 402 INSUFFICIENT_CREDITS from contactout-search edge function
-//      → sets state to "error" with a typed error object { code, message, required, available }
-//   2. Exposes `creditError` separately so callers can render a top-up CTA
-//   3. Passes userId from Supabase session to edge function for transaction logging
+// Changes from v5:
+//   1. RRFilters now has `linkedinUrl: string` (added in RRSearchSidebar v5).
+//   2. ContactOut path has a NEW BRANCH at the top:
+//        if (opts.linkedinUrl is a valid LinkedIn URL)
+//          → call `contactout-enrich-profile` edge fn
+//          → edge fn returns same `{ profiles: {[url]: profileObj}, total: 1 }` wire shape
+//          → normalize with the SAME normalizeCOProfile() used for search
+//          → return as single-element profiles array
+//   3. Everything else is identical to v5.
 
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -174,8 +178,10 @@ function normalizeCOProfile(linkedinUrl: string, p: any): RRProfile {
 
   const currentExp  = exp.find(e => e.is_current) ?? exp[0] ?? null;
   const companyInfo = p.company ?? {};
-  const ca          = p.contact_availability ?? {};
-  const ci          = p.contact_info         ?? {};
+
+  // contact_availability — from search response OR from enrich contact_info
+  const ca = p.contact_availability ?? {};
+  const ci = p.contact_info         ?? {};
 
   const allEmails = [
     ...(ci.personal_emails ?? []).map((e: string) => ({ email: e, type: "personal", smtp_valid: "valid" })),
@@ -192,7 +198,7 @@ function normalizeCOProfile(linkedinUrl: string, p: any): RRProfile {
     id:                      stableIdFromUrl(linkedinUrl),
     status:                  "complete",
     name:                    p.full_name ?? "",
-    current_title:           p.title ?? currentExp?.title ?? "",
+    current_title:           p.title ?? p.headline ?? currentExp?.title ?? "",
     current_employer:        currentExp?.company_name ?? companyInfo.name ?? "",
     current_employer_domain: companyInfo.domain   ?? null,
     current_employer_website:companyInfo.website  ?? null,
@@ -231,6 +237,12 @@ function normalizeCOProfile(linkedinUrl: string, p: any): RRProfile {
   } as unknown as RRProfile;
 }
 
+// ─── URL validation ───────────────────────────────────────────────────────────
+function isValidLinkedInUrl(url?: string): boolean {
+  if (!url?.trim()) return false;
+  return /linkedin\.com\/in\//i.test(url.trim());
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 interface UseRRSearchOpts extends Partial<RRFilters> {
@@ -244,7 +256,7 @@ interface UseRRSearchReturn {
   profiles:     RRProfile[];
   totalEntries: number;
   error:        string | null;
-  creditError:  CreditError | null;  // ← new: specific credit error
+  creditError:  CreditError | null;
   search:       (page?: number) => Promise<void>;
 }
 
@@ -267,15 +279,92 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
     const pageSize = opts.pageSize ?? 10;
     const provider = opts.provider ?? "contactout";
 
-    // Resolve userId from session for transaction logging
     let userId: string | undefined;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       userId = session?.user?.id;
     } catch { /* silent */ }
 
-    // ── ContactOut ─────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    //  ContactOut path
+    // ══════════════════════════════════════════════════════════════════════
     if (provider === "contactout") {
+
+      // ── NEW: LinkedIn URL enrich branch ────────────────────────────────
+      if (isValidLinkedInUrl(opts.linkedinUrl)) {
+        try {
+          const { data, error: fnErr } = await supabase.functions.invoke(
+            "contactout-enrich-profile",
+            {
+              body: {
+                linkedinUrl:    opts.linkedinUrl!.trim(),
+                organizationId: opts.organizationId ?? undefined,
+                userId,
+              },
+            }
+          );
+
+          // credit error
+          if (fnErr) {
+            const errBody = (fnErr as any)?.context ?? {};
+            if (errBody?.code === "INSUFFICIENT_CREDITS" || fnErr.message?.includes("402")) {
+              const ce: CreditError = {
+                code:      "INSUFFICIENT_CREDITS",
+                message:   errBody.message ?? "Insufficient credits.",
+                required:  errBody.required  ?? 1,
+                available: errBody.available ?? 0,
+              };
+              setCreditError(ce);
+              setError(ce.message);
+              setState("error");
+              return;
+            }
+            throw new Error(fnErr.message);
+          }
+
+          // data.code === INSUFFICIENT_CREDITS (200 wrapper)
+          if (data?.code === "INSUFFICIENT_CREDITS") {
+            const ce: CreditError = {
+              code:      "INSUFFICIENT_CREDITS",
+              message:   data.message ?? "Insufficient credits.",
+              required:  data.required  ?? 1,
+              available: data.available ?? 0,
+            };
+            setCreditError(ce);
+            setError(ce.message);
+            setState("error");
+            return;
+          }
+
+          if (!data) throw new Error("No response from enrich");
+
+          // Same wire shape as contactout-search: profiles object keyed by URL
+          const profilesObj: Record<string, any> = data.profiles ?? {};
+          const entries = Object.entries(profilesObj);
+
+          if (!entries.length) {
+            setState("empty");
+            setProfiles([]);
+            setTotalEntries(0);
+            return;
+          }
+
+          // Normalize using the SAME normalizeCOProfile — no code duplication
+          const rawProfiles = entries.map(([url, p]) => normalizeCOProfile(url, p));
+
+          setState("results");
+          setProfiles(rawProfiles);
+          setTotalEntries(1);
+        } catch (e: any) {
+          if (e.name === "AbortError") return;
+          console.error("[contactout-enrich-profile] error:", e);
+          setError(e.message ?? "Enrich failed");
+          setState("error");
+        }
+        return;  // ← end enrich branch
+      }
+
+      // ── Normal contactout-search branch (unchanged from v5) ────────────
       let skillsParam: string[] | undefined;
       if (opts.skillChips?.length) {
         const must    = opts.skillChips.filter(c => c.mode === "must").map(c => c.label);
@@ -308,20 +397,20 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
         : undefined;
 
       const query: Record<string, any> = {};
-      if (opts.name?.trim())          query.name          = opts.name.trim();
-      if (jobTitleParam)              query.job_title     = jobTitleParam;
-      if (seniorityParam)             query.seniority     = seniorityParam;
-      if (jobFunctionParam)           query.job_function  = jobFunctionParam;
-      if (opts.locations?.length)     query.location      = opts.locations;
-      if (opts.currentEmployer?.length) query.company     = opts.currentEmployer;
-      if (skillsParam)                query.skills        = skillsParam;
-      if (opts.yearsExperience)       query.years_of_experience   = toYearsArray(opts.yearsExperience);
-      if (opts.yearsInCurrentRole)    query.years_in_current_role = toYearsArray(opts.yearsInCurrentRole);
-      if (opts.companySize?.length)   query.company_size    = opts.companySize;
-      if (opts.companyIndustry?.length) query.industry      = opts.companyIndustry;
-      if (opts.school?.length)        query.education       = opts.school;
-      if (opts.degree?.length)        query.education       = [...(query.education ?? []), ...opts.degree];
-      if (opts.openToWork)            query.keyword = query.keyword ? `${query.keyword} open to work` : "open to work";
+      if (opts.name?.trim())            query.name          = opts.name.trim();
+      if (jobTitleParam)                query.job_title     = jobTitleParam;
+      if (seniorityParam)               query.seniority     = seniorityParam;
+      if (jobFunctionParam)             query.job_function  = jobFunctionParam;
+      if (opts.locations?.length)       query.location      = opts.locations;
+      if (opts.currentEmployer?.length) query.company       = opts.currentEmployer;
+      if (skillsParam)                  query.skills        = skillsParam;
+      if (opts.yearsExperience)         query.years_of_experience   = toYearsArray(opts.yearsExperience);
+      if (opts.yearsInCurrentRole)      query.years_in_current_role = toYearsArray(opts.yearsInCurrentRole);
+      if (opts.companySize?.length)     query.company_size    = opts.companySize;
+      if (opts.companyIndustry?.length) query.industry        = opts.companyIndustry;
+      if (opts.school?.length)          query.education       = opts.school;
+      if (opts.degree?.length)          query.education       = [...(query.education ?? []), ...opts.degree];
+      if (opts.openToWork)              query.keyword = query.keyword ? `${query.keyword} open to work` : "open to work";
       if (opts.contactMethod?.length) {
         const dataTypes: string[] = [];
         opts.contactMethod.forEach(m => {
@@ -330,9 +419,9 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
         });
         if (dataTypes.length) query.data_types = [...new Set(dataTypes)];
       }
-      if (opts.keyword?.trim())               query.keyword      = opts.keyword.trim();
-      if (opts.previousEmployer?.length)      query.past_company = opts.previousEmployer;
-      if (opts.previousTitle?.length)         query.past_job_title = [`(${opts.previousTitle.join(" OR ")})`];
+      if (opts.keyword?.trim())             query.keyword      = opts.keyword.trim();
+      if (opts.previousEmployer?.length)    query.past_company = opts.previousEmployer;
+      if (opts.previousTitle?.length)       query.past_job_title = [`(${opts.previousTitle.join(" OR ")})`];
 
       const body = {
         query,
@@ -347,9 +436,7 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       try {
         const { data, error: fnErr } = await supabase.functions.invoke("contactout-search", { body });
 
-        // ── 402: Insufficient Credits ─────────────────────────────────────
         if (fnErr) {
-          // Supabase wraps HTTP errors — check the raw response
           const errBody = (fnErr as any)?.context ?? {};
           if (errBody?.code === "INSUFFICIENT_CREDITS" || fnErr.message?.includes("402")) {
             const ce: CreditError = {
@@ -366,7 +453,6 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
           throw new Error(fnErr.message);
         }
 
-        // Also check inside data for 402 (some edge fn configs return 200 with error body)
         if (data?.code === "INSUFFICIENT_CREDITS") {
           const ce: CreditError = {
             code:      "INSUFFICIENT_CREDITS",
@@ -423,7 +509,9 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       return;
     }
 
-    // ── RocketReach ────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════
+    //  RocketReach path — unchanged from v5
+    // ══════════════════════════════════════════════════════════════════════
     const start = (page - 1) * pageSize + 1;
     const query: Record<string, any> = {};
 
@@ -495,6 +583,7 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       setState("error");
     }
   }, [
+    opts.linkedinUrl,    // ← new dependency
     opts.titles, opts.locations, opts.managementLevels, opts.name,
     opts.skillChips, opts.currentEmployer, opts.companySize, opts.companyIndustry,
     opts.companyRevenue, opts.companyPubliclyTraded, opts.companyFundingMin, opts.companyFundingMax,

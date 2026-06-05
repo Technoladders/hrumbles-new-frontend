@@ -1,81 +1,115 @@
 // src/types/candidateSearch.ts
-// UPDATED: Added TypesenseSearchParams + TypesenseSearchResult
 
 export interface SearchTag {
   value: string;
   mandatory: boolean;
 }
 
-export interface SearchHistory {
-  jd_text: string;
-  job_title?: string;
-  selected_job_id?: string;
-  generated_keywords: string[];
-  is_boolean_mode: boolean;
-  search_filters?: Partial<SearchFilters>;
-}
-
-// ── Result shape (same fields as before — Typesense returns the same data) ──
-export interface CandidateSearchResult {
-  id: string;
-  full_name: string;
-  email: string;
-  title: string;
-  source: 'internal' | 'migrated';
-  current_company: string;
-  current_designation: string;
-  previous_company?: string;
-  previous_designation?: string;
-  education_summary: string;
-  key_skills: string[];
-  total_experience_years: number | null;
-  current_ctc: number | null;
-  expected_ctc?: number | null;
-  current_location: string;
-  notice_period: string | null;
-  phone?: string;
-  // Typesense-specific: relevance score (0-100)
-  _relevance_score?: number;
-  // Which fields triggered the match (for UI highlighting)
-  _matched_fields?: string[];
-}
-
-// ── Filters (unchanged — same shape) ────────────────────────────────────────
+// ── Search Filters ─────────────────────────────────────────────────────────────
 export interface SearchFilters {
-  name?: SearchTag[];
-  email?: SearchTag[];
-  keywords?: SearchTag[];
-  skills?: SearchTag[];
-  educations?: SearchTag[];
-  locations?: SearchTag[];
-  industries?: SearchTag[];
-  companies?: SearchTag[];
-  current_company?: string;
+  // Free-text keyword search (MandatoryTagSelector)
+  keywords?:          SearchTag[];
+
+  // Structured filters
+  skills?:            SearchTag[];   // mandatory=exact filter; optional=score
+  locations?:         SearchTag[];   // mandatory=filter_by; optional=score
+  companies?:         SearchTag[];   // mandatory=filter_by; optional=score
+  educations?:        SearchTag[];   // for text search scoring
+
+  // Identity search
+  name?:              SearchTag[];
+  email?:             SearchTag[];
+
+  // Direct field filters
+  current_company?:   string;
   current_designation?: string;
-  min_exp?: number | null;
-  max_exp?: number | null;
-  min_current_salary?: number | null;
-  max_current_salary?: number | null;
-  min_expected_salary?: number | null;
-  max_expected_salary?: number | null;
-  notice_periods?: string[];
-  date_posted?: string;
-  jd_text?: string;
-  jd_job_title?: string;
-  jd_selected_job_id?: string;
+
+  // Experience range
+  min_exp?:           number;
+  max_exp?:           number;
+
+  // Availability
+  notice_periods?:    string[];
+
+  // Compensation
+  min_current_salary?:  number;
+  max_current_salary?:  number;
+  min_expected_salary?: number;
+  max_expected_salary?: number;
+
+  // Date
+  date_posted?:       string;
+
+  // JD-generated keywords (AI extracted)
   jd_generated_keywords?: string[];
-  jd_is_boolean_mode?: boolean;
+
+  // ── Phase 2 additions ─────────────────────────────────────────────────────
+  // Previous experience search
+  previous_titles?:    SearchTag[];   // mandatory=filter_by previous_titles array
+  previous_companies?: SearchTag[];   // mandatory=filter_by previous_companies array
+
+  // Education
+  degree?:             string;        // exact facet filter (single select)
+  institutions?:       SearchTag[];   // institution text search
+
+  // Skill exclusion
+  excluded_skills?:    string[];      // skills:!= filter
+
+  // Companies count range
+  companies_count_min?: number;
+  companies_count_max?: number;
 }
 
-// ── Typesense query params (internal, built by the hook) ─────────────────────
-export interface TypesenseSearchParams {
-  q: string;
-  query_by: string;
-  query_by_weights: string;
-  filter_by: string;
-  sort_by: string;
-  per_page: number;
-  page: number;
-  highlight_fields?: string;
-  highlight_affix_num_tokens?: number;
+// ── Candidate Result ───────────────────────────────────────────────────────────
+export interface CandidateSearchResult {
+  id:                     string;
+  full_name:              string;
+  email:                  string;
+  title:                  string;
+  source:                 'internal' | 'external';
+
+  // Current role
+  current_company:        string;
+  current_designation:    string;
+
+  // Previous role (legacy single fields)
+  previous_company?:      string;
+  previous_designation?:  string;
+
+  // Education
+  education_summary?:     string;
+
+  // Skills
+  key_skills:             string[];
+
+  // Numerics
+  total_experience_years: number | null;
+  current_ctc:            number | null;
+  expected_ctc:           number | null;
+
+  // Location / availability
+  current_location:       string;
+  notice_period:          string | null;
+
+  // Contact
+  phone?:                 string;
+
+  // Search scoring metadata
+  _relevance_score?:      number;
+  _matched_fields?:       string[];
+
+  // ── Phase 2 additions ────────────────────────────────────────────────────
+  previous_titles?:       string[];   // all past job titles
+  previous_companies?:    string[];   // all past companies
+  degree?:                string;     // highest degree
+  institution?:           string;     // institution name
+  companies_count?:       number;     // unique company count
+}
+
+// ── Recent Search (persisted to Supabase) ─────────────────────────────────────
+export interface RecentSearch {
+  id:         string;
+  filters:    SearchFilters;
+  created_at: string;
+  summary?:   string;   // human-readable label
 }
