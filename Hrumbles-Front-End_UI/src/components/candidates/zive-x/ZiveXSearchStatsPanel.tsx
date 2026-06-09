@@ -357,3 +357,4 @@ const td: React.CSSProperties = {
 };
 
 export default ZiveXSearchStatsPanel;
+// new index resume text

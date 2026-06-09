@@ -1,7 +1,10 @@
-// src/types/talentIntelligence.ts  — v3
-// Added: SkillChip/SkillMode, extended filters (titles, employers, edu, yrs exp)
+// src/types/talentIntelligence.ts  — v4
+// Added: new filter fields matching search_org_profiles_v1 new params
+// (excludeJobTitles, companyFilter, excludeCompanies, excludeCompaniesFilter,
+//  domain, currentWorkLocation, pastWorkLocation, languages)
+// Note: matchExperience / locationRadius / yearsInCurrentRole are CO API-only — not in RPC, skipped here.
 
-export type SkillMode = 'must' | 'nice' | 'exclude';
+export type SkillMode = "must" | "nice" | "exclude";
 export interface SkillChip { label: string; mode: SkillMode; }
 
 export interface TIContactAvailability {
@@ -11,31 +14,18 @@ export interface TIContactAvailability {
 }
 
 export interface TIExperience {
-  title: string;
-  company_name: string;
-  domain: string | null;
-  start_date: string;
-  end_date: string;
-  start_date_year: number;
-  start_date_month: number;
-  end_date_year: number;
-  end_date_month: number;
-  is_current: boolean;
-  locality: string;
-  logo_url: string | null;
-  linkedin_url: string;
-  summary: string;
+  title: string; company_name: string; domain: string | null;
+  start_date: string; end_date: string;
+  start_date_year: number; start_date_month: number;
+  end_date_year: number; end_date_month: number;
+  is_current: boolean; locality: string;
+  logo_url: string | null; linkedin_url: string; summary: string;
 }
 
 export interface TIEducation {
-  school_name: string;
-  degree: string;
-  field_of_study: string;
-  start_date_year: string | number;
-  end_date_year: string | number;
-  location: string | null;
-  url: string | null;
-  description: string | null;
+  school_name: string; degree: string; field_of_study: string;
+  start_date_year: string | number; end_date_year: string | number;
+  location: string | null; url: string | null; description: string | null;
 }
 
 export interface TICertification {
@@ -66,48 +56,82 @@ export interface TIProfile {
   discovery_count: number | null; total_count?: number;
 }
 
-export type TIRevealedStatus = 'all' | 'email_revealed' | 'phone_revealed' | 'not_revealed';
+export type TIRevealedStatus = "all" | "email_revealed" | "phone_revealed" | "not_revealed";
 
 export interface TIFilters {
-  // Core
+  // ── Core ──────────────────────────────────────────────────
   query:           string;
-  skillChips:      SkillChip[];
+  skillChips:      SkillChip[];   // must → p_skills (AND); nice → p_nice_skills (OR); exclude → p_exclude_skills
   titles:          string[];
   location:        string;
-  yearsExperience: string;     // '' | '0_2' | '3_5' | '6_10' | '10'
+  yearsExperience: string;        // "" | "0_1" | "1_2" | "0_2" | "3_5" | "6_10" | "10"
   openToWork:      boolean;
-  // Employer & Role
-  currentEmployer:  string[];
-  previousEmployer: string[];
-  previousTitle:    string[];
-  // Company
-  industry:  string[];
-  // Education
+  // ── Job title extras ──────────────────────────────────────
+  excludeJobTitles: string[];     // → p_exclude_titles
+  titleFilter:      "current" | "past" | "both"; // maps titles to p_titles/p_previous_title/p_any_title
+  // ── Employer ──────────────────────────────────────────────
+  currentEmployer:        string[];
+  companyFilter:          "current" | "past" | "both"; // maps currentEmployer to correct RPC param
+  excludeCompanies:       string[];   // → p_exclude_companies
+  excludeCompaniesFilter: "current" | "past" | "both";
+  previousEmployer:       string[];   // role history (always past) → p_previous_employer
+  previousTitle:          string[];
+  // ── Company ───────────────────────────────────────────────
+  industry: string[];
+  domain:   string[];             // → p_domain (exact match on company_domain)
+  // ── Location extras ───────────────────────────────────────
+  currentWorkLocation: string[];  // → p_current_work_location
+  pastWorkLocation:    string[];  // → p_past_work_location
+  // ── Education ─────────────────────────────────────────────
   school: string[];
   degree: string[];
   major:  string[];
-  // Contact
+  // ── Languages ─────────────────────────────────────────────
+  languages: Array<{ language: string; proficiency: string[] }>; // → p_languages (name ilike)
+  // ── Contact ───────────────────────────────────────────────
   hasEmail:       boolean;
   hasPhone:       boolean;
   revealedStatus: TIRevealedStatus;
 }
 
 export const DEFAULT_TI_FILTERS: TIFilters = {
-  query: '', skillChips: [], titles: [], location: '', yearsExperience: '',
-  openToWork: false, currentEmployer: [], previousEmployer: [], previousTitle: [],
-  industry: [], school: [], degree: [], major: [],
-  hasEmail: false, hasPhone: false, revealedStatus: 'all',
-};
+  query: "",
+  location: "",
+  yearsExperience: "",
+  skillChips: [],
+  titles: [],
+  titleFilter: "current",
+  excludeJobTitles: [],          // ← add
+  currentEmployer: [],
+  companyFilter: "current",
+  excludeCompanies: [],           // ← add
+  previousEmployer: [],
+  previousTitle: [],
+  industry: [],
+  domain: [],                     // ← add
+  currentWorkLocation: [],        // ← add
+  pastWorkLocation: [],           // ← add
+  languages: [],
+  school: [],
+  degree: [],
+  major: [],                      // ← add
+  openToWork: false,
+  hasEmail: false,
+  hasPhone: false,
+  revealedStatus: "all",
+}
 
 export interface OrgProfileStats {
   total_profiles: number; email_available: number; phone_available: number;
   email_revealed: number; phone_revealed: number; not_revealed: number; open_to_work: number;
 }
 
-// ── Sidebar option lists ─────────────────────────────────────
+// ── Sidebar option lists ─────────────────────────────────────────────────────
 
 export const YEARS_EXP_OPTIONS = [
   { label: "Any experience", value: "" },
+  { label: "0–1 year",       value: "0_1" },
+  { label: "1–2 years",      value: "1_2" },
   { label: "0–2 years",      value: "0_2" },
   { label: "3–5 years",      value: "3_5" },
   { label: "6–10 years",     value: "6_10" },
@@ -153,46 +177,20 @@ export const DEGREE_OPTIONS = [
 
 export const TI_PAGE_SIZE = 25;
 
-// ── Utility ──────────────────────────────────────────────────
+// ── Utility ──────────────────────────────────────────────────────────────────
 
-export function calcYearsExperience(
-  experience: TIExperience[] | null
-): string | null {
+export function calcYearsExperience(experience: TIExperience[] | null): string | null {
   if (!experience?.length) return null;
-
-  const dates = experience
-    .map(exp => {
-      if (!exp.start_date_year) return null;
-
-      return new Date(
-        Number(exp.start_date_year),
-        Number(exp.start_date_month ?? 1) - 1,
-        1
-      );
-    })
-    .filter(Boolean) as Date[];
-
+  const dates = experience.map(exp => {
+    if (!exp.start_date_year) return null;
+    return new Date(Number(exp.start_date_year), Number(exp.start_date_month ?? 1) - 1, 1);
+  }).filter(Boolean) as Date[];
   if (!dates.length) return null;
-
-  const start = new Date(
-    Math.min(...dates.map(d => d.getTime()))
-  );
-
+  const start = new Date(Math.min(...dates.map(d => d.getTime())));
   const now = new Date();
-
   let years = now.getFullYear() - start.getFullYear();
   let months = now.getMonth() - start.getMonth();
-
-  if (months < 0) {
-    years--;
-    months += 12;
-  }
-
-  if (years <= 0) {
-    return `${months}m`;
-  }
-
-  return months > 0
-    ? `${years}y ${months}m`
-    : `${years}y`;
+  if (months < 0) { years--; months += 12; }
+  if (years <= 0) return `${months}m`;
+  return months > 0 ? `${years}y ${months}m` : `${years}y`;
 }

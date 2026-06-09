@@ -745,3 +745,4 @@ export function useTypesenseSearch({
     },
   });
 }
+// new keyword advanced

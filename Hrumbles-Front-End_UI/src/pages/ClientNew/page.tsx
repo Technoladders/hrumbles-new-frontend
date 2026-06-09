@@ -15,6 +15,7 @@ import OverviewTab from '@/components/clients-new/OverviewTab';
 import CandidatesTab from '@/components/clients-new/CandidatesTab';
 import EmployeesTab from '@/components/clients-new/EmployeesTab';
 import AllCandidatesTab from '@/components/clients-new/AllCandidatesTab';
+import { useOrganizationStatusIds } from "@/hooks/useOrganizationStatusIds";
 import { CheckCircle, HelpCircle, Loader2, ArrowLeft, Building2, Users, Briefcase, LayoutGrid, CalendarDays, X } from 'lucide-react';
 import { CompanyVerificationDialog } from '@/components/clients-new/CompanyVerificationDialog';
 import { EnhancedDateRangeSelector } from '@/components/ui/EnhancedDateRangeSelector';
@@ -43,8 +44,8 @@ const ClientViewPage = () => {
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const auth_user_id = useSelector((state: any) => state.auth.user.id);
-  const statusIds = useMemo(() => organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default, [organization_id]);
-
+  
+ const { data: statusIds, isLoading: statusLoading } = useOrganizationStatusIds(organization_id);
   const [activeTab, setActiveTab] = useState('overview');
   const [isClientEditDialogOpen, setClientEditDialogOpen] = useState(false);
   const [isContactDialogOpen, setContactDialogOpen] = useState(false);
@@ -113,7 +114,7 @@ const ClientViewPage = () => {
   };
 
   const fetchDashboardData = useCallback(async () => {
-    if (!clientName || !organization_id) return;
+    if (!clientName || !organization_id || !statusIds) return;
     setLoading(true); setError(null);
     try {
       const { data: clientData, error: clientError } = await supabase.from('hr_clients').select('*').eq('client_name', clientName).eq('organization_id', organization_id).single();
@@ -126,7 +127,7 @@ const ClientViewPage = () => {
       const hiresAggregates: { [k: string]: number } = {};
       const { data: jobsData } = await supabase.from('hr_jobs').select('id, title, job_type_category').eq('client_details->>clientName', clientName);
       if (jobsData) {
-        let query = supabase.from('hr_job_candidates').select('*').in('job_id', jobsData.map(j => j.id)).or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`).in('sub_status_id', [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
+        let query = supabase.from('hr_job_candidates').select('*').in('job_id', jobsData.map(j => j.id)).or(`main_status_id.eq.${statusIds.offeredMainId},main_status_id.eq.${statusIds.joinedMainId}`).in('sub_status_id', [statusIds.offerIssuedSubId, statusIds.joinedSubId]);
         if (dateRange?.startDate && dateRange?.endDate) {
           query = query.gte('joining_date', format(dateRange.startDate, 'yyyy-MM-dd')).lte('joining_date', format(dateRange.endDate, 'yyyy-MM-dd'));
         }
@@ -280,7 +281,7 @@ const ClientViewPage = () => {
         {activeTab === 'overview' && (
           <OverviewTab client={client} contacts={contacts} metrics={metrics} monthlyData={monthlyData} hiresByMonth={hiresByMonth} loading={loading} onAddContact={handleAddContact} onEditContact={handleEditContact} onDeleteContact={handleDeleteContact} onEditAddress={handleEditAddress} allCandidatesCount={0} recruiterPerformance={[]} pipelineStages={[]} />
         )}
-        {activeTab === 'hired_candidates' && <CandidatesTab candidates={candidates} loading={loading} onUpdate={fetchDashboardData} />}
+        {activeTab === 'hired_candidates' && <CandidatesTab candidates={candidates} loading={loading} onUpdate={fetchDashboardData} statusIds={statusIds}/>}
         {client.service_type?.includes('contractual') && activeTab === 'employees' && <EmployeesTab employees={employees} loading={loading} />}
         {activeTab === 'all_candidates' && <AllCandidatesTab clientName={clientName} dateRange={dateRange} />}
       </div>
