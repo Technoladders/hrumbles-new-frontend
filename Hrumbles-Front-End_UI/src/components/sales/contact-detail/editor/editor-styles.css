@@ -298,6 +298,7 @@
 /* Dropdown menu items hover state */
 [data-radix-popper-content-wrapper] [role="menuitem"]:hover {
   background-color: #f1f5f9 !important;
+  
 }
 
 /* Active toolbar button state */

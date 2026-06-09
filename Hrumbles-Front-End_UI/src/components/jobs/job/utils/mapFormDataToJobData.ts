@@ -42,6 +42,7 @@ export const mapFormDataToJobData = (
     title: formData.jobInformation.jobTitle,
     location: formData.jobInformation.jobLocation,
     hiring_mode: formData.jobInformation.hiringMode,
+    work_mode: formData.jobInformation.workMode || [],
     notice_period: formData.jobInformation.noticePeriod,
     number_of_candidates: formData.jobInformation.numberOfCandidates,
     due_date: formData.jobInformation.dueDate,

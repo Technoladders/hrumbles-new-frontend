@@ -276,9 +276,9 @@ const [recruiterFilter, setRecruiterFilter] = useState<string[]>([]);
           .lte('created_at', dateRange.endDate.toISOString())
           .order('created_at', { ascending: false });
 
-        if (user?.id) {
-            candidatesQuery = candidatesQuery.eq('created_by', user.id);
-        }
+        if (user?.id && role !== 'organization_superadmin') {
+    candidatesQuery = candidatesQuery.eq('created_by', user.id);
+}
 
         const [candidatesResponse, statusesResponse] = await Promise.all([
           candidatesQuery,
@@ -739,6 +739,65 @@ return (
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+
+    {/* Recruiter Filter – Only for organization_superadmin */}
+{role === 'organization_superadmin' && (
+  <div className="flex-shrink-0 order-4 w-full sm:w-[150px] min-w-0 overflow-hidden">
+    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) { setTempRecruiterFilter(recruiterFilter); } }}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant='outline' className="group w-full rounded-full justify-start font-normal h-10 text-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-purple-500 shadow-inner text-sm relative z-0">
+              <User size={16} className="text-gray-500 mr-2 flex-shrink-0 group-hover:text-white" />
+              <div className="truncate min-w-0">
+                {recruiterFilter.length === 0
+                  ? "All Recruiters"
+                  : `${recruiterFilter.length} selected`}
+              </div>
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        {recruiterFilter.length > 1 && (
+          <TooltipContent side="bottom" align="start" className="z-[70]">
+            <p className="max-w-48">Selected: {recruiterFilter.join(', ')}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+      <DropdownMenuContent className="w-64 max-h-96 z-[60] flex flex-col origin-top">
+        <div className="overflow-y-auto">
+          <DropdownMenuCheckboxItem
+            checked={tempRecruiterFilter.length === 0}
+            onCheckedChange={() => setTempRecruiterFilter([])}
+            onSelect={(e) => e.preventDefault()}
+          >
+            All Recruiters
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+          {recruiterOptions.map(recruiter => (
+            <DropdownMenuCheckboxItem
+              key={recruiter}
+              checked={tempRecruiterFilter.includes(recruiter)}
+              onCheckedChange={(checked) => handleRecruiterFilterChange(recruiter, !!checked)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              {recruiter}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </div>
+        <DropdownMenuSeparator />
+        <div className="p-2 border-t">
+          <Button 
+            className="w-full" 
+            size="sm"
+            onClick={() => setRecruiterFilter(tempRecruiterFilter)}
+          >
+            Apply Filter
+          </Button>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </div>
+)}
 
     {/* Search Bar */}
     <div className="relative flex-grow order-1 min-w-[200px] sm:min-w-[260px] md:min-w-[280px] lg:min-w-[320px]">

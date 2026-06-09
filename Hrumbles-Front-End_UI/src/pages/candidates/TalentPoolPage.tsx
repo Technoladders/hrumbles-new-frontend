@@ -708,18 +708,34 @@ const TableTab: FC<{
   }, [searchTerm, currentPage, itemsPerPage, setSearchParams]);
 
   // Team members
-  const { data: teamMembers } = useQuery({
-    queryKey: ['teamMembers', organizationId],
-    queryFn: async () => {
-      if (!organizationId) return [];
-      const { data } = await supabase.from('hr_employees')
-        .select('user_id,first_name,last_name,hr_talent_pool!hr_talent_pool_created_by_fkey!inner(id)')
-        .eq('organization_id', organizationId).not('user_id', 'is', null);
-      return data || [];
-    },
-    enabled: !!organizationId && role !== 'employee',
-    staleTime: 5 * 60 * 1000,
-  });
+const { data: teamMembers } = useQuery({
+  queryKey: ['teamMembers', organizationId],
+  queryFn: async () => {
+    if (!organizationId) return [];
+
+    // 1. get all unique created_by user IDs from the talent pool
+    const { data: creators } = await supabase
+      .from('hr_talent_pool')
+      .select('created_by')
+      .eq('organization_id', organizationId)
+      .not('created_by', 'is', null);
+
+    if (!creators || creators.length === 0) return [];
+
+    const userIds = [...new Set(creators.map(c => c.created_by))];
+
+    // 2. fetch employee details only for those who have added candidates
+    const { data: employees } = await supabase
+      .from('hr_employees')
+      .select('user_id, first_name, last_name')
+      .in('user_id', userIds)
+      .eq('organization_id', organizationId);
+
+    return employees || [];
+  },
+  enabled: !!organizationId && role !== 'employee',
+  staleTime: 5 * 60 * 1000,
+});
 
   // Main candidates
   const { data, isLoading, refetch } = useQuery({
