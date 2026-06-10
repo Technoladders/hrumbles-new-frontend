@@ -28,6 +28,7 @@ const ACCENT_BG   = '#F5F3FF';
 const ACCENT_BD   = '#E9D5FF';
 const NEUTRAL_FG  = '#475569';
 const NEUTRAL_MUT = '#94A3B8';
+const HARD_TERM_CAP_DISPLAY = '5,000';
 
 // ── Mode badge ──────────────────────────────────────────────────────────────
 const ModeBadge: FC<{ mode: 'must' | 'nice' | 'exclude' }> = ({ mode }) => {
@@ -211,27 +212,29 @@ const ZiveXSearchStatsPanel: FC<Props> = ({ stats }) => {
                       <th style={th}>Term</th>
                       <th style={th}>Mode</th>
                       <th style={{ ...th, textAlign: 'right' }}>Hits</th>
+                      <th style={{ ...th, textAlign: 'right' }}>ms</th>
                       <th style={th}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedBreakdown.map((row, i) => (
-                      <tr key={i} style={{
-                        borderBottom: i < sortedBreakdown.length - 1 ? '1px solid #F1F5F9' : 'none',
-                      }}>
+                      <tr key={i} style={{ borderBottom: i < sortedBreakdown.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
                         <td style={td}>{row.field}</td>
-                        <td style={{ ...td, fontFamily: 'monospace', color: '#0F172A', fontWeight: 600 }}>
-                          {row.term}
-                        </td>
+                        <td style={{ ...td, fontFamily: 'monospace', color: '#0F172A', fontWeight: 600 }}>{row.term}</td>
                         <td style={td}><ModeBadge mode={row.mode} /></td>
-                        <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace', color: row.hits === 0 ? '#DC2626' : NEUTRAL_FG }}>
-                          {row.hits.toLocaleString()}
+                        <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace', color: row.hits < 0 ? '#F59E0B' : row.hits === 0 ? '#DC2626' : NEUTRAL_FG }}>
+                          {row.hits < 0 ? '⚠' : row.hits.toLocaleString()}
+                        </td>
+                        <td style={{ ...td, textAlign: 'right', fontFamily: 'monospace', fontSize: 9, color: NEUTRAL_MUT }}>
+                          {(row as any).term_ms != null ? `${(row as any).term_ms}` : '—'}
                         </td>
                         <td style={td}>
-                          {row.hits === 0 ? (
+                          {row.hits < 0 ? (
+                            <span style={{ fontSize: 9, color: '#F59E0B', fontWeight: 600 }}>error — check console</span>
+                          ) : row.hits === 0 ? (
                             <span style={{ fontSize: 9, color: '#DC2626', fontWeight: 600 }}>0 matches</span>
                           ) : row.capped ? (
-                            <span style={{ fontSize: 9, color: '#D97706', fontWeight: 600 }}>capped</span>
+                            <span style={{ fontSize: 9, color: '#D97706', fontWeight: 600 }}>capped at {HARD_TERM_CAP_DISPLAY}</span>
                           ) : (
                             <span style={{ fontSize: 9, color: '#10B981' }}>OK</span>
                           )}
@@ -258,6 +261,10 @@ const ZiveXSearchStatsPanel: FC<Props> = ({ stats }) => {
               border: '1px solid #E2E8F0',
               display: 'flex', flexDirection: 'column', gap: 5,
             }}>
+              {/* org_count runs in parallel now — shown separately so delay is visible */}
+              {'org_count' in timing_ms && (
+                <TimingBar label="Org count (∥)" ms={(timing_ms as any).org_count} total={timing_ms.total} />
+              )}
               <TimingBar label="Term searches" ms={timing_ms.term_searches} total={timing_ms.total} />
               <TimingBar label="Structural"    ms={timing_ms.structural}    total={timing_ms.total} />
               <TimingBar label="Hydration"     ms={timing_ms.hydration}     total={timing_ms.total} />
@@ -357,4 +364,3 @@ const td: React.CSSProperties = {
 };
 
 export default ZiveXSearchStatsPanel;
-// new index resume text

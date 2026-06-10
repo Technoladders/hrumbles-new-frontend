@@ -486,7 +486,7 @@ const ZiveXPage: FC = () => {
             </div>
 
             {/* ── DEBUG: Search Stats Panel ── */}
-            <ZiveXSearchStatsPanel stats={stats} />
+            {/* <ZiveXSearchStatsPanel stats={stats} /> */}
 
             {/* ── Results list ── */}
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
