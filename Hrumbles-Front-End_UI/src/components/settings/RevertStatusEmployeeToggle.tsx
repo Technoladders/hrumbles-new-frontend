@@ -67,7 +67,7 @@ const RevertStatusEmployeeToggle: React.FC<RevertStatusEmployeeToggleProps> = ({
             </div>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Enable "Revert Status" for this organization first (Global Superadmin).</p>
+            <p>Contact your administrator or support to enable "Revert Status".</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

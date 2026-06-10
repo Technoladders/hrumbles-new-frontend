@@ -21,6 +21,7 @@ interface Skill {
 
 export interface JobInformationData {
   hiringMode: string;
+  workMode?: string[];
   jobId: string; // The form state expects camelCase
   jobTitle: string;
   numberOfCandidates: number;
@@ -87,6 +88,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
   const [formData, setFormData] = useState<JobFormData>({
     jobInformation: {
       hiringMode: jobType === "Internal" ? "Full Time" : "",
+      workMode: [],
       jobId: "",
       jobTitle: "",
       numberOfCandidates: 1,
@@ -125,7 +127,7 @@ export const useJobFormState = ({ jobType, editJob }: UseJobFormStateProps) => {
       const initialFormData: JobFormData = {
         jobInformation: {
           hiringMode: editJob.hiringMode || (jobType === "Internal" ? "Full Time" : ""),
-          
+          workMode: editJob.workMode || [],
           // --- THIS IS THE FIX ---
           // The `editJob` object was transformed, so we must use the camelCase `jobId` property.
           jobId: editJob.jobId || "",

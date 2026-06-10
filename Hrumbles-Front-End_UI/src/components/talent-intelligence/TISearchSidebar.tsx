@@ -1,5 +1,13 @@
-// src/components/talent-intelligence/TISearchSidebar.tsx  — v3
-// Matches RRSearchSidebar style: gradient, portal dropdowns, boolean skill builder
+// src/components/talent-intelligence/TISearchSidebar.tsx  — v4
+// Changes from v3:
+//   • SkillChipBuilder v3: Enter=nice(dot), click=must(⭐ yellow), exclude section, boolean section
+//   • New sections/fields matching search_org_profiles_v1:
+//     - Job Title: + excludeJobTitles (collapsible red section)
+//     - Employer: companyFilter tab (Current/Previous/Both) + excludeCompanies
+//     - Company: + domain
+//     - Location: + currentWorkLocation, pastWorkLocation (uses LocationSelect)
+//     - Languages: new section
+//   • Contact Status section: unchanged
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactDOM from "react-dom";
@@ -8,14 +16,15 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Search, RotateCcw, MapPin, Briefcase, Building2, ChevronDown,
-  Tag, Users, Filter, Mail, Phone, Eye, EyeOff, X, GraduationCap, Database,
+  Tag, Users, Filter, Mail, Phone, Eye, X, GraduationCap, Database,
+  Star, Minus, Zap, Globe2, Languages,
 } from "lucide-react";
 import {
   TIFilters, OrgProfileStats, SkillChip, SkillMode,
   YEARS_EXP_OPTIONS, INDUSTRY_OPTIONS, DEGREE_OPTIONS,
 } from "@/types/talentIntelligence";
 
-// ── Gradient ──────────────────────────────────────────────────
+// ── Gradient ──────────────────────────────────────────────────────────────────
 const GradientDef = () => (
   <svg width="0" height="0" style={{ position: "absolute" }}>
     <defs>
@@ -26,7 +35,7 @@ const GradientDef = () => (
   </svg>
 );
 
-// ── Portal dropdown ───────────────────────────────────────────
+// ── Portal dropdown ───────────────────────────────────────────────────────────
 function PortalDropdown({ anchorRef, isOpen, maxH = 220, children }: {
   anchorRef: React.RefObject<HTMLDivElement>; isOpen: boolean; maxH?: number; children: React.ReactNode;
 }) {
@@ -58,7 +67,7 @@ function PortalDropdown({ anchorRef, isOpen, maxH = 220, children }: {
   );
 }
 
-// ── Section header ────────────────────────────────────────────
+// ── Section header ────────────────────────────────────────────────────────────
 function SectionHeader({ label, icon: Icon, isOpen, onToggle, count }: {
   label: string; icon: React.ElementType; isOpen: boolean; onToggle: () => void; count?: number;
 }) {
@@ -79,11 +88,11 @@ function SectionHeader({ label, icon: Icon, isOpen, onToggle, count }: {
 }
 
 const Div = () => <div className="h-px bg-slate-100 my-0.5" />;
-const SL = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{children}</p>
+const SL = ({ children, info }: { children: React.ReactNode; info?: string }) => (
+  <p className="text-[10px] font-extrabold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-purple-600 mb-1.5">{children}</p>
 );
 
-// ── Chip ──────────────────────────────────────────────────────
+// ── Chip ──────────────────────────────────────────────────────────────────────
 const Chip = ({ label, onRemove, color }: { label: string; onRemove: () => void; color?: string }) => (
   <span className={cn("inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border",
     color ?? "bg-violet-50 text-violet-700 border-violet-200")}>
@@ -92,7 +101,7 @@ const Chip = ({ label, onRemove, color }: { label: string; onRemove: () => void;
   </span>
 );
 
-// ── Searchable multi-select ───────────────────────────────────
+// ── Searchable multi-select ───────────────────────────────────────────────────
 function SearchableMultiSelect({ label, options, selected, onChange, icon: Icon, chipColor }: {
   label: string; options: string[]; selected: string[];
   onChange: (v: string[]) => void; icon: React.ElementType; chipColor?: string;
@@ -114,7 +123,7 @@ function SearchableMultiSelect({ label, options, selected, onChange, icon: Icon,
           <Icon size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors" />
           <input ref={inputRef} type="text" value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
-            placeholder={label} className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
+            placeholder={label} className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-600 placeholder:italic placeholder:text-[10px]" />
           <ChevronDown size={9} className={cn("text-slate-400 flex-shrink-0 transition-all group-hover:text-violet-500", open && "rotate-180")} />
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && filtered.length > 0}>
@@ -128,7 +137,7 @@ function SearchableMultiSelect({ label, options, selected, onChange, icon: Icon,
   );
 }
 
-// ── Simple select ─────────────────────────────────────────────
+// ── Simple select ─────────────────────────────────────────────────────────────
 function SimpleSelect({ value, onChange, options, placeholder }: {
   value: string; onChange: (v: string) => void;
   options: { label: string; value: string }[]; placeholder?: string;
@@ -139,7 +148,7 @@ function SimpleSelect({ value, onChange, options, placeholder }: {
     <div className="relative" ref={anchorRef}>
       <div onClick={() => setOpen(v => !v)}
         className="group w-full h-8 rounded-lg border border-slate-200 bg-white px-2.5 flex items-center justify-between cursor-pointer transition-all hover:border-violet-300">
-        <span className={cn("text-[11px]", value ? "text-slate-700" : "text-slate-400 italic")}>{selected?.label || placeholder || "Select"}</span>
+        <span className={cn("text-[10px]", value ? "text-slate-700" : "text-slate-600 italic")}>{selected?.label || placeholder || "Select"}</span>
         <ChevronDown size={9} className={cn("text-slate-400 transition-all group-hover:text-violet-500", open && "rotate-180")} />
       </div>
       <PortalDropdown anchorRef={anchorRef} isOpen={open}>
@@ -153,10 +162,10 @@ function SimpleSelect({ value, onChange, options, placeholder }: {
   );
 }
 
-// ── Tag input ─────────────────────────────────────────────────
-function TagInput({ selected, onChange, placeholder, icon: Icon, chipColor }: {
+// ── Tag input ─────────────────────────────────────────────────────────────────
+function TagInput({ selected, onChange, placeholder, icon: Icon, chipColor, onSearch }: {
   selected: string[]; onChange: (v: string[]) => void;
-  placeholder: string; icon: React.ElementType; chipColor?: string;
+  placeholder: string; icon: React.ElementType; chipColor?: string; onSearch?: () => void;
 }) {
   const [input, setInput] = useState("");
   const add = () => { const s = input.trim(); if (s && !selected.includes(s)) onChange([...selected, s]); setInput(""); };
@@ -166,15 +175,18 @@ function TagInput({ selected, onChange, placeholder, icon: Icon, chipColor }: {
       <div className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 transition-all hover:border-violet-300 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-200">
         <Icon size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors" />
         <input type="text" value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key==="Enter"||e.key===",") { e.preventDefault(); add(); } if (e.key==="Backspace"&&!input&&selected.length) onChange(selected.slice(0,-1)); }}
-          placeholder={placeholder} className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
+          onKeyDown={e => {
+            if (e.key==="Enter"||e.key===",") { e.preventDefault(); if (input.trim()) add(); else if (onSearch) onSearch(); }
+            if (e.key==="Backspace"&&!input&&selected.length) onChange(selected.slice(0,-1));
+          }}
+          placeholder={placeholder} className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-600 placeholder:italic placeholder:text-[10px]" />
         {input && <button type="button" onClick={() => setInput("")}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
       </div>
     </div>
   );
 }
 
-// ── Location select (country-state-city) ──────────────────────
+// ── LocationSelect (country-state-city) ──────────────────────────────────────
 type LocType = "country"|"state"|"city";
 const LOC_STYLE: Record<LocType,string> = {
   country: "bg-blue-50 text-blue-700 border-blue-200",
@@ -195,6 +207,7 @@ function searchLocs(q: string, selected: string[]) {
   return out.slice(0,20);
 }
 
+// Single-value location select
 function LocationSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [q, setQ] = useState(""); const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null); const anchorRef = useRef<HTMLDivElement>(null); const inputRef = useRef<HTMLInputElement>(null);
@@ -218,7 +231,7 @@ function LocationSelect({ value, onChange }: { value: string; onChange: (v: stri
           <MapPin size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors" />
           <input ref={inputRef} type="text" value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
             onKeyDown={e => { if (e.key==="Escape") setOpen(false); }}
-            placeholder="Country, state or city…" className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-400 placeholder:italic placeholder:text-[10px]" />
+            placeholder="Country, state or city…" className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-600 placeholder:italic placeholder:text-[10px]" />
           {q && <button type="button" onMouseDown={e => { e.preventDefault(); setQ(""); }}><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
         </div>
         <PortalDropdown anchorRef={anchorRef} isOpen={open && opts.length > 0}>
@@ -236,111 +249,221 @@ function LocationSelect({ value, onChange }: { value: string; onChange: (v: stri
   );
 }
 
-// ── Boolean skill chip builder ────────────────────────────────
-const SKILL_MODE_CFG: Record<SkillMode,{label:string;dot:string;chip:string}> = {
-  must:    { label:"Must",    dot:"bg-violet-500", chip:"bg-violet-50 text-violet-700 border-violet-200" },
-  nice:    { label:"Nice",    dot:"bg-blue-400",   chip:"bg-blue-50 text-blue-700 border-blue-200" },
-  exclude: { label:"Exclude", dot:"bg-red-400",    chip:"bg-red-50 text-red-600 border-red-200" },
-};
-
-function SkillChipBuilder({ chips, onChange }: { chips: SkillChip[]; onChange: (c: SkillChip[]) => void }) {
-  const [input, setInput]   = useState("");
-  const [mode, setMode]     = useState<SkillMode>("must");
-  const [boolShow, setBoolShow] = useState(false);
-  const [boolIn, setBoolIn] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const add = (raw: string, m: SkillMode) => {
-    const labels = raw.split(",").map(s=>s.trim()).filter(Boolean);
-    const existing = new Set(chips.map(c=>c.label.toLowerCase()));
-    const next = labels.filter(l=>!existing.has(l.toLowerCase())).map(l=>({label:l,mode:m}));
-    if (next.length) onChange([...chips,...next]);
-  };
-  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key==="Enter"||e.key===",")&&input.trim()) { e.preventDefault(); add(input,mode); setInput(""); }
-    else if (e.key==="Backspace"&&!input&&chips.length) onChange(chips.slice(0,-1));
-  };
-  const applyBool = () => {
-    if (!boolIn.trim()) return;
-    const raw = boolIn.replace(/\bAND\b/gi," ").replace(/\bOR\b/gi," ");
-    const parts = raw.split(/\s+/).filter(Boolean);
-    const must:string[]=[],nice:string[]=[],excl:string[]=[]; let skip=false;
-    for (let i=0;i<parts.length;i++) {
-      if(skip){skip=false;continue;}
-      const cur=parts[i],next=parts[i+1];
-      if(/^NOT$/i.test(cur)&&next){excl.push(next.replace(/^-/,""));skip=true;}
-      else if(cur.startsWith("-")&&cur.length>1)excl.push(cur.slice(1));
-      else if(!/^(AND|OR|NOT)$/i.test(cur))nice.push(cur);
-    }
-    const existing=new Set(chips.map(c=>c.label.toLowerCase()));
-    onChange([...chips,
-      ...must.filter(l=>!existing.has(l.toLowerCase())).map(l=>({label:l,mode:"must" as SkillMode})),
-      ...nice.filter(l=>!existing.has(l.toLowerCase())).map(l=>({label:l,mode:"nice" as SkillMode})),
-      ...excl.filter(l=>!existing.has(l.toLowerCase())).map(l=>({label:l,mode:"exclude" as SkillMode})),
-    ]);
-    setBoolIn(""); setBoolShow(false);
-  };
-  const cycle = (i:number) => {
-    const order:SkillMode[]=["must","nice","exclude"];
-    const next=order[(order.indexOf(chips[i].mode)+1)%order.length];
-    onChange(chips.map((c,j)=>j===i?{...c,mode:next}:c));
-  };
-  const counts = { must:chips.filter(c=>c.mode==="must").length, nice:chips.filter(c=>c.mode==="nice").length, exclude:chips.filter(c=>c.mode==="exclude").length };
-
+// Multi-value location select (for currentWorkLocation / pastWorkLocation)
+function LocationMultiSelect({ selected, onChange }: { selected: string[]; onChange: (v: string[]) => void }) {
+  const [q, setQ] = useState(""); const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null); const anchorRef = useRef<HTMLDivElement>(null); const inputRef = useRef<HTMLInputElement>(null);
+  const opts = useMemo(() => searchLocs(q, selected), [q, selected]);
+  useEffect(() => {
+    const fn = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQ(""); } };
+    document.addEventListener("mousedown", fn); return () => document.removeEventListener("mousedown", fn);
+  }, []);
+  const getType = (v: string): LocType => { if (ALL_COUNTRIES.some(c=>c.value===v)) return "country"; if (ALL_STATES.some(s=>s.value===v)) return "state"; return "city"; };
   return (
-    <div className="space-y-1.5">
-      {/* Mode selector */}
-      <div className="flex items-center gap-1">
-        {(["must","nice","exclude"] as SkillMode[]).map(m => {
-          const cfg = SKILL_MODE_CFG[m];
-          return (
-            <button key={m} type="button" onClick={() => setMode(m)}
-              className={cn("group flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border transition-all",
-                mode===m ? `${cfg.chip} border-current shadow-sm scale-[1.02]` : "text-slate-400 border-slate-200 bg-white hover:border-violet-300 hover:text-violet-500")}>
-              <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />{cfg.label}
-              {counts[m]>0 && <span className="opacity-70">({counts[m]})</span>}
-            </button>
-          );
-        })}
-        <button type="button" onClick={() => setBoolShow(v=>!v)}
-          className={cn("ml-auto text-[9px] px-1.5 py-0.5 rounded border transition-all",
-            boolShow ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border-transparent" : "text-slate-400 border-slate-200 bg-white hover:border-violet-300 hover:text-violet-500")}>
-          Bool
-        </button>
-      </div>
-      {/* Boolean input */}
-      {boolShow && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5 focus-within:border-violet-400 transition-all">
-          <p className="text-[8px] text-slate-400">e.g. <span className="text-violet-500">Python AND React NOT PHP</span></p>
-          <div className="flex gap-1">
-            <input type="text" value={boolIn} onChange={e=>setBoolIn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&applyBool()}
-              placeholder="Python AND React NOT PHP" className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:outline-none focus:border-violet-400" />
-            <button type="button" onClick={applyBool} className="px-2 py-1 rounded bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold">Parse</button>
-          </div>
+    <div ref={wrapRef} className="space-y-1.5">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map(v => (
+            <span key={v} className={cn("inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border", LOC_STYLE[getType(v)])}>
+              {v}
+              <button type="button" onMouseDown={e => { e.preventDefault(); onChange(selected.filter(x=>x!==v)); }} className="opacity-60 hover:opacity-100 hover:text-red-500"><X size={8} /></button>
+            </span>
+          ))}
         </div>
       )}
-      {/* Chip input area */}
-      <div onClick={() => inputRef.current?.focus()}
-        className="group rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1 min-h-[34px] cursor-text hover:border-violet-300 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-200 transition-all">
-        {chips.map((chip,i) => {
-          const cfg = SKILL_MODE_CFG[chip.mode];
-          return (
-            <span key={i} onClick={()=>cycle(i)} className={cn("group inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-medium cursor-pointer hover:scale-[1.05] hover:shadow-sm transition-all", cfg.chip)}>
-              <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
-              {chip.label}
-              <button type="button" onClick={e=>{e.stopPropagation();onChange(chips.filter((_,j)=>j!==i));}} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
-            </span>
-          );
-        })}
-        <input ref={inputRef} type="text" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleKey}
-          placeholder={chips.length===0?"Type skill, Enter…":""}
-          className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 focus:outline-none placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic" />
+      <div ref={anchorRef}>
+        <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+          className="group rounded-lg border border-slate-200 bg-white flex items-center gap-2 px-2 h-8 cursor-text transition-all hover:border-violet-300 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-200">
+          <MapPin size={10} className="text-slate-400 flex-shrink-0 group-hover:text-violet-500 transition-colors" />
+          <input ref={inputRef} type="text" value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+            onKeyDown={e => { if (e.key==="Escape") setOpen(false); if (e.key==="Backspace"&&!q&&selected.length) onChange(selected.slice(0,-1)); }}
+            placeholder="Country, state or city…" className="flex-1 bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-slate-600 placeholder:italic placeholder:text-[10px]" />
+        </div>
+        <PortalDropdown anchorRef={anchorRef} isOpen={open && opts.length > 0}>
+          {opts.map(opt => (
+            <button key={`${opt.type}-${opt.value}`} type="button"
+              onMouseDown={e => { e.preventDefault(); onChange([...selected, opt.value]); setQ(""); setTimeout(() => inputRef.current?.focus(), 50); }}
+              className="group w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-violet-50 hover:pl-4 transition-all duration-150">
+              <span className={cn("text-[8px] px-1 py-0.5 rounded border font-bold uppercase", LOC_STYLE[opt.type])}>{opt.type[0]}</span>
+              <span className="text-[11px] text-slate-700 truncate">{opt.label}</span>
+            </button>
+          ))}
+        </PortalDropdown>
       </div>
     </div>
   );
 }
 
-// ── Reveal status radio pills ─────────────────────────────────
+// ── parseBooleanExpression ────────────────────────────────────────────────────
+function parseBooleanExpression(raw: string): Array<{ label: string; mode: SkillMode }> {
+  const out: Array<{ label: string; mode: SkillMode }> = [];
+  const notMatch = raw.match(/^NOT\s+(.+)$/i);
+  if (notMatch) { const label = notMatch[1].replace(/^["']|["']$/g,"").trim(); if (label) out.push({ label, mode:"exclude" }); return out; }
+  if (/\bAND\b/i.test(raw)) { raw.split(/\bAND\b/i).forEach(p => { const l=p.replace(/^["']|["']$/g,"").trim(); if(l) out.push({label:l,mode:"must"}); }); return out; }
+  if (/\bOR\b/i.test(raw))  { raw.split(/\bOR\b/i).forEach(p  => { const l=p.replace(/^["']|["']$/g,"").trim(); if(l) out.push({label:l,mode:"nice"}); }); return out; }
+  const label = raw.replace(/^["']|["']$/g,"").trim();
+  if (label) out.push({ label, mode:"nice" });
+  return out;
+}
+
+// ── SkillChipBuilder v3 — star-toggle UX ────────────────────────────────────
+// Enter → nice (violet dot, optional), Click chip → must (⭐ yellow, required)
+// Separate exclude section below, boolean expression section below
+function SkillChipBuilder({ chips, onChange }: { chips: SkillChip[]; onChange: (c: SkillChip[]) => void }) {
+  const [input,        setInput]        = useState("");
+  const [excludeInput, setExcludeInput] = useState("");
+  const [boolInput,    setBoolInput]    = useState("");
+  const [showExclude,  setShowExclude]  = useState(false);
+  const [showBoolean,  setShowBoolean]  = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const excRef   = useRef<HTMLInputElement>(null);
+  const boolRef  = useRef<HTMLInputElement>(null);
+
+  const mainChips    = chips.filter(c => c.mode !== "exclude");
+  const excludeChips = chips.filter(c => c.mode === "exclude");
+  const mustCount    = mainChips.filter(c => c.mode === "must").length;
+  const niceCount    = mainChips.filter(c => c.mode === "nice").length;
+
+  useEffect(() => {
+    if (excludeChips.length === 0 && !excludeInput) setShowExclude(false);
+  }, [excludeChips.length, excludeInput]);
+
+  const addChip = (label: string, mode: SkillMode) => {
+    const t = label.trim();
+    if (!t) return;
+    const exists = chips.some(c => c.label.toLowerCase() === t.toLowerCase());
+    if (!exists) onChange([...chips, { label: t, mode }]);
+  };
+  const removeChip = (label: string) => onChange(chips.filter(c => c.label !== label));
+  const toggleMust = (chip: SkillChip) => {
+    const next: SkillMode = chip.mode === "must" ? "nice" : "must";
+    onChange(chips.map(c => c.label === chip.label ? { ...c, mode: next } : c));
+  };
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>, mode: SkillMode, val: string, setVal: (v:string)=>void) => {
+    if ((e.key==="Enter"||e.key===",") && val.trim()) { e.preventDefault(); addChip(val,mode); setVal(""); }
+    else if (e.key==="Backspace"&&!val) { const t = mode==="exclude"?excludeChips:mainChips; if(t.length) removeChip(t[t.length-1].label); }
+  };
+  const handleBoolKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key==="Enter"&&boolInput.trim()) {
+      e.preventDefault();
+      const newChips = parseBooleanExpression(boolInput);
+      const existing = new Set(chips.map(c=>c.label.toLowerCase()));
+      const toAdd = newChips.filter(nc=>!existing.has(nc.label.toLowerCase()));
+      if (toAdd.length) onChange([...chips,...toAdd]);
+      setBoolInput("");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Legend */}
+      {mainChips.length > 0 && (
+        <div className="flex items-center gap-2.5 px-0.5">
+          {niceCount > 0 && (
+            <span className="flex items-center gap-1 text-[8px] text-violet-500">
+              <Star size={8} className="text-violet-300 flex-shrink-0" />
+              {niceCount} nice-to-have
+            </span>
+          )}
+          {mustCount > 0 && (
+            <span className="flex items-center gap-1 text-[8px] text-amber-600 font-semibold">
+              <Star size={8} fill="currentColor" className="text-yellow-400 flex-shrink-0" />
+              {mustCount} mandatory
+            </span>
+          )}
+          <span className="text-[8px] text-slate-400 ml-auto">click chip to toggle ★</span>
+        </div>
+      )}
+      {/* Main chip area */}
+      <div onClick={() => inputRef.current?.focus()}
+        className="group rounded-lg border border-slate-200 bg-white px-2 py-1.5 flex flex-wrap gap-1.5 min-h-[38px] cursor-text transition-all hover:border-purple-300 focus-within:border-purple-500 focus-within:ring-1 focus-within:ring-purple-200">
+        {mainChips.map(chip => {
+          const isMust = chip.mode === "must";
+          return (
+            <span key={chip.label}
+              onMouseEnter={() => {}} onMouseLeave={() => {}}
+              onClick={e => { e.stopPropagation(); toggleMust(chip); }}
+              title={isMust ? "Mandatory ★ - click to make optional" : "Optional - click to ★ mark as mandatory"}
+              className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-full text-[10px] font-medium border cursor-pointer select-none transition-all duration-150 hover:scale-[1.04] active:scale-[0.97] bg-violet-50 text-violet-700 border-violet-200 hover:border-violet-400"
+            >
+              {isMust
+                ? <Star size={9} fill="currentColor" className="text-yellow-400 flex-shrink-0" />
+                : <Star size={9} className="text-violet-300 flex-shrink-0" />}
+              <span>{chip.label}</span>
+              <button type="button" onClick={e=>{e.stopPropagation();removeChip(chip.label);}}
+                className="text-slate-400 hover:text-red-400 transition-colors ml-0.5 flex-shrink-0"><X size={8}/></button>
+            </span>
+          );
+        })}
+        <input ref={inputRef} type="text" value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>handleKey(e,"nice",input,setInput)}
+          placeholder={mainChips.length===0?"Add skill, Enter… · click tag make mandatory ★":""}
+          className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-700 focus:outline-none placeholder:text-[9px] placeholder:text-slate-600 placeholder:italic" />
+      </div>
+      {/* Exclude section */}
+      {(showExclude||excludeChips.length>0) ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[8px] font-semibold text-red-500 uppercase tracking-wide flex items-center gap-1">
+              <Minus size={8}/> Exclude Skills
+            </span>
+            {excludeChips.length===0 && <button type="button" onClick={()=>setShowExclude(false)} className="ml-auto text-[8px] text-slate-400 hover:text-slate-600">Hide</button>}
+          </div>
+          <div onClick={()=>excRef.current?.focus()}
+            className="rounded-lg border border-red-200 bg-white px-2 py-1.5 flex flex-wrap gap-1.5 min-h-[32px] cursor-text focus-within:border-red-400 focus-within:ring-1 focus-within:ring-red-100 transition-all">
+            {excludeChips.map(chip => (
+              <span key={chip.label} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-[10px] font-medium border bg-red-50 text-red-600 border-red-200">
+                {chip.label}
+                <button type="button" onClick={()=>removeChip(chip.label)} className="text-slate-400 hover:text-red-500 ml-0.5"><X size={8}/></button>
+              </span>
+            ))}
+            <input ref={excRef} type="text" value={excludeInput} onChange={e=>setExcludeInput(e.target.value)}
+              onKeyDown={e=>handleKey(e,"exclude",excludeInput,setExcludeInput)}
+              placeholder={excludeChips.length===0?"Skill to block, Enter…":""}
+              className="flex-1 min-w-[60px] bg-transparent text-[11px] text-slate-600 focus:outline-none placeholder:text-[9px] placeholder:text-red-300 placeholder:italic" />
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={()=>{setShowExclude(true);setTimeout(()=>excRef.current?.focus(),50);}}
+          className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-red-500 transition-colors">
+          <Minus size={9} className="text-red-400 flex-shrink-0"/> Exclude skills
+        </button>
+      )}
+      {/* Boolean section */}
+      {showBoolean ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[8px] font-semibold text-violet-500 uppercase tracking-wide flex items-center gap-1"><Zap size={8}/> Boolean</span>
+            <button type="button" onClick={()=>{setShowBoolean(false);setBoolInput("");}} className="ml-auto text-[8px] text-slate-400 hover:text-slate-600">Hide</button>
+          </div>
+          <div onClick={()=>boolRef.current?.focus()}
+            className="rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 flex items-center gap-1.5 focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-100 transition-all cursor-text">
+            <Zap size={9} className="text-violet-400 flex-shrink-0"/>
+            <input ref={boolRef} type="text" value={boolInput} onChange={e=>setBoolInput(e.target.value)}
+              onKeyDown={handleBoolKey}
+              placeholder="Python AND Django · React OR Vue · NOT Java"
+              className="flex-1 bg-transparent text-[11px] text-slate-700 focus:outline-none placeholder:text-[9px] placeholder:text-slate-400 placeholder:italic"/>
+          </div>
+          <div className="flex items-center gap-2 px-0.5">
+            <span className="text-[8px] text-slate-400">
+              <span className="font-semibold text-violet-600">AND</span> = must ·
+              <span className="font-semibold text-violet-500"> OR</span> = nice ·
+              <span className="font-semibold text-red-400"> NOT</span> = exclude
+            </span>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={()=>{setShowBoolean(true);setTimeout(()=>boolRef.current?.focus(),50);}}
+          className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-violet-500 transition-colors">
+          <Zap size={9} className="text-violet-400 flex-shrink-0"/> Boolean search
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Reveal status radio pills ─────────────────────────────────────────────────
 function RevealStatus({ value, onChange, stats }: { value: string; onChange: (v: string) => void; stats: OrgProfileStats | null }) {
   const opts = [
     { value:"all",            label:"All",           count: stats?.total_profiles },
@@ -366,7 +489,7 @@ function RevealStatus({ value, onChange, stats }: { value: string; onChange: (v:
   );
 }
 
-// ── Main sidebar ──────────────────────────────────────────────
+// ── Main sidebar ──────────────────────────────────────────────────────────────
 
 interface TISearchSidebarProps {
   filters: TIFilters; onChange: (f: TIFilters) => void;
@@ -376,15 +499,30 @@ interface TISearchSidebarProps {
 export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchSidebarProps) {
   const set = <K extends keyof TIFilters>(key: K, val: TIFilters[K]) => onChange({ ...filters, [key]: val });
 
-  const [open, setOpen] = useState({ core:true, employer:false, company:false, education:false, contact:true });
+  const [open, setOpen] = useState({
+    core: true, employer: false, company: false,
+    location: false, education: false, languages: false, contact: true,
+  });
   const tog = (k: keyof typeof open) => setOpen(p => ({ ...p, [k]: !p[k] }));
 
-  const coreCnt    = (filters.query?1:0) + filters.skillChips.length + filters.titles.length + (filters.location?1:0) + (filters.yearsExperience?1:0) + (filters.openToWork?1:0);
-  const empCnt     = filters.currentEmployer.length + filters.previousEmployer.length + filters.previousTitle.length;
-  const companyCnt = filters.industry.length;
-  const eduCnt     = filters.school.length + filters.degree.length + filters.major.length;
-  const contactCnt = (filters.hasEmail?1:0) + (filters.hasPhone?1:0) + (filters.revealedStatus!=="all"?1:0);
-  const hasAny     = !!(coreCnt+empCnt+companyCnt+eduCnt+contactCnt);
+  const [showExcludeTitles, setShowExcludeTitles] = useState((filters.excludeJobTitles?.length ?? 0) > 0);
+
+  // ── Counts for section badges ──────────────────────────────────────────────
+  const coreCnt     = (filters.query?1:0) + filters.skillChips.length + filters.titles.length
+                    + (filters.openToWork?1:0) + (filters.yearsExperience?1:0)
+                    + filters.excludeJobTitles.length;
+  const empCnt      = filters.currentEmployer.length + filters.previousEmployer.length
+                    + filters.previousTitle.length + filters.excludeCompanies.length;
+  const companyCnt  = filters.industry.length + filters.domain.length;
+  const locationCnt = (filters.location?1:0) + filters.currentWorkLocation.length + filters.pastWorkLocation.length;
+  const eduCnt      = filters.school.length + filters.degree.length + filters.major.length;
+  const langCnt     = filters.languages.length;
+  const contactCnt  = (filters.hasEmail?1:0) + (filters.hasPhone?1:0) + (filters.revealedStatus!=="all"?1:0);
+  const hasAny      = !!(coreCnt+empCnt+companyCnt+locationCnt+eduCnt+langCnt+contactCnt);
+
+  // employer label changes by companyFilter tab
+  const companyLabel = filters.companyFilter === "past" ? "Previous Company"
+    : filters.companyFilter === "both" ? "Any Company" : "Current Company";
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-slate-100">
@@ -399,7 +537,7 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
           </div>
           {hasAny && (
             <button type="button" onClick={onReset} className="flex items-center gap-1 text-[10px] font-semibold text-violet-600 hover:text-violet-800 transition-colors">
-              <RotateCcw size={9} /> Reset
+              <RotateCcw size={9}/> Reset
             </button>
           )}
         </div>
@@ -414,7 +552,7 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
       <ScrollArea className="flex-1 min-h-0">
         <div className="px-4">
 
-          {/* ── CORE FILTERS ─────────────────────────────────── */}
+          {/* ── CORE FILTERS ──────────────────────────────────────────────── */}
           <SectionHeader label="Core Filters" icon={Filter} isOpen={open.core} onToggle={() => tog("core")} count={coreCnt} />
           {open.core && (
             <div className="pb-3 space-y-3">
@@ -426,33 +564,75 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
                     <Search size={10} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input type="text" placeholder="Search by name, headline…" value={filters.query}
                       onChange={e => set("query", e.target.value)}
-                      className="w-full h-8 pl-7 pr-3 rounded-lg text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-400 placeholder:italic bg-transparent border-none outline-none" />
+                      className="w-full h-8 pl-7 pr-3 rounded-lg text-[11px] text-slate-600 placeholder:text-[10px] placeholder:text-slate-600 placeholder:italic bg-transparent border-none outline-none" />
                     {filters.query && <button type="button" onClick={() => set("query","")} className="absolute right-2 top-1/2 -translate-y-1/2"><X size={9} className="text-slate-400 hover:text-red-400" /></button>}
                   </div>
                 </div>
               </div>
+
               {/* Skills */}
               <div>
                 <SL>Skills</SL>
                 <SkillChipBuilder chips={filters.skillChips} onChange={v => set("skillChips", v)} />
               </div>
-              {/* Job Title */}
+
+              {/* Job Title + Current/Past/Both toggle */}
               <div>
-                <SL>Job Title</SL>
+                <div className="flex items-center justify-between mb-1.5">
+                  <SL>Job Title</SL>
+                  {/* Current / Past / Both toggle — controls titleFilter */}
+                  <div className="flex text-[8px] font-semibold gap-0.5">
+                    {(["current","past","both"] as const).map(mode => {
+                      const labels = { current:"Current", past:"Past", both:"Both" };
+                      return (
+                        <button key={mode} type="button"
+                          onClick={() => set("titleFilter", mode)}
+                          title={mode==="current"?"Search current job title only":mode==="past"?"Search past experience titles only":"Search current OR past titles (OR)"}
+                          className={cn("px-2 py-1 capitalize transition-all rounded-xl",
+                            filters.titleFilter===mode
+                              ? "bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 text-white"
+                              : "bg-white text-slate-500 hover:bg-violet-50 hover:text-violet-600")}>
+                          {labels[mode]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <TagInput selected={filters.titles} onChange={v => set("titles", v)}
-                  placeholder="e.g. Software Engineer, Enter…" icon={Briefcase}
+                  placeholder={
+                    filters.titleFilter==="past"  ? "Past title, Enter…" :
+                    filters.titleFilter==="both"  ? "Title (current or past), Enter…" :
+                    "e.g. Software Engineer, Enter…"
+                  }
+                  icon={Briefcase}
                   chipColor="bg-blue-50 text-blue-700 border-blue-200" />
+                {/* Exclude titles — collapsible */}
+                {(showExcludeTitles || filters.excludeJobTitles.length > 0) ? (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8px] font-semibold text-red-500 uppercase tracking-wide flex items-center gap-1"><Minus size={8}/> Exclude Titles</span>
+                      {(filters.excludeJobTitles?.length ?? 0) === 0 && (
+                        <button type="button" onClick={() => setShowExcludeTitles(false)} className="ml-auto text-[8px] text-slate-400 hover:text-slate-600">Hide</button>
+                      )}
+                    </div>
+                    <TagInput selected={filters.excludeJobTitles} onChange={v => set("excludeJobTitles", v)}
+                      placeholder="Title to exclude, Enter…" icon={Briefcase}
+                      chipColor="bg-red-50 text-red-600 border-red-200" />
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowExcludeTitles(true)}
+                    className="mt-1.5 flex items-center gap-1 text-[9px] text-slate-400 hover:text-red-500 transition-colors">
+                    <Minus size={9} className="text-red-400"/> Exclude titles
+                  </button>
+                )}
               </div>
-              {/* Location */}
-              <div>
-                <SL>Location</SL>
-                <LocationSelect value={filters.location} onChange={v => set("location", v)} />
-              </div>
+
               {/* Years of Experience */}
               <div>
                 <SL>Years of Experience</SL>
                 <SimpleSelect value={filters.yearsExperience} onChange={v => set("yearsExperience", v)} options={YEARS_EXP_OPTIONS} placeholder="Any experience" />
               </div>
+
               {/* Open to Work */}
               <label className="flex items-center gap-2 cursor-pointer" onClick={() => set("openToWork", !filters.openToWork)}>
                 <div className={cn("relative w-8 h-4 rounded-full transition-all flex-shrink-0", filters.openToWork ? "bg-gradient-to-r from-purple-600 to-pink-600" : "bg-slate-200")}>
@@ -466,49 +646,125 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
           )}
           <Div />
 
-          {/* ── EMPLOYER & ROLE ──────────────────────────────── */}
-          <SectionHeader label="Employer & Role" icon={Building2} isOpen={open.employer} onToggle={() => tog("employer")} count={empCnt} />
+          {/* ── EMPLOYER & ROLE ─────────────────────────────────────────────── */}
+          <SectionHeader label="Company & Industry" icon={Building2} isOpen={open.employer} onToggle={() => tog("employer")} count={empCnt} />
           {open.employer && (
             <div className="pb-3 space-y-3">
+              {/* Employer with Current/Previous/Both tab */}
               <div>
-                <SL>Current Employer</SL>
-                <TagInput selected={filters.currentEmployer} onChange={v => set("currentEmployer", v)}
-                  placeholder="Add company, Enter…" icon={Building2} chipColor="bg-blue-50 text-blue-700 border-blue-200" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <SL>{companyLabel}</SL>
+                  <div className="flex text-[8px] font-semibold gap-0.5">
+                    {(["current","past","both"] as const).map(mode => (
+                      <button key={mode} type="button" onClick={() => set("companyFilter", mode)}
+                        className={cn("px-2 py-1 capitalize transition-all rounded-xl",
+                          filters.companyFilter===mode
+                            ? "bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 text-white"
+                            : "bg-white text-slate-500 hover:bg-violet-50 hover:text-violet-600")}>
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <TagInput
+                  selected={filters.currentEmployer}
+                  onChange={v => set("currentEmployer", v)}
+                  placeholder={`${companyLabel}, Enter…`}
+                  icon={Building2}
+                  chipColor="bg-blue-50 text-blue-700 border-blue-200" />
+              </div>
+
+              {/* Exclude Companies */}
+              <div>
+                <SL>Exclude Companies</SL>
+                <TagInput selected={filters.excludeCompanies} onChange={v => set("excludeCompanies", v)}
+                  placeholder="Company to exclude, Enter…" icon={Building2}
+                  chipColor="bg-red-50 text-red-600 border-red-200" />
+              </div>
+
+              <div>
+                <SL>Industry</SL>
+                <SearchableMultiSelect label="Search industries…" options={INDUSTRY_OPTIONS}
+                  selected={filters.industry} onChange={v => set("industry", v)}
+                  icon={Building2} chipColor="bg-teal-50 text-teal-700 border-teal-200" />
               </div>
               <div>
+                <SL>Company Domain</SL>
+                <TagInput selected={filters.domain} onChange={v => set("domain", v)}
+                  placeholder="e.g. google.com, Enter…" icon={Globe2}
+                  chipColor="bg-sky-50 text-sky-700 border-sky-200" />
+              </div>
+            
+
+              {/* Previous Employer (role history — always past) */}
+              {/* <div>
                 <SL>Previous Employer</SL>
                 <TagInput selected={filters.previousEmployer} onChange={v => set("previousEmployer", v)}
-                  placeholder="Past company, Enter…" icon={Building2} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
-              </div>
-              <div>
+                  placeholder="Past company, Enter…" icon={Building2}
+                  chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+              </div> */}
+
+              {/* Previous Title */}
+              {/* <div>
                 <SL>Previous Title</SL>
                 <TagInput selected={filters.previousTitle} onChange={v => set("previousTitle", v)}
-                  placeholder="Past title, Enter…" icon={Briefcase} chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+                  placeholder="Past title, Enter…" icon={Briefcase}
+                  chipColor="bg-slate-100 text-slate-700 border-slate-200" />
+              </div> */}
+            </div>
+          )}
+          <Div />
+
+          {/* ── COMPANY ──────────────────────────────────────────────────────── */}
+          {/* <SectionHeader label="Company" icon={Building2} isOpen={open.company} onToggle={() => tog("company")} count={companyCnt} />
+          {open.company && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Industry</SL>
+                <SearchableMultiSelect label="Search industries…" options={INDUSTRY_OPTIONS}
+                  selected={filters.industry} onChange={v => set("industry", v)}
+                  icon={Building2} chipColor="bg-teal-50 text-teal-700 border-teal-200" />
+              </div>
+              <div>
+                <SL>Company Domain</SL>
+                <TagInput selected={filters.domain} onChange={v => set("domain", v)}
+                  placeholder="e.g. google.com, Enter…" icon={Globe2}
+                  chipColor="bg-sky-50 text-sky-700 border-sky-200" />
+              </div>
+            </div>
+          )}
+          <Div /> */}
+
+          {/* ── LOCATION DETAILS ─────────────────────────────────────────────── */}
+          <SectionHeader label="Location" icon={MapPin} isOpen={open.location} onToggle={() => tog("location")}
+            count={filters.currentWorkLocation.length + filters.pastWorkLocation.length + (filters.location?1:0)} />
+          {open.location && (
+            <div className="pb-3 space-y-3">
+              <div>
+                <SL>Profile Location</SL>
+                <LocationSelect value={filters.location} onChange={v => set("location", v)} />
+              </div>
+              <div>
+                <SL>Current Work Location</SL>
+                <LocationMultiSelect selected={filters.currentWorkLocation} onChange={v => set("currentWorkLocation", v)} />
+              </div>
+              <div>
+                <SL>Past Work Location</SL>
+                <LocationMultiSelect selected={filters.pastWorkLocation} onChange={v => set("pastWorkLocation", v)} />
               </div>
             </div>
           )}
           <Div />
 
-          {/* ── COMPANY ──────────────────────────────────────── */}
-          <SectionHeader label="Company" icon={Building2} isOpen={open.company} onToggle={() => tog("company")} count={companyCnt} />
-          {open.company && (
-            <div className="pb-3">
-              <SL>Industry</SL>
-              <SearchableMultiSelect label="Search industries…" options={INDUSTRY_OPTIONS}
-                selected={filters.industry} onChange={v => set("industry", v)}
-                icon={Building2} chipColor="bg-teal-50 text-teal-700 border-teal-200" />
-            </div>
-          )}
-          <Div />
-
-          {/* ── EDUCATION ────────────────────────────────────── */}
+          {/* ── EDUCATION ────────────────────────────────────────────────────── */}
           <SectionHeader label="Education" icon={GraduationCap} isOpen={open.education} onToggle={() => tog("education")} count={eduCnt} />
           {open.education && (
             <div className="pb-3 space-y-3">
               <div>
                 <SL>School / University</SL>
                 <TagInput selected={filters.school} onChange={v => set("school", v)}
-                  placeholder="e.g. IIT Bombay, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
+                  placeholder="e.g. IIT Bombay, Enter…" icon={GraduationCap}
+                  chipColor="bg-green-50 text-green-700 border-green-200" />
               </div>
               <div>
                 <SL>Degree</SL>
@@ -519,13 +775,36 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
               <div>
                 <SL>Major / Field</SL>
                 <TagInput selected={filters.major} onChange={v => set("major", v)}
-                  placeholder="e.g. Computer Science, Enter…" icon={GraduationCap} chipColor="bg-green-50 text-green-700 border-green-200" />
+                  placeholder="e.g. Computer Science, Enter…" icon={GraduationCap}
+                  chipColor="bg-green-50 text-green-700 border-green-200" />
               </div>
             </div>
           )}
           <Div />
 
-          {/* ── CONTACT STATUS ───────────────────────────────── */}
+          {/* ── LANGUAGES ────────────────────────────────────────────────────── */}
+          <SectionHeader label="Languages" icon={Languages} isOpen={open.languages} onToggle={() => tog("languages")} count={langCnt} />
+          {open.languages && (
+            <div className="pb-3">
+              <SL>Spoken Languages</SL>
+              <div className="space-y-1.5">
+                <TagInput
+                  selected={filters.languages.map(l => l.language)}
+                  onChange={newLangs => {
+                    const existing = filters.languages.map(l => l.language);
+                    const added = newLangs.filter(l => !existing.includes(l)).map(l => ({ language: l, proficiency: [] }));
+                    const kept  = filters.languages.filter(l => newLangs.includes(l.language));
+                    set("languages", [...kept, ...added]);
+                  }}
+                  placeholder="e.g. Hindi, Tamil, Enter…"
+                  icon={Languages}
+                  chipColor="bg-teal-50 text-teal-700 border-teal-200" />
+              </div>
+            </div>
+          )}
+          <Div />
+
+          {/* ── CONTACT STATUS ───────────────────────────────────────────────── */}
           <SectionHeader label="Contact Status" icon={Eye} isOpen={open.contact} onToggle={() => tog("contact")} count={contactCnt} />
           {open.contact && (
             <div className="pb-3 space-y-3">
@@ -534,13 +813,13 @@ export function TISearchSidebar({ filters, onChange, onReset, stats }: TISearchS
                   <div className={cn("relative w-8 h-4 rounded-full transition-all flex-shrink-0", filters.hasEmail ? "bg-violet-600" : "bg-slate-200")}>
                     <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all" style={{ left: filters.hasEmail ? "calc(100% - 14px)" : "2px" }} />
                   </div>
-                  <span className="text-[11px] text-slate-600 flex items-center gap-1"><Mail size={10} className="text-violet-500" /> Has email ({Number(stats?.email_available??0).toLocaleString()})</span>
+                  <span className="text-[11px] text-slate-600 flex items-center gap-1"><Mail size={10} className="text-violet-500"/> Has email ({Number(stats?.email_available??0).toLocaleString()})</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer" onClick={() => set("hasPhone", !filters.hasPhone)}>
                   <div className={cn("relative w-8 h-4 rounded-full transition-all flex-shrink-0", filters.hasPhone ? "bg-violet-600" : "bg-slate-200")}>
                     <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all" style={{ left: filters.hasPhone ? "calc(100% - 14px)" : "2px" }} />
                   </div>
-                  <span className="text-[11px] text-slate-600 flex items-center gap-1"><Phone size={10} className="text-violet-500" /> Has phone ({Number(stats?.phone_available??0).toLocaleString()})</span>
+                  <span className="text-[11px] text-slate-600 flex items-center gap-1"><Phone size={10} className="text-violet-500"/> Has phone ({Number(stats?.phone_available??0).toLocaleString()})</span>
                 </label>
               </div>
               <div>

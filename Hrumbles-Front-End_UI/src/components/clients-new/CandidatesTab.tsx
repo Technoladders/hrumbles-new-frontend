@@ -11,7 +11,16 @@ import moment from 'moment';
 import { Candidate, SortConfig } from './ClientTypes';
 import HiddenContactCell from '@/components/ui/HiddenContactCell';
 import { useSelector } from 'react-redux';
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell, PieChart, Pie } from 'recharts';
+
+
+interface StatusIds {
+  offeredMainId: string | null;
+  joinedMainId: string | null;
+  offerIssuedSubId: string | null;
+  joinedSubId: string | null;
+}
 
 const STATUS_CONFIG = {
   default: { OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417", OFFER_ISSUED_SUB_STATUS_ID: "bcc84d3b-fb76-4912-86cc-e95448269d6b", JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e", JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680" },
@@ -41,13 +50,14 @@ const Skel = () => (
 
 const PALETTE = ['#7B43F1', '#10B981', '#06B6D4', '#F59E0B', '#EF4444'];
 
-const CandidatesTab: React.FC<{ candidates: Candidate[]; loading: boolean; onUpdate: () => void }> = ({ candidates, loading, onUpdate }) => {
+const CandidatesTab: React.FC<{ candidates: Candidate[]; loading: boolean; onUpdate: () => void; statusIds: StatusIds | undefined; }> = ({ candidates, loading, onUpdate, statusIds }) => {
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
   const [sortConfig, setSortConfig] = useState<SortConfig<Candidate>>(null);
   const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const statusIds = useMemo(() => organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default, [organization_id]);
+   const joinedCount = candidates.filter(c => c.sub_status_id === statusIds?.joinedSubId).length;
+  const offerCount = candidates.filter(c => c.sub_status_id === statusIds?.offerIssuedSubId).length;
 
   const parseSalary = (s?: string): number => {
     if (!s) return 0;
@@ -62,15 +72,15 @@ const CandidatesTab: React.FC<{ candidates: Candidate[]; loading: boolean; onUpd
   const fmt = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n);
   const fmtDate = (d?: string) => d ? moment(new Date(d)).format('DD MMM YYYY') : '—';
 
-  const statusStyle = (sid?: string) => sid === statusIds.JOINED_SUB_STATUS_ID ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200';
-  const statusText = (sid?: string) => sid === statusIds.JOINED_SUB_STATUS_ID ? 'Joined' : 'Offer Issued';
-  const statusDot = (sid?: string) => sid === statusIds.JOINED_SUB_STATUS_ID ? 'bg-green-500' : 'bg-amber-500';
+  const statusStyle = (sid?: string) => sid === statusIds?.joinedSubId ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+  const statusText = (sid?: string) => sid === statusIds?.joinedSubId ? 'Joined' : 'Offer Issued';
+  const statusDot = (sid?: string) => sid === statusIds?.joinedSubId ? 'bg-green-500' : 'bg-amber-500';
 
   const handleStatusChange = async (id: string, subId: string) => {
     setStatusUpdateLoading(id);
     try {
       await supabase.from('hr_job_candidates').update({
-        main_status_id: subId === statusIds.OFFER_ISSUED_SUB_STATUS_ID ? statusIds.OFFERED_STATUS_ID : statusIds.JOINED_STATUS_ID,
+        main_status_id: subId === statusIds?.offerIssuedSubId ? statusIds?.offeredMainId : statusIds?.joinedMainId,
         sub_status_id: subId,
       }).eq('id', id);
       toast({ title: 'Status Updated' }); onUpdate();
@@ -108,8 +118,8 @@ const sorted = useMemo(() => {
 
   // ── Analytics for mini visualizations ─────────────────────────────────────
   const analytics = useMemo(() => {
-    const joined = candidates.filter(c => c.sub_status_id === statusIds.JOINED_SUB_STATUS_ID).length;
-    const offerIssued = candidates.filter(c => c.sub_status_id === statusIds.OFFER_ISSUED_SUB_STATUS_ID).length;
+    const joined = candidates.filter(c => c.sub_status_id === statusIds?.joinedSubId).length;
+    const offerIssued = candidates.filter(c => c.sub_status_id === statusIds?.offerIssuedSubId).length;
 
     // Salary distribution buckets
     const buckets: Record<string, number> = { '<5L': 0, '5–10L': 0, '10–20L': 0, '>20L': 0 };
@@ -321,8 +331,8 @@ const sorted = useMemo(() => {
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="rounded-xl shadow-lg w-36">
-                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds.OFFER_ISSUED_SUB_STATUS_ID)} className="text-xs text-amber-700">Offer Issued</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds.JOINED_SUB_STATUS_ID)} className="text-xs text-green-700">Joined</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds?.offerIssuedSubId)} className="text-xs text-amber-700">Offer Issued</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleStatusChange(c.id, statusIds?.joinedSubId)} className="text-xs text-green-700">Joined</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -356,8 +366,5 @@ const sorted = useMemo(() => {
     </div>
   );
 };
-
-// Need TooltipProvider import (was missing in compact form)
-import { TooltipProvider } from '@/components/ui/tooltip';
 
 export default CandidatesTab;

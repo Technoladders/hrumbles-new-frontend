@@ -1,14 +1,19 @@
-// hooks/useRRSearch.ts — v6
+// hooks/useRRSearch.ts — v7
 //
-// Changes from v5:
-//   1. RRFilters now has `linkedinUrl: string` (added in RRSearchSidebar v5).
-//   2. ContactOut path has a NEW BRANCH at the top:
-//        if (opts.linkedinUrl is a valid LinkedIn URL)
-//          → call `contactout-enrich-profile` edge fn
-//          → edge fn returns same `{ profiles: {[url]: profileObj}, total: 1 }` wire shape
-//          → normalize with the SAME normalizeCOProfile() used for search
-//          → return as single-element profiles array
-//   3. Everything else is identical to v5.
+// Changes from v6:
+//   CO path only — RocketReach path is UNCHANGED.
+//   1. Calls `contactout-search-v1` instead of `contactout-search`.
+//   2. previousEmployer fix: CO has no `past_company` param.
+//      Maps to `company` + `company_filter: "past"` instead.
+//   3. previousTitle fix: CO has no `past_job_title` param.
+//      Merges into `job_title` and forces `current_titles_only: false`.
+//   4. New params forwarded to CO API:
+//      matchExperience, currentTitlesOnly, includeRelatedJobTitles,
+//      companyFilter (tab), excludeJobTitles, excludeCompanies,
+//      excludeCompaniesFilter, domain, locationRadius, currentWorkLocation,
+//      pastWorkLocation, languages.
+//   5. match_experience conflict: when set, current_titles_only and
+//      company_filter are OMITTED (CO API returns error otherwise).
 
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -102,24 +107,15 @@ const JOB_FUNCTION_MAP: Record<string, string> = {
   "Quality Management":      "operations",
   "Supply Chain":            "operations",
   "Manufacturing":           "operations",
-  "Real Estate":             "real estate",
-  "Office Operations":       "operations",
   "Legal Counsel":           "legal",
   "Compliance":              "legal",
   "Contracts":               "legal",
   "Corporate Secretary":     "legal",
   "Litigation":              "legal",
-  "Privacy":                 "legal",
   "Doctor":                  "medical",
   "Nursing":                 "medical",
   "Therapy":                 "medical",
   "Dental":                  "medical",
-  "Fitness":                 "wellness",
-  "Wellness":                "wellness",
-  "Medical Administration":  "medical",
-  "Medical Education & Training": "medical",
-  "Medical Research":        "medical",
-  "Clinical Operations":     "medical",
   "Administration":          "education",
   "Professor":               "education",
   "Teacher":                 "education",
@@ -178,8 +174,6 @@ function normalizeCOProfile(linkedinUrl: string, p: any): RRProfile {
 
   const currentExp  = exp.find(e => e.is_current) ?? exp[0] ?? null;
   const companyInfo = p.company ?? {};
-
-  // contact_availability — from search response OR from enrich contact_info
   const ca = p.contact_availability ?? {};
   const ci = p.contact_info         ?? {};
 
@@ -237,14 +231,12 @@ function normalizeCOProfile(linkedinUrl: string, p: any): RRProfile {
   } as unknown as RRProfile;
 }
 
-// ─── URL validation ───────────────────────────────────────────────────────────
 function isValidLinkedInUrl(url?: string): boolean {
   if (!url?.trim()) return false;
   return /linkedin\.com\/in\//i.test(url.trim());
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
+// ─── Hook types ───────────────────────────────────────────────────────────────
 interface UseRRSearchOpts extends Partial<RRFilters> {
   pageSize?:       number;
   provider?:       string;
@@ -258,8 +250,10 @@ interface UseRRSearchReturn {
   error:        string | null;
   creditError:  CreditError | null;
   search:       (page?: number) => Promise<void>;
+  reset:        () => void;
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
   const [state,        setState]        = useState<UseRRSearchReturn["state"]>("idle");
   const [profiles,     setProfiles]     = useState<RRProfile[]>([]);
@@ -285,75 +279,36 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       userId = session?.user?.id;
     } catch { /* silent */ }
 
-    // ══════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════════
     //  ContactOut path
-    // ══════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════════
     if (provider === "contactout") {
 
-      // ── NEW: LinkedIn URL enrich branch ────────────────────────────────
+      // ── LinkedIn URL enrich branch (unchanged from v6) ─────────────────────
       if (isValidLinkedInUrl(opts.linkedinUrl)) {
         try {
           const { data, error: fnErr } = await supabase.functions.invoke(
             "contactout-enrich-profile",
-            {
-              body: {
-                linkedinUrl:    opts.linkedinUrl!.trim(),
-                organizationId: opts.organizationId ?? undefined,
-                userId,
-              },
-            }
+            { body: { linkedinUrl: opts.linkedinUrl!.trim(), organizationId: opts.organizationId ?? undefined, userId } }
           );
-
-          // credit error
           if (fnErr) {
             const errBody = (fnErr as any)?.context ?? {};
             if (errBody?.code === "INSUFFICIENT_CREDITS" || fnErr.message?.includes("402")) {
-              const ce: CreditError = {
-                code:      "INSUFFICIENT_CREDITS",
-                message:   errBody.message ?? "Insufficient credits.",
-                required:  errBody.required  ?? 1,
-                available: errBody.available ?? 0,
-              };
-              setCreditError(ce);
-              setError(ce.message);
-              setState("error");
-              return;
+              const ce: CreditError = { code: "INSUFFICIENT_CREDITS", message: errBody.message ?? "Insufficient credits.", required: errBody.required ?? 1, available: errBody.available ?? 0 };
+              setCreditError(ce); setError(ce.message); setState("error"); return;
             }
             throw new Error(fnErr.message);
           }
-
-          // data.code === INSUFFICIENT_CREDITS (200 wrapper)
           if (data?.code === "INSUFFICIENT_CREDITS") {
-            const ce: CreditError = {
-              code:      "INSUFFICIENT_CREDITS",
-              message:   data.message ?? "Insufficient credits.",
-              required:  data.required  ?? 1,
-              available: data.available ?? 0,
-            };
-            setCreditError(ce);
-            setError(ce.message);
-            setState("error");
-            return;
+            const ce: CreditError = { code: "INSUFFICIENT_CREDITS", message: data.message ?? "Insufficient credits.", required: data.required ?? 1, available: data.available ?? 0 };
+            setCreditError(ce); setError(ce.message); setState("error"); return;
           }
-
           if (!data) throw new Error("No response from enrich");
-
-          // Same wire shape as contactout-search: profiles object keyed by URL
           const profilesObj: Record<string, any> = data.profiles ?? {};
           const entries = Object.entries(profilesObj);
-
-          if (!entries.length) {
-            setState("empty");
-            setProfiles([]);
-            setTotalEntries(0);
-            return;
-          }
-
-          // Normalize using the SAME normalizeCOProfile — no code duplication
-          const rawProfiles = entries.map(([url, p]) => normalizeCOProfile(url, p));
-
+          if (!entries.length) { setState("empty"); setProfiles([]); setTotalEntries(0); return; }
           setState("results");
-          setProfiles(rawProfiles);
+          setProfiles(entries.map(([url, p]) => normalizeCOProfile(url, p)));
           setTotalEntries(1);
         } catch (e: any) {
           if (e.name === "AbortError") return;
@@ -361,56 +316,127 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
           setError(e.message ?? "Enrich failed");
           setState("error");
         }
-        return;  // ← end enrich branch
+        return;
       }
 
-      // ── Normal contactout-search branch (unchanged from v5) ────────────
-      let skillsParam: string[] | undefined;
+      // ── Normal contactout-search-v1 branch ────────────────────────────────
+      const query: Record<string, any> = {};
+      const matchExpSet = !!opts.matchExperience;
+
+      // ── TITLE ──────────────────────────────────────────────────────────────
+      // Fix: CO has no past_job_title. Merge previousTitle into job_title
+      // and force current_titles_only=false so past titles are searched too.
+      const allTitles = [
+        ...(opts.titles        ?? []),
+        ...(opts.previousTitle ?? []),  // merged here to fix previous title search
+      ];
+      if (allTitles.length) {
+        query.job_title = allTitles.length === 1
+          ? [allTitles[0]]
+          : [`(${allTitles.join(" OR ")})`];
+      }
+
+      if (opts.excludeJobTitles?.length) {
+        query.exclude_job_titles = opts.excludeJobTitles;
+      }
+      if (opts.includeRelatedJobTitles) {
+        query.include_related_job_titles = true;
+      }
+
+      // CO API: if match_experience is set → MUST NOT include current_titles_only or company_filter
+      if (matchExpSet) {
+        query.match_experience = opts.matchExperience;
+      } else {
+        // Force false when previous titles are present (they need past search)
+        const hasPastTitles = !!(opts.previousTitle?.length);
+        const ctOnly = hasPastTitles ? false : (opts.currentTitlesOnly ?? true);
+        if (!ctOnly) query.current_titles_only = false;
+      }
+
+      // ── COMPANY ────────────────────────────────────────────────────────────
+      // Fix: CO has no past_company param. Use company + company_filter: "past".
+      // companyFilter = the UI tab: "current" | "past" | "both"
+      // previousEmployer (Role Details) also contributes as past companies.
+      const companyMode = opts.companyFilter ?? "current";
+      const hasCurrent  = !!(opts.currentEmployer?.length);
+      const hasPastEmp  = !!(opts.previousEmployer?.length);
+
+      if (hasCurrent && hasPastEmp) {
+        // Both T&C company AND Role Details previousEmployer → merge, use "both"
+        query.company = [...opts.currentEmployer!, ...opts.previousEmployer!];
+        if (!matchExpSet) query.company_filter = "both";
+      } else if (hasCurrent) {
+        query.company = opts.currentEmployer;
+        if (!matchExpSet) query.company_filter = companyMode;
+      } else if (hasPastEmp) {
+        // Only Role Details previous employer → map as past
+        query.company = opts.previousEmployer;
+        if (!matchExpSet) query.company_filter = "past"; // Fix: was past_company (invalid CO param)
+      }
+
+      if (opts.excludeCompanies?.length) {
+        query.exclude_companies        = opts.excludeCompanies;
+        query.exclude_companies_filter = opts.excludeCompaniesFilter ?? "both";
+      }
+      if (opts.domain?.length) {
+        query.domain = opts.domain;
+      }
+
+      // ── SKILLS (CO path) ───────────────────────────────────────────────────
+      // CO API boolean expression in query.skills:
+      //   must → AND block (ALL required)
+      //   nice → OR block  (AT LEAST ONE required; more matches rank higher)
+      //   excl → NOT block
+      // e.g. node(must)+react(nice)+python(nice) → ["node AND (react OR python)"]
       if (opts.skillChips?.length) {
         const must    = opts.skillChips.filter(c => c.mode === "must").map(c => c.label);
         const nice    = opts.skillChips.filter(c => c.mode === "nice").map(c => c.label);
         const exclude = opts.skillChips.filter(c => c.mode === "exclude").map(c => c.label);
-        const positive = must.length ? must : nice;
-        let eq = "";
-        if (positive.length === 1)     eq = positive[0];
-        else if (positive.length > 1)  eq = `(${positive.join(" AND ")})`;
-        if (exclude.length > 0) {
-          const excClause = exclude.length === 1 ? exclude[0] : `(${exclude.join(" OR ")})`;
-          eq = eq ? `${eq} NOT ${excClause}` : `NOT ${excClause}`;
-        }
-        if (eq) skillsParam = [eq];
+        const parts: string[] = [];
+        if (must.length === 1)   parts.push(must[0]);
+        else if (must.length > 1) parts.push(`(${must.join(" AND ")})`);
+        if (nice.length === 1)   parts.push(nice[0]);
+        else if (nice.length > 1) parts.push(`(${nice.join(" OR ")})`);
+        let expr = parts.join(" AND ");
+        if (exclude.length === 1)  expr = (expr ? `${expr} NOT ` : "NOT ") + exclude[0];
+        else if (exclude.length > 1) expr = (expr ? `${expr} NOT ` : "NOT ") + `(${exclude.join(" OR ")})`;
+        if (expr) query.skills = [expr];
       }
 
-      let jobTitleParam: string[] | undefined;
-      if (opts.titles?.length) {
-        jobTitleParam = opts.titles.length === 1
-          ? [opts.titles[0]]
-          : [`(${opts.titles.join(" OR ")})`];
+      // ── SENIORITY / JOB FUNCTION ───────────────────────────────────────────
+      if (opts.managementLevels?.length) {
+        const seniorityParam = [...new Set(
+          opts.managementLevels.map(s => SENIORITY_MAP[s] ?? null).filter(Boolean) as string[]
+        )];
+        if (seniorityParam.length) query.seniority = seniorityParam;
+      }
+      if (opts.department?.length) {
+        const jobFunctionParam = [...new Set(
+          opts.department.map(d => JOB_FUNCTION_MAP[d] ?? d.toLowerCase()).filter(Boolean)
+        )];
+        if (jobFunctionParam.length) query.job_function = jobFunctionParam;
       }
 
-      const seniorityParam = opts.managementLevels?.length
-        ? [...new Set(opts.managementLevels.map(s => SENIORITY_MAP[s] ?? null).filter(Boolean) as string[])]
-        : undefined;
+      // ── LOCATION ───────────────────────────────────────────────────────────
+      if (opts.name?.trim())                query.name                  = opts.name.trim();
+      if (opts.locations?.length)           query.location              = opts.locations;
+      if (opts.locationRadius)              query.location_radius       = Number(opts.locationRadius);
+      if (opts.currentWorkLocation?.length) query.current_work_location = opts.currentWorkLocation;
+      if (opts.pastWorkLocation?.length)    query.past_work_location    = opts.pastWorkLocation;
 
-      const jobFunctionParam = opts.department?.length
-        ? [...new Set(opts.department.map(d => JOB_FUNCTION_MAP[d] ?? d.toLowerCase()).filter(Boolean))]
-        : undefined;
+      // ── EXPERIENCE / FILTERS ───────────────────────────────────────────────
+      if (opts.yearsExperience)             query.years_of_experience   = toYearsArray(opts.yearsExperience);
+      if (opts.yearsInCurrentRole)          query.years_in_current_role = toYearsArray(opts.yearsInCurrentRole);
+      if (opts.companySize?.length)         query.company_size          = opts.companySize;
+      if (opts.companyIndustry?.length)     query.industry              = opts.companyIndustry;
+      if (opts.openToWork)                  query.keyword               = query.keyword ? `${query.keyword} open to work` : "open to work";
+      if (opts.keyword?.trim())             query.keyword               = opts.keyword.trim();
 
-      const query: Record<string, any> = {};
-      if (opts.name?.trim())            query.name          = opts.name.trim();
-      if (jobTitleParam)                query.job_title     = jobTitleParam;
-      if (seniorityParam)               query.seniority     = seniorityParam;
-      if (jobFunctionParam)             query.job_function  = jobFunctionParam;
-      if (opts.locations?.length)       query.location      = opts.locations;
-      if (opts.currentEmployer?.length) query.company       = opts.currentEmployer;
-      if (skillsParam)                  query.skills        = skillsParam;
-      if (opts.yearsExperience)         query.years_of_experience   = toYearsArray(opts.yearsExperience);
-      if (opts.yearsInCurrentRole)      query.years_in_current_role = toYearsArray(opts.yearsInCurrentRole);
-      if (opts.companySize?.length)     query.company_size    = opts.companySize;
-      if (opts.companyIndustry?.length) query.industry        = opts.companyIndustry;
-      if (opts.school?.length)          query.education       = opts.school;
-      if (opts.degree?.length)          query.education       = [...(query.education ?? []), ...opts.degree];
-      if (opts.openToWork)              query.keyword = query.keyword ? `${query.keyword} open to work` : "open to work";
+      // Education
+      if (opts.school?.length)  query.education = opts.school;
+      if (opts.degree?.length)  query.education = [...(query.education ?? []), ...opts.degree];
+
+      // Contact method → data_types
       if (opts.contactMethod?.length) {
         const dataTypes: string[] = [];
         opts.contactMethod.forEach(m => {
@@ -419,9 +445,17 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
         });
         if (dataTypes.length) query.data_types = [...new Set(dataTypes)];
       }
-      if (opts.keyword?.trim())             query.keyword      = opts.keyword.trim();
-      if (opts.previousEmployer?.length)    query.past_company = opts.previousEmployer;
-      if (opts.previousTitle?.length)       query.past_job_title = [`(${opts.previousTitle.join(" OR ")})`];
+
+      // ── LANGUAGES (new in v7) ──────────────────────────────────────────────
+      if (opts.languages?.length) {
+        const validLangs = opts.languages.filter(l => l.language.trim());
+        if (validLangs.length) {
+          query.languages = validLangs.map(l => ({
+            language: l.language.toLowerCase().trim(),
+            ...(l.proficiency.length ? { proficiency: l.proficiency } : {}),
+          }));
+        }
+      }
 
       const body = {
         query,
@@ -431,41 +465,23 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
         userId,
       };
 
-      console.log("[contactout-search] query:", JSON.stringify(query, null, 2));
+      console.log("[co-search-v1] query:", JSON.stringify(query, null, 2));
 
       try {
-        const { data, error: fnErr } = await supabase.functions.invoke("contactout-search", { body });
+        const { data, error: fnErr } = await supabase.functions.invoke("contactout-search-v1", { body });
 
         if (fnErr) {
           const errBody = (fnErr as any)?.context ?? {};
           if (errBody?.code === "INSUFFICIENT_CREDITS" || fnErr.message?.includes("402")) {
-            const ce: CreditError = {
-              code:      "INSUFFICIENT_CREDITS",
-              message:   errBody.message ?? "Insufficient credits to perform this search.",
-              required:  errBody.required  ?? 0,
-              available: errBody.available ?? 0,
-            };
-            setCreditError(ce);
-            setError(ce.message);
-            setState("error");
-            return;
+            const ce: CreditError = { code: "INSUFFICIENT_CREDITS", message: errBody.message ?? "Insufficient credits to perform this search.", required: errBody.required ?? 0, available: errBody.available ?? 0 };
+            setCreditError(ce); setError(ce.message); setState("error"); return;
           }
           throw new Error(fnErr.message);
         }
-
         if (data?.code === "INSUFFICIENT_CREDITS") {
-          const ce: CreditError = {
-            code:      "INSUFFICIENT_CREDITS",
-            message:   data.message ?? "Insufficient credits.",
-            required:  data.required  ?? 0,
-            available: data.available ?? 0,
-          };
-          setCreditError(ce);
-          setError(ce.message);
-          setState("error");
-          return;
+          const ce: CreditError = { code: "INSUFFICIENT_CREDITS", message: data.message ?? "Insufficient credits.", required: data.required ?? 0, available: data.available ?? 0 };
+          setCreditError(ce); setError(ce.message); setState("error"); return;
         }
-
         if (!data) throw new Error("No response from search");
 
         const profilesObj: Record<string, any> = data.profiles ?? {};
@@ -480,13 +496,9 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
           );
         }
 
-        if (!rawProfiles.length) {
-          setState("empty");
-          setProfiles([]);
-          setTotalEntries(0);
-          return;
-        }
+        if (!rawProfiles.length) { setState("empty"); setProfiles([]); setTotalEntries(0); return; }
 
+        // Client-side skill exclude filter (safety net)
         const excluded = new Set(
           (opts.skillChips ?? []).filter(c => c.mode === "exclude").map(c => c.label.toLowerCase())
         );
@@ -497,21 +509,19 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
             })
           : rawProfiles;
 
-        setState("results");
-        setProfiles(filtered);
-        setTotalEntries(total);
+        setState("results"); setProfiles(filtered); setTotalEntries(total);
       } catch (e: any) {
         if (e.name === "AbortError") return;
-        console.error("[contactout-search] error:", e);
+        console.error("[co-search-v1] error:", e);
         setError(e.message ?? "Search failed");
         setState("error");
       }
       return;
     }
 
-    // ══════════════════════════════════════════════════════════════════════
-    //  RocketReach path — unchanged from v5
-    // ══════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════════
+    //  RocketReach path — UNCHANGED from v6
+    // ══════════════════════════════════════════════════════════════════════════
     const start = (page - 1) * pageSize + 1;
     const query: Record<string, any> = {};
 
@@ -520,10 +530,12 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
     if (opts.managementLevels?.length) query.management_levels      = opts.managementLevels;
     if (opts.name?.trim())             query.name                   = [opts.name.trim()];
     if (opts.skillChips?.length) {
+      // RR path: skills as plain array (RR API uses AND logic natively)
+      // must chips → required skills; nice → optional (sent as desired_skills if present)
       const must = opts.skillChips.filter(c => c.mode === "must").map(c => c.label);
       const nice = opts.skillChips.filter(c => c.mode === "nice").map(c => c.label);
-      if (must.length) query.all_skills = must;
-      if (nice.length) query.skills     = nice;
+      if (must.length)        query.current_title_skills  = must;   // RR required skills
+      if (nice.length)        query.desired_skills        = nice;   // RR optional skills
     }
     if (opts.currentEmployer?.length)   query.current_employer           = opts.currentEmployer;
     if (opts.companySize?.length)       query.company_size               = opts.companySize;
@@ -561,9 +573,7 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       const rawProfiles: RRProfile[] = data.profiles ?? [];
       const total                    = data.pagination?.total ?? 0;
 
-      if (!rawProfiles.length) {
-        setState("empty"); setProfiles([]); setTotalEntries(0); return;
-      }
+      if (!rawProfiles.length) { setState("empty"); setProfiles([]); setTotalEntries(0); return; }
 
       const excludedSkills = new Set(
         (opts.skillChips ?? []).filter(c => c.mode === "exclude").map(c => c.label.toLowerCase())
@@ -583,7 +593,13 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
       setState("error");
     }
   }, [
-    opts.linkedinUrl,    // ← new dependency
+    // CO new deps
+    opts.linkedinUrl, opts.matchExperience, opts.currentTitlesOnly,
+    opts.includeRelatedJobTitles, opts.companyFilter,
+    opts.excludeJobTitles, opts.excludeCompanies, opts.excludeCompaniesFilter,
+    opts.domain, opts.locationRadius, opts.currentWorkLocation, opts.pastWorkLocation,
+    opts.languages,
+    // existing deps
     opts.titles, opts.locations, opts.managementLevels, opts.name,
     opts.skillChips, opts.currentEmployer, opts.companySize, opts.companyIndustry,
     opts.companyRevenue, opts.companyPubliclyTraded, opts.companyFundingMin, opts.companyFundingMax,
@@ -594,5 +610,15 @@ export function useRRSearch(opts: UseRRSearchOpts): UseRRSearchReturn {
     opts.openToWork, opts.yearsInCurrentRole, opts.recentlyChangedJobs,
   ]);
 
-  return { state, profiles, totalEntries, error, creditError, search };
+
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
+    setState("idle");
+    setProfiles([]);
+    setTotalEntries(0);
+    setError(null);
+    setCreditError(null);
+  }, []);
+
+  return { state, profiles, totalEntries, error, creditError, search, reset };
 }

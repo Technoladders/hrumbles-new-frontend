@@ -24,23 +24,9 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useOrganizationStatusIds } from "@/hooks/useOrganizationStatusIds";
 
-// --- Constants (UNCHANGED) ---
-const STATUS_CONFIG = {
-  default: {
-    OFFERED_STATUS_ID: "9d48d0f9-8312-4f60-aaa4-bafdce067417",
-    OFFER_ISSUED_SUB_STATUS_ID: "bcc84d3b-fb76-4912-86cc-e95448269d6b",
-    JOINED_STATUS_ID: "5b4e0b82-0774-4e3b-bb1e-96bc2743f96e",
-    JOINED_SUB_STATUS_ID: "c9716374-3477-4606-877a-dfa5704e7680",
-  },
-  demo: {
-    OFFERED_STATUS_ID: "0557a2c9-6c27-46d5-908c-a826b82a6c47",
-    OFFER_ISSUED_SUB_STATUS_ID: "7ad5ab45-21ab-4af1-92b9-dd0cb1d52887",
-    JOINED_STATUS_ID: "5ab8833c-c409-46b8-a6b0-dbf23591827b",
-    JOINED_SUB_STATUS_ID: "247ef818-9fbe-41ee-a755-a446d620ebb6",
-  }
-};
-const DEMO_ORGANIZATION_ID = '53989f03-bdc9-439a-901c-45b274eff506';
+
 const USD_TO_INR_RATE = 84;
 
 const CHART_COLORS = ['#7B43F1', '#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'];
@@ -147,7 +133,9 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const organization_id = useSelector((state: any) => state.auth.organization_id);
-  const statusIds = useMemo(() => organization_id === DEMO_ORGANIZATION_ID ? STATUS_CONFIG.demo : STATUS_CONFIG.default, [organization_id]);
+  const { data: statusIds } = useOrganizationStatusIds(organization_id);
+
+  console.log("Status IDs from hook:", statusIds);
 
   // --- ALL CALCULATION FUNCTIONS UNCHANGED ---
   const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
@@ -201,6 +189,7 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
   // --- DATA FETCHING UNCHANGED ---
   const fetchAllData = useCallback(async () => {
     if (!organization_id) return;
+    if (!statusIds) return;
     setLoading(true);
     try {
       const { data: clientsData, error: clientsError } = await supabase.from("hr_clients").select("*, hr_employees:hr_employees!hr_clients_created_by_fkey(first_name, last_name), internal_contact_employee:hr_employees!hr_clients_internal_contact_id_fkey(first_name, last_name)").eq("organization_id", organization_id);
@@ -217,8 +206,8 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
       setAllEmployees(employeesData);
     }
 
-      const { data: candidatesData } = await supabase.from("hr_job_candidates").select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`).or(`main_status_id.eq.${statusIds.JOINED_STATUS_ID},main_status_id.eq.${statusIds.OFFERED_STATUS_ID}`).in("sub_status_id", [statusIds.JOINED_SUB_STATUS_ID, statusIds.OFFER_ISSUED_SUB_STATUS_ID]);
-      // const { data: employeesData } = await supabase.from("hr_project_employees").select("*");
+      const { data: candidatesData } = await supabase.from("hr_job_candidates").select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`).or(`main_status_id.eq.${statusIds.joinedMainId},main_status_id.eq.${statusIds.offeredMainId}`).in("sub_status_id", [statusIds.joinedSubId, statusIds.offerIssuedSubId]);
+      
       const { data: timeLogs } = await supabase.from("time_logs").select("*").eq("is_approved", true);
       let totalRevenue = 0, totalProfit = 0;
       const metricsByClient: { [k: string]: { revenue: number; profit: number } } = {};
@@ -226,7 +215,10 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
       if (candidatesData) {
         candidatesData.forEach((candidate) => {
           const job = (candidate as any).hr_jobs;
-          const client = clientsData.find((c) => c.client_name === job?.client_owner);
+          const jobClientName = job?.client_details?.clientName;
+const client = jobClientName 
+  ? clientsData.find((c) => c.client_name === jobClientName) 
+  : undefined;
           if (!job || !client) return;
           const candProfit = calculateProfit(candidate, client.currency || "INR", client.commission_type || "", client.commission_value || 0, job);
           const candRevenue = job.job_type_category.toLowerCase() === "internal" ? parseSalary(candidate.accrual_ctc) : candProfit;
@@ -234,6 +226,8 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
           if (metricsByClient[client.client_name]) { metricsByClient[client.client_name].revenue += candRevenue; metricsByClient[client.client_name].profit += candProfit; }
         });
       }
+  console.log("candidatedata", candidatesData);
+
       if (employeesData) {
         employeesData.forEach((employee) => {
           const client = clientsData.find((c) => c.id === employee.client_id);
@@ -250,6 +244,7 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
       toast({ title: "Error", description: `Failed to load data: ${error.message}`, variant: "destructive" });
     } finally { setLoading(false); }
   }, [organization_id, toast, statusIds]);
+
 
   // Helper function to get employee names from IDs
 const getInternalContactNames = useCallback((client: Client) => {

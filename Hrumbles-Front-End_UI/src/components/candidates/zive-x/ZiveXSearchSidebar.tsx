@@ -1,11 +1,15 @@
-// src/components/candidates/zive-x/ZiveXSearchSidebar.tsx  v4
-// CHANGES vs v3:
-//  • SearchableMultiPopover — replaces AcText for: CurrentTitle, CurrentCompany,
-//    PreviousTitles, PreviousCompanies, Qualification, Institution
-//  • All those fields are now true multi-select tag arrays (SearchTag[])
-//  • Education normalization via canonicalizeEdu before suggestion matching
-//  • onSearch passes arrays for current_designation[] / current_company[]
-//  • SkillBuilder, LocIn, TagIn, keyword handling unchanged
+// src/components/candidates/zive-x/ZiveXSearchSidebar.tsx  v5
+//
+// CHANGES vs v4:
+//  • SkillBuilder rebuilt as SkillsPopoverBuilder — uses the SAME popover pattern
+//    as title/company/etc, but with the Must/Nice/Exclude mode toggle integrated.
+//  • Mode toggle lives next to each chip (click to cycle), with a clearly visible
+//    "New as: [Must][Nice][Excl]" legend above the field.
+//  • Suggestions in the popover show a small badge of the active mode so the
+//    recruiter knows how the next-added skill will be tagged.
+//  • Education normalization carried over.
+//  • State + onSearch payload unchanged — must/nice still in `skills` SearchTag[],
+//    exclude still in `excluded_skills: string[]`.
 
 import {
   FC, useState, useEffect, useRef, KeyboardEvent, useMemo, useCallback,
@@ -34,12 +38,12 @@ const EXP_OPTIONS = [
   { value: '', label: 'Any' },
   ...Array.from({ length: 21 }, (_, i) => ({ value: String(i), label: `${i}y` })),
 ];
-const CHIP_STYLES: Record<SkillMode, React.CSSProperties> = {
+const SKILL_MODE_STYLES: Record<SkillMode, React.CSSProperties> = {
   must:    { background: '#FEE2E2', color: '#991B1B', borderColor: '#FECACA' },
   nice:    { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' },
   exclude: { background: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', textDecoration: 'line-through' },
 };
-const CHIP_ICONS: Record<SkillMode, string> = { must: '✓', nice: '~', exclude: '✕' };
+const SKILL_MODE_ICONS: Record<SkillMode, string> = { must: '✓', nice: '~', exclude: '✕' };
 const SKILL_CYCLE: SkillMode[] = ['must', 'nice', 'exclude'];
 
 function parseCoCount(v: string) {
@@ -99,7 +103,7 @@ const Tip: FC<{ text: string }> = ({ text }) => {
           position: 'absolute', bottom: 'calc(100% + 5px)', left: '50%',
           transform: 'translateX(-50%)', background: '#1E293B', color: '#E2E8F0',
           padding: '6px 9px', borderRadius: 6, fontSize: 9, lineHeight: 1.55,
-          zIndex: 300, width: 195, pointerEvents: 'none',
+          zIndex: 300, width: 220, pointerEvents: 'none',
           boxShadow: '0 4px 14px rgba(0,0,0,.35)', whiteSpace: 'normal',
           textTransform: 'none', fontWeight: 400, letterSpacing: 0,
         }}>
@@ -176,54 +180,17 @@ function chipStyle(mandatory: boolean): React.CSSProperties {
   };
 }
 
-// ── Simple tag chips (no mandatory toggle — for popover results) ──────────────
-function plainChipStyle(): React.CSSProperties {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 3,
-    padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
-    border: '1px solid #C4B5FD', background: '#EDE9FE', color: '#5B21B6',
-  };
-}
-
-// ── DropList ──────────────────────────────────────────────────────────────────
-const DropList: FC<{ items: string[]; onPick: (s: string) => void }> = ({ items, onPick }) => (
-  <div style={{
-    position: 'absolute', left: 0, right: 0, top: '100%', marginTop: 2,
-    background: 'white', border: '1px solid #E2E8F0', borderRadius: 7,
-    boxShadow: '0 4px 14px rgba(0,0,0,.09)', zIndex: 100,
-    maxHeight: 160, overflowY: 'auto',
-  }}>
-    {items.map(s => (
-      <button
-        key={s} type="button" onMouseDown={e => { e.preventDefault(); onPick(s); }}
-        style={{
-          display: 'block', width: '100%', padding: '5px 10px', border: 'none',
-          background: 'none', textAlign: 'left', cursor: 'pointer',
-          fontSize: 10, color: '#0F172A', lineHeight: 1.4,
-        }}
-        onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-      >
-        {s}
-      </button>
-    ))}
-  </div>
-);
-
 // ══════════════════════════════════════════════════════════════════════════════
 // SearchableMultiPopover
-// A field that shows selected chips inline.
-// Clicking the field (or the + button) opens a floating popover with a search
-// box + scrollable list.  Supports mandatory star toggle.
+// Reused for: titles, companies, prev titles/cos, qualifications, institutions
 // ══════════════════════════════════════════════════════════════════════════════
 interface SearchableMultiPopoverProps {
   tags:        SearchTag[];
   onChange:    (t: SearchTag[]) => void;
   placeholder: string;
   suggs:       string[];
-  onQ:         (q: string) => void;         // fires as user types in the popover
-  allowM?:     boolean;                      // show ★/☆ toggle
-  /** optional: custom filter fn for the suggestion list (e.g. edu normalization) */
+  onQ:         (q: string) => void;
+  allowM?:     boolean;
   filterSuggs?: (suggs: string[], q: string) => string[];
 }
 
@@ -235,26 +202,21 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
   const wrapRef  = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // close on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setQ('');
-        onQ('');
+        setOpen(false); setQ(''); onQ('');
       }
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [onQ]);
 
-  // focus inner input when popover opens
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
   }, [open]);
 
   const displaySuggs = useMemo(() => {
-    // filter out already selected (by canonical key for edu)
     const already = new Set(tags.map(t => t.value.toLowerCase()));
     const base = suggs.filter(s => !already.has(s.toLowerCase()));
     if (!q.trim()) return base.slice(0, 40);
@@ -269,10 +231,7 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
   }, [tags, onChange]);
 
   const addAndKeepOpen = (v: string) => {
-    add(v);
-    // keep popover open but clear query
-    setQ('');
-    onQ('');
+    add(v); setQ(''); onQ('');
     setTimeout(() => inputRef.current?.focus(), 30);
   };
 
@@ -286,38 +245,26 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
     if (e.key === 'Escape') { setOpen(false); setQ(''); onQ(''); }
     if (e.key === 'Enter' && q.trim()) {
       e.preventDefault();
-      // if there's a highlighted suggestion, pick it; otherwise free-type
-      if (displaySuggs.length > 0) {
-        addAndKeepOpen(displaySuggs[0]);
-      } else {
-        addAndKeepOpen(q.trim());
-      }
+      if (displaySuggs.length > 0) addAndKeepOpen(displaySuggs[0]);
+      else addAndKeepOpen(q.trim());
     }
   };
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      {/* ── Chips row ── */}
       {tags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 5 }}>
           {tags.map((t, i) => (
             <span key={i} style={chipStyle(t.mandatory)}>
               {allowM && (
-                <button
-                  type="button" onClick={() => toggleM(i)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
-                >
+                <button type="button" onClick={() => toggleM(i)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}>
                   {t.mandatory ? '★' : '☆'}
                 </button>
               )}
-              <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>
-                {t.value}
-              </span>
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); removeTag(i); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
-              >
+              <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>{t.value}</span>
+              <button type="button" onClick={e => { e.stopPropagation(); removeTag(i); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}>
                 <X size={8} />
               </button>
             </span>
@@ -325,19 +272,13 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
         </div>
       )}
 
-      {/* ── Trigger ── */}
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
+      <button type="button" onClick={() => setOpen(v => !v)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           height: 30, border: '1px solid #E2E8F0', borderRadius: 6,
-          background: open ? '#F5F3FF' : '#FAFAFA',
-          padding: '0 8px', cursor: 'pointer',
-          fontSize: 10, color: tags.length ? '#6D28D9' : '#94A3B8',
-          fontWeight: tags.length ? 600 : 400,
-        }}
-      >
+          background: open ? '#F5F3FF' : '#FAFAFA', padding: '0 8px', cursor: 'pointer',
+          fontSize: 10, color: tags.length ? '#6D28D9' : '#94A3B8', fontWeight: tags.length ? 600 : 400,
+        }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <Search size={10} style={{ color: '#C4B5FD', flexShrink: 0 }} />
           {tags.length > 0 ? `${tags.length} selected — click to add more` : placeholder}
@@ -345,7 +286,6 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
         <Plus size={10} style={{ color: '#C4B5FD' }} />
       </button>
 
-      {/* ── Popover panel ── */}
       {open && (
         <div style={{
           position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
@@ -353,36 +293,20 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
           borderRadius: 10, boxShadow: '0 8px 28px rgba(109,28,217,0.12)',
           zIndex: 200, overflow: 'hidden',
         }}>
-          {/* search box */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 10px', borderBottom: '1px solid #F3F4F6',
-            background: '#FAFAFE',
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: '1px solid #F3F4F6', background: '#FAFAFE' }}>
             <Search size={11} style={{ color: '#A78BFA', flexShrink: 0 }} />
-            <input
-              ref={inputRef}
-              value={q}
+            <input ref={inputRef} value={q}
               onChange={e => { setQ(e.target.value); onQ(e.target.value); }}
-              onKeyDown={onKey}
-              placeholder="Search or type to add…"
-              style={{
-                flex: 1, border: 'none', background: 'none', outline: 'none',
-                fontSize: 11, color: '#0F172A',
-              }}
-            />
+              onKeyDown={onKey} placeholder="Search or type to add…"
+              style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 11, color: '#0F172A' }} />
             {q && (
-              <button
-                type="button"
-                onClick={() => { setQ(''); onQ(''); inputRef.current?.focus(); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}
-              >
+              <button type="button" onClick={() => { setQ(''); onQ(''); inputRef.current?.focus(); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}>
                 <X size={10} />
               </button>
             )}
           </div>
 
-          {/* suggestions list */}
           <div style={{ maxHeight: 200, overflowY: 'auto' }}>
             {displaySuggs.length === 0 && (
               <div style={{ padding: '10px 12px', fontSize: 10, color: '#94A3B8', textAlign: 'center' }}>
@@ -394,9 +318,7 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
             {displaySuggs.map(s => {
               const already = tags.some(t => t.value.toLowerCase() === s.toLowerCase());
               return (
-                <button
-                  key={s}
-                  type="button"
+                <button key={s} type="button"
                   onMouseDown={e => { e.preventDefault(); if (!already) addAndKeepOpen(s); }}
                   disabled={already}
                   style={{
@@ -407,8 +329,7 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
                     fontSize: 10, color: already ? '#7C3AED' : '#0F172A', lineHeight: 1.4,
                   }}
                   onMouseEnter={e => { if (!already) (e.currentTarget as HTMLElement).style.background = '#F5F3FF'; }}
-                  onMouseLeave={e => { if (!already) (e.currentTarget as HTMLElement).style.background = 'none'; }}
-                >
+                  onMouseLeave={e => { if (!already) (e.currentTarget as HTMLElement).style.background = 'none'; }}>
                   <span>{s}</span>
                   {already && <span style={{ fontSize: 8, color: '#7C3AED', fontWeight: 700 }}>✓</span>}
                 </button>
@@ -416,17 +337,10 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
             })}
           </div>
 
-          {/* footer hint */}
-          <div style={{
-            padding: '5px 12px', borderTop: '1px solid #F3F4F6',
-            fontSize: 8, color: '#94A3B8', background: '#FAFAFE',
-            display: 'flex', justifyContent: 'space-between',
-          }}>
+          <div style={{ padding: '5px 12px', borderTop: '1px solid #F3F4F6', fontSize: 8, color: '#94A3B8', background: '#FAFAFE', display: 'flex', justifyContent: 'space-between' }}>
             <span>Click to select · Enter to add typed</span>
-            <button
-              type="button" onClick={() => { setOpen(false); setQ(''); onQ(''); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}
-            >
+            <button type="button" onClick={() => { setOpen(false); setQ(''); onQ(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}>
               Done
             </button>
           </div>
@@ -436,7 +350,7 @@ const SearchableMultiPopover: FC<SearchableMultiPopoverProps> = ({
   );
 };
 
-// ── Multi-value tag input with suggestions and ★ (keywords / misc) ────────────
+// ── Multi-value tag input with suggestions and ★ (used for Keywords) ─────────
 const TagIn: FC<{
   tags: SearchTag[];
   onChange: (t: SearchTag[]) => void;
@@ -444,33 +358,20 @@ const TagIn: FC<{
   allowM?: boolean;
   suggs?: string[];
   onQ?: (q: string) => void;
-}> = ({ tags, onChange, placeholder, allowM = false, suggs = [], onQ }) => {
+}> = ({ tags, onChange, placeholder, allowM = false }) => {
   const [inp, setInp] = useState('');
-  const [show, setShow] = useState(false);
-  const wrapRef  = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShow(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-
-  const add = useCallback((v: string) => {
+  const add = (v: string) => {
     const val = v.trim();
-    if (!val || tags.some(t => t.value.toLowerCase() === val.toLowerCase())) {
-      setInp(''); onQ?.(''); setShow(false); return;
-    }
+    if (!val || tags.some(t => t.value.toLowerCase() === val.toLowerCase())) { setInp(''); return; }
     onChange([...tags, { value: val, mandatory: false }]);
-    setInp(''); onQ?.(''); setShow(false);
-  }, [tags, onChange, onQ]);
+    setInp('');
+  };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === 'Enter' || e.key === ',') && inp) { e.preventDefault(); add(inp); }
     if (e.key === 'Backspace' && !inp && tags.length) onChange(tags.slice(0, -1));
-    if (e.key === 'Escape') setShow(false);
   };
 
   const toggleM = (i: number) => {
@@ -478,85 +379,73 @@ const TagIn: FC<{
     onChange(tags.map((t, idx) => idx === i ? { ...t, mandatory: !t.mandatory } : t));
   };
 
-  const filtered = suggs.filter(s => !tags.some(t => t.value.toLowerCase() === s.toLowerCase()));
-
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
-      <div
-        style={{
-          display: 'flex', flexWrap: 'wrap', gap: 3, padding: '5px 8px',
-          border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA',
-          minHeight: 32, cursor: 'text', alignItems: 'center',
-        }}
-        onClick={() => inputRef.current?.focus()}
-      >
-        {tags.map((t, i) => (
-          <span key={i} style={chipStyle(t.mandatory)}>
-            {allowM && (
-              <button
-                type="button" onClick={() => toggleM(i)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
-              >
-                {t.mandatory ? '★' : '☆'}
-              </button>
-            )}
-            <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>
-              {t.value}
-            </span>
-            <button
-              type="button"
-              onClick={e => { e.stopPropagation(); onChange(tags.filter((_, idx) => idx !== i)); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
-            >
-              <X size={8} />
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 3, padding: '5px 8px',
+      border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA',
+      minHeight: 32, cursor: 'text', alignItems: 'center',
+    }}
+      onClick={() => inputRef.current?.focus()}>
+      {tags.map((t, i) => (
+        <span key={i} style={chipStyle(t.mandatory)}>
+          {allowM && (
+            <button type="button" onClick={() => toggleM(i)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}>
+              {t.mandatory ? '★' : '☆'}
             </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef} value={inp}
-          onChange={e => { setInp(e.target.value); onQ?.(e.target.value); setShow(true); }}
-          onKeyDown={onKey}
-          onFocus={() => { if (filtered.length > 0) setShow(true); }}
-          placeholder={tags.length ? '' : placeholder}
-          style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
-        />
-      </div>
-      {show && filtered.length > 0 && <DropList items={filtered} onPick={add} />}
+          )}
+          <span onClick={() => allowM && toggleM(i)} style={{ cursor: allowM ? 'pointer' : 'default' }}>{t.value}</span>
+          <button type="button" onClick={e => { e.stopPropagation(); onChange(tags.filter((_, idx) => idx !== i)); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}>
+            <X size={8} />
+          </button>
+        </span>
+      ))}
+      <input ref={inputRef} value={inp}
+        onChange={e => setInp(e.target.value)} onKeyDown={onKey}
+        placeholder={tags.length ? '' : placeholder}
+        style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }} />
     </div>
   );
 };
 
-// ── SkillChipBuilder ──────────────────────────────────────────────────────────
-const SkillBuilder: FC<{
+// ══════════════════════════════════════════════════════════════════════════════
+// SkillsPopoverBuilder
+//   Same popover pattern as SearchableMultiPopover, BUT with the must/nice/exclude
+//   mode control integrated. Chips show their mode; clicking a chip cycles modes.
+// ══════════════════════════════════════════════════════════════════════════════
+const SkillsPopoverBuilder: FC<{
   chips:    ZxSkillChip[];
   onChange: (c: ZxSkillChip[]) => void;
   suggs:    string[];
   onQ:      (q: string) => void;
 }> = ({ chips, onChange, suggs, onQ }) => {
   const [activeMode, setActiveMode] = useState<SkillMode>('must');
-  const [inp,        setInp]        = useState('');
   const [open,       setOpen]       = useState(false);
+  const [q,          setQ]          = useState('');
   const wrapRef  = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Close on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        setOpen(false); setQ(''); onQ('');
       }
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
-  }, []);
+  }, [onQ]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
 
   const add = useCallback((v: string, m = activeMode) => {
     const val = v.trim();
-    if (!val || chips.some(c => c.label.toLowerCase() === val.toLowerCase())) {
-      setInp(''); onQ(''); setOpen(false); return;
-    }
+    if (!val || chips.some(c => c.label.toLowerCase() === val.toLowerCase())) return;
     onChange([...chips, { label: val, mode: m }]);
-    setInp(''); onQ('');
-    // keep popover open so recruiter can keep adding skills
+    setQ(''); onQ('');
     setTimeout(() => inputRef.current?.focus(), 30);
   }, [chips, onChange, onQ, activeMode]);
 
@@ -565,24 +454,23 @@ const SkillBuilder: FC<{
     onChange(chips.map((c, idx) => idx === i ? { ...c, mode: next } : c));
   };
 
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === 'Enter' || e.key === ',') && inp) {
-      e.preventDefault();
-      // if there's a suggestion visible, pick first; otherwise free-type
-      const filtered = suggs.filter(s =>
-        !chips.some(c => c.label.toLowerCase() === s.toLowerCase()) &&
-        s.toLowerCase().includes(inp.toLowerCase())
-      );
-      add(filtered.length > 0 ? filtered[0] : inp);
-    }
-    if (e.key === 'Backspace' && !inp && chips.length) onChange(chips.slice(0, -1));
-    if (e.key === 'Escape') { setOpen(false); }
-  };
+  const removeChip = (i: number) => onChange(chips.filter((_, idx) => idx !== i));
 
-  const filtered = suggs.filter(
-    s => !chips.some(c => c.label.toLowerCase() === s.toLowerCase()) &&
-         (inp.length === 0 || s.toLowerCase().includes(inp.toLowerCase()))
-  ).slice(0, 40);
+  const filtered = useMemo(() => {
+    const already = new Set(chips.map(c => c.label.toLowerCase()));
+    const base = suggs.filter(s => !already.has(s.toLowerCase()));
+    if (!q.trim()) return base.slice(0, 40);
+    return base.filter(s => s.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
+  }, [suggs, chips, q]);
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') { setOpen(false); setQ(''); onQ(''); }
+    if (e.key === 'Enter' && q.trim()) {
+      e.preventDefault();
+      if (filtered.length > 0) add(filtered[0]);
+      else add(q.trim());
+    }
+  };
 
   const counts = {
     must:    chips.filter(c => c.mode === 'must').length,
@@ -591,13 +479,13 @@ const SkillBuilder: FC<{
   };
 
   return (
-    <div>
-      {/* ── Mode legend ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 8, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>New as:</span>
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+
+      {/* Mode legend — visible above the field */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 8, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Add as:</span>
         {SKILL_CYCLE.map(m => (
-          <button
-            key={m} type="button" onClick={() => setActiveMode(m)}
+          <button key={m} type="button" onClick={() => setActiveMode(m)}
             title={`New chips will be added as "${m}"`}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -605,133 +493,137 @@ const SkillBuilder: FC<{
               border: '1.5px solid', cursor: 'pointer', transition: 'all 0.12s',
               outline: activeMode === m ? '2px solid' : 'none',
               outlineOffset: 2, outlineColor: 'currentColor',
-              opacity: activeMode === m ? 1 : 0.45, ...CHIP_STYLES[m],
-            }}
-          >
-            {CHIP_ICONS[m]} {m === 'must' ? 'Must' : m === 'nice' ? 'Nice' : 'Excl'}
-            {activeMode === m && <span style={{ fontSize: 7 }}>◀</span>}
+              opacity: activeMode === m ? 1 : 0.45, ...SKILL_MODE_STYLES[m],
+            }}>
+            {SKILL_MODE_ICONS[m]} {m === 'must' ? 'Must' : m === 'nice' ? 'Nice' : 'Excl'}
           </button>
         ))}
       </div>
 
-      {/* ── Chip display + input ── */}
-      <div
-        style={{
-          display: 'flex', flexWrap: 'wrap', gap: 3, padding: '5px 8px',
-          border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA',
-          minHeight: 32, cursor: 'text', alignItems: 'center',
-        }}
-        onClick={() => { inputRef.current?.focus(); setOpen(true); }}
-      >
-        {chips.map((c, i) => (
-          <span
-            key={i}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-              padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
-              border: '1px solid', cursor: 'pointer', userSelect: 'none', ...CHIP_STYLES[c.mode],
-            }}
-            onClick={e => { e.stopPropagation(); cycleMode(i); }}
-            title={`${c.mode} — click to cycle`}
-          >
-            <span style={{ fontSize: 8 }}>{CHIP_ICONS[c.mode]}</span>
-            <span>{c.label}</span>
-            <button
-              type="button"
-              onClick={e => { e.stopPropagation(); onChange(chips.filter((_, idx) => idx !== i)); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
-            >
-              <X size={8} />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef} value={inp}
-          onChange={e => { setInp(e.target.value); onQ(e.target.value); setOpen(true); }}
-          onKeyDown={onKey}
-          onFocus={() => setOpen(true)}
-          placeholder={chips.length ? '' : 'Type skill + Enter  (click legend to set mode)'}
-          style={{ flex: 1, minWidth: 80, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
-        />
-      </div>
+      {/* Chips row */}
+      {chips.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 5 }}>
+          {chips.map((c, i) => (
+            <span key={i}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '2px 6px', borderRadius: 4, fontSize: 9, fontWeight: 600,
+                border: '1px solid', cursor: 'pointer', userSelect: 'none', ...SKILL_MODE_STYLES[c.mode],
+              }}
+              onClick={() => cycleMode(i)}
+              title={`${c.mode} — click to cycle`}>
+              <span style={{ fontSize: 8 }}>{SKILL_MODE_ICONS[c.mode]}</span>
+              <span>{c.label}</span>
+              <button type="button"
+                onClick={e => { e.stopPropagation(); removeChip(i); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}>
+                <X size={8} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
-      {/* ── Popover suggestions (same style as SearchableMultiPopover) ── */}
+      {/* Trigger */}
+      <button type="button" onClick={() => setOpen(v => !v)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          height: 30, border: '1px solid #E2E8F0', borderRadius: 6,
+          background: open ? '#F5F3FF' : '#FAFAFA', padding: '0 8px', cursor: 'pointer',
+          fontSize: 10, color: chips.length ? '#6D28D9' : '#94A3B8', fontWeight: chips.length ? 600 : 400,
+        }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Search size={10} style={{ color: '#C4B5FD', flexShrink: 0 }} />
+          {chips.length > 0 ? `${chips.length} skills — click to add more` : 'Search skills…'}
+        </span>
+        <Plus size={10} style={{ color: '#C4B5FD' }} />
+      </button>
+
+      {/* Popover */}
       {open && (
-        <div
-          ref={wrapRef}
-          style={{
-            background: 'white', border: '1px solid #C4B5FD',
-            borderRadius: 10, boxShadow: '0 8px 28px rgba(109,28,217,0.12)',
-            overflow: 'hidden', marginTop: 2,
-          }}
-        >
-          {filtered.length === 0 ? (
-            <div style={{ padding: '8px 12px', fontSize: 10, color: '#94A3B8', textAlign: 'center' }}>
-              {inp.length > 0
-                ? <span>No match — press <strong>Enter</strong> to add <em>"{inp}"</em> as {activeMode}</span>
-                : 'Start typing to search skills…'}
-            </div>
-          ) : (
-            <div style={{ maxHeight: 160, overflowY: 'auto' }}>
-              {filtered.map(s => (
-                <button
-                  key={s} type="button"
-                  onMouseDown={e => { e.preventDefault(); add(s, activeMode); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    width: '100%', padding: '5px 12px', border: 'none',
-                    background: 'none', textAlign: 'left', cursor: 'pointer',
-                    fontSize: 10, color: '#0F172A',
-                  }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#F5F3FF')}
-                  onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}
-                >
-                  <span>{s}</span>
-                  {/* preview the mode badge */}
-                  <span style={{
-                    fontSize: 8, fontWeight: 700, padding: '1px 4px',
-                    borderRadius: 3, ...CHIP_STYLES[activeMode],
-                  }}>
-                    {CHIP_ICONS[activeMode]} {activeMode}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-          <div style={{
-            padding: '4px 12px', borderTop: '1px solid #F3F4F6',
-            fontSize: 8, color: '#94A3B8', background: '#FAFAFE',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
-            <span>Click or Enter to add · click chip to cycle mode</span>
-            <button
-              type="button" onClick={() => { setOpen(false); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}
-            >
+        <div style={{
+          position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
+          background: 'white', border: '1px solid #C4B5FD',
+          borderRadius: 10, boxShadow: '0 8px 28px rgba(109,28,217,0.12)',
+          zIndex: 200, overflow: 'hidden',
+        }}>
+          {/* Search header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderBottom: '1px solid #F3F4F6', background: '#FAFAFE' }}>
+            <Search size={11} style={{ color: '#A78BFA', flexShrink: 0 }} />
+            <input ref={inputRef} value={q}
+              onChange={e => { setQ(e.target.value); onQ(e.target.value); }}
+              onKeyDown={onKey} placeholder="Search skills or type to add…"
+              style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontSize: 11, color: '#0F172A' }} />
+
+            {/* Active mode badge inside the search bar */}
+            <span style={{
+              fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+              border: '1px solid', flexShrink: 0, ...SKILL_MODE_STYLES[activeMode],
+            }}>
+              {SKILL_MODE_ICONS[activeMode]} {activeMode}
+            </span>
+
+            {q && (
+              <button type="button" onClick={() => { setQ(''); onQ(''); inputRef.current?.focus(); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94A3B8' }}>
+                <X size={10} />
+              </button>
+            )}
+          </div>
+
+          {/* Suggestion list */}
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {filtered.length === 0 && (
+              <div style={{ padding: '10px 12px', fontSize: 10, color: '#94A3B8', textAlign: 'center' }}>
+                {q.length > 0
+                  ? <span>No match — press <strong>Enter</strong> to add <em>"{q}"</em> as <strong>{activeMode}</strong></span>
+                  : 'Start typing to search…'}
+              </div>
+            )}
+            {filtered.map(s => (
+              <button key={s} type="button"
+                onMouseDown={e => { e.preventDefault(); add(s); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '6px 12px', border: 'none',
+                  background: 'none', textAlign: 'left', cursor: 'pointer',
+                  fontSize: 10, color: '#0F172A', lineHeight: 1.4,
+                }}
+                onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#F5F3FF')}
+                onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}>
+                <span>{s}</span>
+                <span style={{
+                  fontSize: 8, fontWeight: 700, padding: '1px 4px',
+                  borderRadius: 3, border: '1px solid', ...SKILL_MODE_STYLES[activeMode],
+                }}>
+                  {SKILL_MODE_ICONS[activeMode]} {activeMode}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: '5px 12px', borderTop: '1px solid #F3F4F6', fontSize: 8, color: '#94A3B8', background: '#FAFAFE', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Click chip to cycle mode · Enter to add typed</span>
+            <button type="button" onClick={() => { setOpen(false); setQ(''); onQ(''); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 8, color: '#6D28D9', fontWeight: 700, padding: 0 }}>
               Done
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Counts summary ── */}
+      {/* Counts summary */}
       {chips.length > 0 && (
         <div style={{ marginTop: 5, fontSize: 9, color: '#94A3B8', display: 'flex', gap: 6 }}>
-          {counts.must > 0 && (
-            <span style={{ color: '#991B1B', fontWeight: 600 }}>✓ {counts.must} must</span>
-          )}
-          {counts.nice > 0 && (
-            <span style={{ color: '#5B21B6', fontWeight: 600 }}>~ {counts.nice} nice</span>
-          )}
-          {counts.exclude > 0 && (
-            <span style={{ color: '#64748B', fontWeight: 600 }}>✕ {counts.exclude} excl</span>
-          )}
+          {counts.must > 0 && <span style={{ color: '#991B1B', fontWeight: 600 }}>✓ {counts.must} must</span>}
+          {counts.nice > 0 && <span style={{ color: '#5B21B6', fontWeight: 600 }}>~ {counts.nice} nice</span>}
+          {counts.exclude > 0 && <span style={{ color: '#64748B', fontWeight: 600 }}>✕ {counts.exclude} excl</span>}
         </div>
       )}
     </div>
   );
 };
-
 
 // ── Location input ────────────────────────────────────────────────────────────
 const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ tags, onChange }) => {
@@ -774,31 +666,23 @@ const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginBottom: 4 }}>
           {tags.map((t, i) => (
             <span key={i} style={chipStyle(t.mandatory)}>
-              <button
-                type="button" onClick={() => tM(i)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}
-              >
+              <button type="button" onClick={() => tM(i)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 9, color: t.mandatory ? '#D97706' : '#7C3AED', lineHeight: 1 }}>
                 {t.mandatory ? '★' : '☆'}
               </button>
               <span onClick={() => tM(i)} style={{ cursor: 'pointer' }}>{t.value}</span>
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); rm(i); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}
-              >
+              <button type="button" onClick={e => { e.stopPropagation(); rm(i); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'inherit', opacity: 0.55 }}>
                 <X size={8} />
               </button>
             </span>
           ))}
         </div>
       )}
-      <div
-        onClick={() => { setOpen(true); inputRef.current?.focus(); }}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA', minHeight: 32, cursor: 'text' }}
-      >
+      <div onClick={() => { setOpen(true); inputRef.current?.focus(); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 7, background: '#FAFAFA', minHeight: 32, cursor: 'text' }}>
         <MapPin size={10} style={{ color: '#94A3B8', flexShrink: 0 }} />
-        <input
-          ref={inputRef} value={q}
+        <input ref={inputRef} value={q}
           onChange={e => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={e => {
@@ -809,13 +693,10 @@ const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ 
             }
           }}
           placeholder="Country, state or city…"
-          style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }}
-        />
+          style={{ flex: 1, minWidth: 60, border: 'none', background: 'none', outline: 'none', fontSize: 10, color: '#0F172A', padding: 0 }} />
         {q && (
-          <button
-            type="button" onClick={() => setQ('')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
-          >
+          <button type="button" onClick={() => setQ('')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
             <X size={9} style={{ color: '#94A3B8' }} />
           </button>
         )}
@@ -827,12 +708,10 @@ const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ 
           boxShadow: '0 4px 14px rgba(0,0,0,.09)', zIndex: 100, maxHeight: 180, overflowY: 'auto',
         }}>
           {suggs.map(s => (
-            <button
-              key={s.v} type="button" onMouseDown={e => { e.preventDefault(); add(s.v); }}
+            <button key={s.v} type="button" onMouseDown={e => { e.preventDefault(); add(s.v); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '5px 10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}
               onMouseEnter={e => ((e.currentTarget as HTMLElement).style.background = '#F5F3FF')}
-              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}
-            >
+              onMouseLeave={e => ((e.currentTarget as HTMLElement).style.background = 'none')}>
               <span style={{ fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3, color: TC[s.t], background: TB[s.t] }}>{s.t}</span>
               {s.v}
             </button>
@@ -847,10 +726,8 @@ const LocIn: FC<{ tags: SearchTag[]; onChange: (t: SearchTag[]) => void }> = ({ 
 const ExpSel: FC<{ v: string; onChange: (v: string) => void; label: string }> = ({ v, onChange, label }) => (
   <div style={{ flex: 1 }}>
     <FL>{label}</FL>
-    <select
-      value={v} onChange={e => onChange(e.target.value)}
-      style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}
-    >
+    <select value={v} onChange={e => onChange(e.target.value)}
+      style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}>
       {EXP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   </div>
@@ -861,22 +738,15 @@ const CtcIn: FC<{ v: string; onChange: (v: string) => void; label: string }> = (
     <FL>{label}</FL>
     <div style={{ position: 'relative' }}>
       <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 9, color: '#94A3B8' }}>₹</span>
-      <input
-        type="number" value={v} onChange={e => onChange(e.target.value)} placeholder="—"
-        style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', paddingLeft: 18, paddingRight: 6, outline: 'none', boxSizing: 'border-box' }}
-      />
+      <input type="number" value={v} onChange={e => onChange(e.target.value)} placeholder="—"
+        style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', paddingLeft: 18, paddingRight: 6, outline: 'none', boxSizing: 'border-box' }} />
     </div>
   </div>
 );
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ZiveXSearchSidebar
+// Education normalization filter for popover suggestions
 // ══════════════════════════════════════════════════════════════════════════════
-
-/**
- * Education normalization filter for popover suggestions.
- * When user types "mba", also match "Master of Business Administration" etc.
- */
 function eduFilterSuggs(suggs: string[], q: string): string[] {
   if (!q.trim()) return suggs.slice(0, 40);
   const nQ = canonicalizeEdu(q);
@@ -900,12 +770,13 @@ interface ZiveXSearchSidebarProps {
   isSearching?:   boolean;
   initialFilters?: Partial<SearchFilters>;
   organizationId: string;
+  /** When provided, the sidebar fires onSearch automatically on chip changes (live mode) */
+  liveMode?:      boolean;
 }
 
 const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
-  onSearch, onReset, isSearching, initialFilters = {}, organizationId,
+  onSearch, onReset, isSearching, initialFilters = {}, organizationId, liveMode = true,
 }) => {
-  // section open/close
   const [open, setOpen] = useState<Record<string, boolean>>({
     core: true, skills: false, past: false, edu: false, avail: false,
   });
@@ -913,7 +784,6 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [keywords,      setKeywords]      = useState<SearchTag[]>([]);
-  // multi-value arrays (now arrays, not single strings)
   const [currTitles,    setCurrTitles]    = useState<SearchTag[]>([]);
   const [currCompanies, setCurrCompanies] = useState<SearchTag[]>([]);
   const [minExp,        setMinExp]        = useState('');
@@ -923,7 +793,7 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
   const [prevTitles,    setPrevTitles]    = useState<SearchTag[]>([]);
   const [prevCos,       setPrevCos]       = useState<SearchTag[]>([]);
   const [coCount,       setCoCount]       = useState('');
-  const [degrees,       setDegrees]       = useState<SearchTag[]>([]);   // was single string
+  const [degrees,       setDegrees]       = useState<SearchTag[]>([]);
   const [institutions,  setInstitutions]  = useState<SearchTag[]>([]);
   const [noticePeriods, setNoticePeriods] = useState<string[]>([]);
   const [minCCTC,       setMinCCTC]       = useState('');
@@ -931,7 +801,7 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
   const [minECTC,       setMinECTC]       = useState('');
   const [maxECTC,       setMaxECTC]       = useState('');
 
-  // ── Autocomplete queries ─────────────────────────────────────────────────────
+  // Autocomplete queries
   const [titleQ,   setTitleQ]   = useState('');
   const [companyQ, setCompanyQ] = useState('');
   const [skillQ,   setSkillQ]   = useState('');
@@ -953,20 +823,18 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
     const f = initialFilters;
     if (!f || !Object.keys(f).length) return;
 
-    if (f.keywords?.length)    setKeywords(f.keywords);
+    if (f.keywords?.length) setKeywords(f.keywords);
 
-    // current_designation / current_company may be single strings or arrays
     if ((f as any).current_designations?.length) setCurrTitles((f as any).current_designations);
     else if (f.current_designation) setCurrTitles([{ value: f.current_designation, mandatory: false }]);
 
     if ((f as any).current_companies?.length) setCurrCompanies((f as any).current_companies);
     else if (f.current_company) setCurrCompanies([{ value: f.current_company, mandatory: false }]);
 
-    if (f.min_exp != null)    setMinExp(String(f.min_exp));
-    if (f.max_exp != null)    setMaxExp(String(f.max_exp));
-    if (f.locations?.length)  setLocations(f.locations);
+    if (f.min_exp != null) setMinExp(String(f.min_exp));
+    if (f.max_exp != null) setMaxExp(String(f.max_exp));
+    if (f.locations?.length) setLocations(f.locations);
 
-    // skills / excluded
     const must = (f.skills || []).filter(t =>  t.mandatory).map(t => ({ label: t.value, mode: 'must'  as SkillMode }));
     const nice = (f.skills || []).filter(t => !t.mandatory).map(t => ({ label: t.value, mode: 'nice'  as SkillMode }));
     const excl = (f.excluded_skills || []).map(v => ({ label: v, mode: 'exclude' as SkillMode }));
@@ -986,7 +854,6 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
       else if (mn === 5) setCoCount('5+');
     }
 
-    // degree: was single string, now multi-tag
     if ((f as any).degrees?.length)   { setDegrees((f as any).degrees); setOpen(s => ({ ...s, edu: true })); }
     else if (f.degree)                { setDegrees([{ value: f.degree, mandatory: false }]); setOpen(s => ({ ...s, edu: true })); }
     if (f.institutions?.length)        { setInstitutions(f.institutions); setOpen(s => ({ ...s, edu: true })); }
@@ -998,7 +865,7 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
     if (f.max_expected_salary != null) setMaxECTC(String(f.max_expected_salary));
   }, [JSON.stringify(initialFilters)]);
 
-  // ── Active counts ────────────────────────────────────────────────────────────
+  // ── Counts ────────────────────────────────────────────────────────────────
   const coreCount  = (keywords.length ? 1 : 0) + (currTitles.length ? 1 : 0) + (currCompanies.length ? 1 : 0) + ((minExp || maxExp) ? 1 : 0) + (locations.length ? 1 : 0);
   const skillCount = skillChips.length;
   const pastCount  = (prevTitles.length ? 1 : 0) + (prevCos.length ? 1 : 0) + (coCount ? 1 : 0);
@@ -1006,7 +873,6 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
   const availCount = (noticePeriods.length ? 1 : 0) + ((minCCTC || maxCCTC) ? 1 : 0) + ((minECTC || maxECTC) ? 1 : 0);
   const totalActive = coreCount + skillCount + pastCount + eduCount + availCount;
 
-  // ── Reset ────────────────────────────────────────────────────────────────────
   const resetAll = () => {
     setKeywords([]); setCurrTitles([]); setCurrCompanies([]);
     setMinExp(''); setMaxExp(''); setLocations([]);
@@ -1018,16 +884,15 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
     onReset?.();
   };
 
-  // ── Build + fire search ──────────────────────────────────────────────────────
-  const handleSearch = () => {
+  // ── Build filter payload ──────────────────────────────────────────────────
+  const buildPayload = (): SearchFilters => {
     const mustS = skillChips.filter(c => c.mode === 'must').map(c => ({ value: c.label, mandatory: true  }));
     const niceS = skillChips.filter(c => c.mode === 'nice').map(c => ({ value: c.label, mandatory: false }));
     const exclS = skillChips.filter(c => c.mode === 'exclude').map(c => c.label);
     const { min: ccMin, max: ccMax } = parseCoCount(coCount);
 
-    onSearch({
+    return {
       ...(keywords.length               && { keywords }),
-      // pass full arrays; backend/hook will use first value for DB compat or new RPC
       ...(currTitles.length             && { current_designations: currTitles, current_designation: currTitles[0]?.value }),
       ...(currCompanies.length          && { current_companies: currCompanies, current_company: currCompanies[0]?.value }),
       ...(minExp                        && { min_exp: Number(minExp) }),
@@ -1039,7 +904,6 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
       ...(prevCos.length                && { previous_companies: prevCos }),
       ...(ccMin != null                 && { companies_count_min: ccMin }),
       ...(ccMax != null                 && { companies_count_max: ccMax }),
-      // degrees: send full array + legacy single
       ...(degrees.length                && { degrees, degree: degrees[0]?.value }),
       ...(institutions.length           && { institutions }),
       ...(noticePeriods.length          && { notice_periods: noticePeriods }),
@@ -1047,16 +911,49 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
       ...(maxCCTC                       && { max_current_salary:  Number(maxCCTC) }),
       ...(minECTC                       && { min_expected_salary: Number(minECTC) }),
       ...(maxECTC                       && { max_expected_salary: Number(maxECTC) }),
-    } as SearchFilters);
+    } as SearchFilters;
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── LIVE MODE: re-fire onSearch whenever any chip changes ───────────────────
+  // This is what makes chip removal trigger a real refetch.
+  //
+  // GUARDS:
+  //  • isFirstRun ref skips the initial mount-effect (React 18 StrictMode
+  //    runs effects twice in dev — the second pass would otherwise fire
+  //    onSearch({}) and flip the parent's hasSearched=true before the user
+  //    has done anything, hiding the hero section).
+  //  • Empty-payload check: if no chip / range / option is set, don't fire.
+  //    Belt and braces against the StrictMode double-effect re-firing after
+  //    isFirstRun has flipped to false.
+  //  • liveMode prop: parent passes false until the user has explicitly
+  //    searched at least once.
+  const isFirstRun = useRef(true);
+  useEffect(() => {
+    if (isFirstRun.current) { isFirstRun.current = false; return; }
+    if (!liveMode) return;
+    const payload = buildPayload();
+    if (Object.keys(payload).length === 0) return;  // ← never fire empty
+    const t = setTimeout(() => onSearch(payload), 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    JSON.stringify(keywords),
+    JSON.stringify(currTitles), JSON.stringify(currCompanies),
+    minExp, maxExp,
+    JSON.stringify(locations),
+    JSON.stringify(skillChips),
+    JSON.stringify(prevTitles), JSON.stringify(prevCos), coCount,
+    JSON.stringify(degrees), JSON.stringify(institutions),
+    JSON.stringify(noticePeriods),
+    minCCTC, maxCCTC, minECTC, maxECTC,
+  ]);
+
+  const handleSearchButton = () => onSearch(buildPayload());
+
   return (
     <div
-      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSearch(); }}
-      style={{ display: 'flex', flexDirection: 'column', width: 272, flexShrink: 0, background: 'white', borderRight: '1px solid #E2E8F0', height: '100%', overflow: 'hidden' }}
-    >
-      {/* ── Header ── */}
+      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleSearchButton(); }}
+      style={{ display: 'flex', flexDirection: 'column', width: 272, flexShrink: 0, background: 'white', borderRight: '1px solid #E2E8F0', height: '100%', overflow: 'hidden' }}>
       <div style={{ flexShrink: 0, padding: '11px 14px 9px', borderBottom: '1px solid #E2E8F0', background: 'linear-gradient(135deg,#1E1B4B,#312E81)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.8px', color: 'white', textTransform: 'uppercase' }}>
@@ -1068,58 +965,40 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
             )}
           </span>
           {totalActive > 0 && (
-            <button
-              onClick={resetAll}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A78BFA', display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 600, padding: 0 }}
-            >
+            <button onClick={resetAll}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#A78BFA', display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 600, padding: 0 }}>
               <RotateCcw size={10} /> Reset
             </button>
           )}
         </div>
-        <button
-          onClick={handleSearch} disabled={isSearching}
-          style={{ width: '100%', height: 32, borderRadius: 7, border: 'none', background: isSearching ? '#4C1D95' : '#7C3AED', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-        >
+        <button onClick={handleSearchButton} disabled={isSearching}
+          style={{ width: '100%', height: 32, borderRadius: 7, border: 'none', background: isSearching ? '#4C1D95' : '#7C3AED', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Search size={12} />{isSearching ? 'Searching…' : 'Search Candidates'}
         </button>
         <div style={{ marginTop: 5, fontSize: 8, color: '#A78BFA', textAlign: 'center' }}>
-          Ctrl+Enter  ·  ★ required  ·  ☆ optional
+          {liveMode ? 'Live · auto-search on change' : 'Ctrl+Enter to search'} · ★ required
         </div>
       </div>
 
-      {/* ── Sections ── */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
 
-        {/* CORE */}
         <SectionHeader label="Core" count={coreCount} open={open.core} onToggle={() => tog('core')} />
         {open.core && (
           <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
             <div>
-              <FL tip="Full-text search across resume, title, skills. ★ = required in all results.">Keywords</FL>
+              <FL tip="Full-text search across resume, title, skills. ★ = required.">Keywords</FL>
               <TagIn tags={keywords} onChange={setKeywords} placeholder="Type + Enter" allowM />
             </div>
-
             <div>
-              <FL tip="Current job title — select multiple, each treated as OR unless starred.">Current Title</FL>
-              <SearchableMultiPopover
-                tags={currTitles} onChange={setCurrTitles}
-                placeholder="Search titles…"
-                suggs={titleSugg} onQ={setTitleQ}
-                allowM
-              />
+              <FL tip="Current job title — multiple titles OR'd unless starred.">Current Title</FL>
+              <SearchableMultiPopover tags={currTitles} onChange={setCurrTitles}
+                placeholder="Search titles…" suggs={titleSugg} onQ={setTitleQ} allowM />
             </div>
-
             <div>
-              <FL tip="Current employer — select multiple, each treated as OR unless starred.">Current Company</FL>
-              <SearchableMultiPopover
-                tags={currCompanies} onChange={setCurrCompanies}
-                placeholder="Search companies…"
-                suggs={companySugg} onQ={setCompanyQ}
-                allowM
-              />
+              <FL tip="Current employer — multiple companies OR'd unless starred.">Current Company</FL>
+              <SearchableMultiPopover tags={currCompanies} onChange={setCurrCompanies}
+                placeholder="Search companies…" suggs={companySugg} onQ={setCompanyQ} allowM />
             </div>
-
             <div>
               <FL tip="Filter by total years of experience.">Experience</FL>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -1127,7 +1006,6 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
                 <ExpSel v={maxExp} onChange={setMaxExp} label="Max" />
               </div>
             </div>
-
             <div>
               <FL tip="Filter by city, state or country. ★ = required.">Location</FL>
               <LocIn tags={locations} onChange={setLocations} />
@@ -1135,78 +1013,58 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
           </div>
         )}
 
-        {/* SKILLS */}
         <SectionHeader label="Skills" count={skillCount} open={open.skills} onToggle={() => tog('skills')} />
         {open.skills && (
           <div style={{ padding: '10px 12px' }}>
-            <FL tip="Click legend to set mode for new chips. Click existing chip to cycle mode. ✓ hard filter · ~ boosts score · ✕ removes from results.">
+            <FL tip="✓ Must = hard filter. ~ Nice = boosts score, OR-matched. ✕ Excl = hard remove. Click chip to cycle modes.">
               Skill Tags
             </FL>
-            <SkillBuilder chips={skillChips} onChange={setSkillChips} suggs={skillSugg} onQ={setSkillQ} />
+            <SkillsPopoverBuilder chips={skillChips} onChange={setSkillChips} suggs={skillSugg} onQ={setSkillQ} />
           </div>
         )}
 
-        {/* PAST EXPERIENCE */}
         <SectionHeader label="Past Experience" count={pastCount} open={open.past} onToggle={() => tog('past')} />
         {open.past && (
           <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
-              <FL tip="Search all previous job titles. ★ = must have held this title.">Previous Titles</FL>
-              <SearchableMultiPopover
-                tags={prevTitles} onChange={setPrevTitles}
-                placeholder="Search previous titles…"
-                suggs={prevTSugg} onQ={setPrevTQ}
-                allowM
-              />
+              <FL tip="Search all previous job titles. ★ = must have held.">Previous Titles</FL>
+              <SearchableMultiPopover tags={prevTitles} onChange={setPrevTitles}
+                placeholder="Search previous titles…" suggs={prevTSugg} onQ={setPrevTQ} allowM />
             </div>
             <div>
               <FL tip="Search previous employers. ★ = must have worked there.">Previous Companies</FL>
-              <SearchableMultiPopover
-                tags={prevCos} onChange={setPrevCos}
-                placeholder="Search companies…"
-                suggs={prevCoSugg} onQ={setPrevCoQ}
-                allowM
-              />
+              <SearchableMultiPopover tags={prevCos} onChange={setPrevCos}
+                placeholder="Search companies…" suggs={prevCoSugg} onQ={setPrevCoQ} allowM />
             </div>
             <div>
-              <FL tip="Filter by total number of distinct companies.">Companies Count</FL>
-              <select
-                value={coCount} onChange={e => setCoCount(e.target.value)}
-                style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}
-              >
+              <FL tip="Total number of distinct companies.">Companies Count</FL>
+              <select value={coCount} onChange={e => setCoCount(e.target.value)}
+                style={{ width: '100%', height: 28, border: '1px solid #E2E8F0', borderRadius: 6, background: '#FAFAFA', fontSize: 10, color: '#0F172A', padding: '0 8px', outline: 'none', cursor: 'pointer' }}>
                 {CO_COUNT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
         )}
 
-        {/* EDUCATION */}
         <SectionHeader label="Education" count={eduCount} open={open.edu} onToggle={() => tog('edu')} />
         {open.edu && (
           <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
-              <FL tip="Search normalised — 'MBA', 'M.B.A', 'Master of Business Administration' all match. Multiple allowed.">
+              <FL tip="Normalised — 'MBA', 'M.B.A.', 'Master of Business Administration' all match. ★ = required.">
                 Qualification / Degree
               </FL>
-              <SearchableMultiPopover
-                tags={degrees} onChange={setDegrees}
-                placeholder="Search qualifications…"
-                suggs={degreeSugg} onQ={setDegreeQ}
-                filterSuggs={eduFilterSuggs}
-              />
+              <SearchableMultiPopover tags={degrees} onChange={setDegrees}
+                placeholder="Search qualifications…" suggs={degreeSugg} onQ={setDegreeQ}
+                filterSuggs={eduFilterSuggs} allowM />
             </div>
             <div>
-              <FL tip="University or college — select multiple.">Institution</FL>
-              <SearchableMultiPopover
-                tags={institutions} onChange={setInstitutions}
-                placeholder="Search institutions…"
-                suggs={instSugg} onQ={setInstQ}
-              />
+              <FL tip="University or college.">Institution</FL>
+              <SearchableMultiPopover tags={institutions} onChange={setInstitutions}
+                placeholder="Search institutions…" suggs={instSugg} onQ={setInstQ} allowM />
             </div>
           </div>
         )}
 
-        {/* AVAILABILITY */}
         <SectionHeader label="Availability" count={availCount} open={open.avail} onToggle={() => tog('avail')} />
         {open.avail && (
           <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1216,11 +1074,9 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
                 {NOTICE_OPTIONS.map(np => {
                   const a = noticePeriods.includes(np);
                   return (
-                    <button
-                      key={np} type="button"
+                    <button key={np} type="button"
                       onClick={() => setNoticePeriods(prev => a ? prev.filter(p => p !== np) : [...prev, np])}
-                      style={{ padding: '3px 9px', borderRadius: 99, fontSize: 9, fontWeight: 600, border: '1px solid', cursor: 'pointer', ...(a ? { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' } : { background: 'white', color: '#64748B', borderColor: '#E2E8F0' }) }}
-                    >
+                      style={{ padding: '3px 9px', borderRadius: 99, fontSize: 9, fontWeight: 600, border: '1px solid', cursor: 'pointer', ...(a ? { background: '#EDE9FE', color: '#5B21B6', borderColor: '#C4B5FD' } : { background: 'white', color: '#64748B', borderColor: '#E2E8F0' }) }}>
                       {np}
                     </button>
                   );
@@ -1228,7 +1084,7 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
               </div>
             </div>
             <div>
-              <FL tip="Current salary in lakhs. 5 = ₹5L per annum.">Current CTC (₹L)</FL>
+              <FL tip="Current salary in lakhs.">Current CTC (₹L)</FL>
               <div style={{ display: 'flex', gap: 6 }}>
                 <CtcIn v={minCCTC} onChange={setMinCCTC} label="Min" />
                 <CtcIn v={maxCCTC} onChange={setMaxCCTC} label="Max" />

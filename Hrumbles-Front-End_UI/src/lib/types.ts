@@ -114,6 +114,7 @@ export interface JobData {
   dueDate: string;
   clientOwner: string;
   hiringMode: string;
+  workMode?: string[];
   createdAt: string;
   submissionType: "Internal" | "Client";
   jobType: "Internal" | "External"; // Added jobType field

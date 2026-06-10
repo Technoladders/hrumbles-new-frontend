@@ -1,8 +1,9 @@
 // src/components/jobs/job/steps/ExternalJobInfoStep.tsx
 import { useSelector } from "react-redux";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LocationSelector from "../LocationSelector";
 import ExperienceSelector from "./experience-skills/ExperienceSelector";
@@ -11,7 +12,7 @@ import BudgetField from "./client-details/BudgetField";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar"; // Ensure you have this shadcn component
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils"
 
@@ -24,6 +25,7 @@ interface ExternalJobInfoData {
   currency_type: string;
   budget_type: string;
   hiringMode: string; // <-- ADDED
+  workMode?: string[];
   jobId: string;
   jobTitle: string;
   numberOfCandidates: number;
@@ -44,6 +46,120 @@ interface ExternalJobInfoStepProps {
 
 const TUP_ORG_ID = "0e4318d8-b1a5-4606-b311-c56d7eec47ce";
 const AMPLE_ORG_ID = "e032d8c5-2168-4083-9919-c2e09719550a";
+
+const WORK_MODE_OPTIONS = [
+  "Not Specified",
+  "Remote",
+  "Onsite",
+  "Hybrid",
+  "WFH",
+  "Client Location",
+  "Field Work",
+  "Flexible",
+  "5 Days",
+  "5.5 Days",
+  "6 Days",
+  "Alternate Saturdays Off",
+  "Rotational Week Off",
+  "General Shift",
+  "Day Shift",
+  "Night Shift",
+  "Rotational Shift",
+  "US Shift",
+  "UK Shift",
+];
+
+const WorkModeMultiSelect = ({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (selected: string[]) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredOptions = WORK_MODE_OPTIONS.filter((option) =>
+    option.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((item) => item !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-left font-normal h-auto min-h-[2.5rem] py-1.5"
+        >
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {selected.map((item) => (
+                <span
+                  key={item}
+                  className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800"
+                >
+                  {item}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleOption(item);
+                    }}
+                    className="hover:text-red-500 ml-0.5"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground">Select Work Mode</span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0" align="start">
+        <div className="overflow-visible">
+        {/* Search input */}
+        <div className="p-2 border-b">
+          <input
+            type="text"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-8 rounded-md border px-2 text-sm focus:outline-none focus:ring-1 focus:ring-violet-500"
+          />
+        </div>
+        {/* Options list – forced visible scrollbar */}
+        
+        <div className="max-h-60 overflow-y-auto custom-scrollbar p-2 space-y-1"  onWheel={(e) => e.stopPropagation()}>
+          {filteredOptions.length === 0 ? (
+            <p className="text-sm text-center text-gray-400 py-2">No results</p>
+          ) : (
+            filteredOptions.map((option) => (
+              <label
+                key={option}
+                className="flex items-center gap-2 cursor-pointer px-2 py-1 rounded hover:bg-slate-100"
+              >
+                <Checkbox
+                  checked={selected.includes(option)}
+                  onCheckedChange={() => toggleOption(option)}
+                />
+                <span className="text-sm">{option}</span>
+              </label>
+            ))
+          )}
+        </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const ExternalJobInfoStep = ({ data, onChange, orgSettings }: ExternalJobInfoStepProps) => {
 
@@ -106,7 +222,7 @@ const ExternalJobInfoStep = ({ data, onChange, orgSettings }: ExternalJobInfoSte
               <h3 className="text-lg text-purple-600 font-medium">Job Information</h3>
               <p className="text-sm text-gray-500">Enter the basic information about the job posting.</p>
          </div>
-         <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {/* --- NEW HIRING MODE FIELD --- */}
               <div className="space-y-1">
                 <Label htmlFor="hiringMode">Hiring Mode <span className="text-red-500">*</span></Label>
@@ -122,6 +238,14 @@ const ExternalJobInfoStep = ({ data, onChange, orgSettings }: ExternalJobInfoSte
                   </SelectContent>
                 </Select>
               </div>
+              {/* Work Mode – multi-select chip dropdown */}
+<div className="space-y-1">
+  <Label>Work Mode</Label>
+  <WorkModeMultiSelect
+    selected={data.workMode || []}
+    onChange={(selected) => handleFieldChange('workMode', selected)}
+  />
+</div>
               {/* --- END NEW HIRING MODE FIELD --- */}
               <div className="space-y-2">
                 <Label htmlFor="jobId">Job ID <span className="text-red-500">*</span></Label>

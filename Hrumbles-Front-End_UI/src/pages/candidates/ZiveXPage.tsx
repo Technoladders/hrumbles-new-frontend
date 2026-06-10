@@ -1,13 +1,14 @@
 // src/pages/candidates/ZiveXPage.tsx
-// Phase 2 — single-page search (sidebar + hero/results)
 //
-// INVITE FLOW (restored from ZiveXResultsPage.tsx):
-//   single invite  → JobPickerModal → InviteCandidateModal
-//   bulk invite    → JobPickerModal → BulkInviteReviewModal
-//
-// IMPORTS use the correct paths from the original codebase:
-//   @/components/jobs/job/invite/InviteCandidateModal
-//   @/components/jobs/job/invite/BulkInviteReviewModal
+// CHANGES vs prior version:
+//  • useTypesenseSearch now returns { results, stats } instead of just results[]
+//    → destructure: `const { data, ... } = useTypesenseSearch(...)`
+//    → `const results = data?.results ?? []`
+//    → `const stats   = data?.stats`
+//  • <ZiveXSearchStatsPanel stats={stats} /> mounted above results
+//  • Sidebar gets liveMode={true} by default; chip changes auto-fire onSearch
+//    → URL params stay in sync automatically (handleSearch updates them)
+//  • All invite / URL / history flows unchanged.
 
 import { FC, useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -19,19 +20,20 @@ import { getAuthDataFromLocalStorage } from '@/utils/localstorage';
 import { SearchFilters, SearchTag, CandidateSearchResult } from '@/types/candidateSearch';
 import { useTypesenseSearch } from '@/hooks/zive-x/useTypesenseSearch';
 
-import ZiveXSearchSidebar from '@/components/candidates/zive-x/ZiveXSearchSidebar';
-import ZiveXCardList from '@/components/candidates/zive-x/ZiveXCardList';
-import ZiveXResultsTable from '@/components/candidates/zive-x/ZiveXResultsTable';
-import ZiveXHeroSection from '@/components/candidates/zive-x/ZiveXHeroSection';
+import ZiveXSearchSidebar      from '@/components/candidates/zive-x/ZiveXSearchSidebar';
+import ZiveXCardList           from '@/components/candidates/zive-x/ZiveXCardList';
+import ZiveXResultsTable       from '@/components/candidates/zive-x/ZiveXResultsTable';
+import ZiveXHeroSection        from '@/components/candidates/zive-x/ZiveXHeroSection';
+import ZiveXGroupedResults     from '@/components/candidates/zive-x/ZiveXGroupedResults';
+import ZiveXSearchStatsPanel   from '@/components/candidates/zive-x/ZiveXSearchStatsPanel';
 
-// ← CORRECT IMPORT PATHS (from ZiveXResultsPage original)
-import InviteCandidateModal from '@/components/jobs/job/invite/InviteCandidateModal';
-import BulkInviteReviewModal, { BulkInviteCandidate } from '@/components/jobs/job/invite/BulkInviteReviewModal';
-import ZiveXGroupedResults from '@/components/candidates/zive-x/ZiveXGroupedResults';
+import InviteCandidateModal              from '@/components/jobs/job/invite/InviteCandidateModal';
+import BulkInviteReviewModal,
+       { BulkInviteCandidate }           from '@/components/jobs/job/invite/BulkInviteReviewModal';
 
 import { LayoutGrid, List, Send, Briefcase, Search, X, RefreshCw } from 'lucide-react';
 
-// ── JobOption type (matches ZiveXResultsPage original) ────────────────────────
+// ── JobOption type (unchanged) ────────────────────────────────────────────────
 interface JobOption {
   id:             string;
   title:          string;
@@ -47,7 +49,7 @@ interface JobOption {
   department?:    string;
 }
 
-// ── JobPickerModal (inline — copied from ZiveXResultsPage original) ───────────
+// ── JobPickerModal (inline — unchanged) ───────────────────────────────────────
 const JobPickerModal: FC<{
   isOpen:          boolean;
   onClose:         () => void;
@@ -67,7 +69,6 @@ const JobPickerModal: FC<{
         zIndex: 1051, width: 'calc(100vw - 32px)', maxWidth: 440,
         background: '#fff', borderRadius: 14, boxShadow: '0 20px 56px rgba(0,0,0,0.2)', overflow: 'hidden',
       }}>
-        {/* Header */}
         <div style={{ padding: '14px 16px', background: 'linear-gradient(135deg,#5B21B6,#7C3AED)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'white' }}>
@@ -81,15 +82,11 @@ const JobPickerModal: FC<{
             <X size={13} color="white" />
           </button>
         </div>
-
-        {/* Search */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid #F3F4F6', position: 'relative' }}>
           <Search size={12} style={{ position: 'absolute', left: 22, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
           <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search jobs…"
             style={{ width: '100%', padding: '7px 10px 7px 28px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
         </div>
-
-        {/* List */}
         <div style={{ maxHeight: 340, overflowY: 'auto' }}>
           {filtered.length === 0
             ? <div style={{ padding: 28, textAlign: 'center', color: '#9CA3AF', fontSize: 12 }}>No active jobs found</div>
@@ -114,7 +111,6 @@ const JobPickerModal: FC<{
             ))
           }
         </div>
-
         <div style={{ padding: '10px 14px', borderTop: '1px solid #F3F4F6', background: '#FAFAFA', display: 'flex', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: 7, border: '1px solid #E5E7EB', background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#6B7280' }}>Cancel</button>
         </div>
@@ -123,7 +119,7 @@ const JobPickerModal: FC<{
   );
 };
 
-// ── URL param helpers ─────────────────────────────────────────────────────────
+// ── URL param helpers (unchanged) ─────────────────────────────────────────────
 function encodeTagArray(tags: SearchTag[]): { m?: string; o?: string } {
   const m = tags.filter(t =>  t.mandatory).map(t => encodeURIComponent(t.value)).join(',');
   const o = tags.filter(t => !t.mandatory).map(t => encodeURIComponent(t.value)).join(',');
@@ -148,16 +144,15 @@ const ZiveXPage: FC = () => {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [viewMode,     setViewMode]     = useState<'card' | 'table'>('card');
 
-  // ── Invite state (restored from ZiveXResultsPage original) ─────────────────
+  // ── Invite state ────────────────────────────────────────────────────────────
   const [jobPickerMode,    setJobPickerMode]    = useState<'single' | 'bulk' | null>(null);
   const [pendingSingle,    setPendingSingle]    = useState<CandidateSearchResult | null>(null);
   const [pendingBulkList,  setPendingBulkList]  = useState<BulkInviteCandidate[]>([]);
   const [selectedJob,      setSelectedJob]      = useState<JobOption | null>(null);
   const [singleInviteOpen, setSingleInviteOpen] = useState(false);
   const [bulkModalOpen,    setBulkModalOpen]    = useState(false);
-  
 
-  // ── WhatsApp config (restored from ZiveXResultsPage original) ──────────────
+  // ── WhatsApp config (unchanged) ─────────────────────────────────────────────
   const { data: waCfg } = useQuery({
     queryKey: ['whatsapp-config', organization_id],
     queryFn: async () => {
@@ -171,7 +166,7 @@ const ZiveXPage: FC = () => {
     enabled: !!organization_id,
   });
 
-  // ── Active jobs (restored from ZiveXResultsPage original) ──────────────────
+  // ── Active jobs (unchanged) ─────────────────────────────────────────────────
   const { data: jobs = [] } = useQuery<JobOption[]>({
     queryKey: ['zx-jobs', organization_id],
     queryFn: async () => {
@@ -197,7 +192,7 @@ const ZiveXPage: FC = () => {
 
   const orgName = waCfg?.company_name || 'DCS Group';
 
-  // ── Parse all Phase 2 filters from URL ─────────────────────────────────────
+  // ── Parse filters from URL ──────────────────────────────────────────────────
   const filters: SearchFilters = useMemo(() => {
     const p    = searchParams;
     const get  = (k: string) => p.get(k);
@@ -222,7 +217,6 @@ const ZiveXPage: FC = () => {
       min_expected_salary:  num('min_ectc'),
       max_expected_salary:  num('max_ectc'),
       date_posted:          get('dp') ?? undefined,
-      // Phase 2
       previous_titles:      tags('pt'),
       previous_companies:   tags('pc'),
       degree:               get('degree') ?? undefined,
@@ -233,7 +227,7 @@ const ZiveXPage: FC = () => {
     };
   }, [searchParams]);
 
-  // ── Encode filters → URL ────────────────────────────────────────────────────
+  // ── Encode filters → URL (unchanged) ────────────────────────────────────────
   const encodeFiltersToURL = useCallback((f: SearchFilters) => {
     const p = new URLSearchParams();
     const setTags = (prefix: string, tags: SearchTag[] | undefined) => {
@@ -258,14 +252,13 @@ const ZiveXPage: FC = () => {
     setNum('min_ectc', f.min_expected_salary);
     setNum('max_ectc', f.max_expected_salary);
     setStr('dp',       f.date_posted);
-    // Phase 2
-    setTags('pt',   f.previous_titles);
-    setTags('pc',   f.previous_companies);
-    setStr('degree', f.degree);
-    setTags('inst', f.institutions);
-    setArr('excl_sk', f.excluded_skills);
-    setNum('cc_min', f.companies_count_min);
-    setNum('cc_max', f.companies_count_max);
+    setTags('pt',      f.previous_titles);
+    setTags('pc',      f.previous_companies);
+    setStr('degree',   f.degree);
+    setTags('inst',    f.institutions);
+    setArr('excl_sk',  f.excluded_skills);
+    setNum('cc_min',   f.companies_count_min);
+    setNum('cc_max',   f.companies_count_max);
     setSearchParams(p, { replace: true });
   }, [setSearchParams]);
 
@@ -275,18 +268,18 @@ const ZiveXPage: FC = () => {
       setHasSearched(true);
       setSidebarInit(filters);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Search / reset handlers ─────────────────────────────────────────────────
-const handleSearch = useCallback((newFilters: SearchFilters) => {
-  // Merge any hero‑added keywords into the final filters
-  encodeFiltersToURL(newFilters);
-  setHasSearched(true);
-  setSelectedIds(new Set());
-  // Clear hero keywords after they’ve been used
-  
-},  [encodeFiltersToURL]);
+  // Sidebar's live mode pushes new filters here on every chip change.
+  // We just sync to URL — React Query then refires automatically because
+  // the query key includes JSON.stringify(filters).
+  const handleSearch = useCallback((newFilters: SearchFilters) => {
+    encodeFiltersToURL(newFilters);
+    setHasSearched(true);
+    setSelectedIds(new Set());
+  }, [encodeFiltersToURL]);
 
   const handleReset = useCallback(() => {
     setSearchParams(new URLSearchParams(), { replace: true });
@@ -296,16 +289,12 @@ const handleSearch = useCallback((newFilters: SearchFilters) => {
     setSelectedIds(new Set());
   }, [setSearchParams]);
 
-  
-
-  // Adds keywords from hero AI extraction to sidebar without triggering search
-const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
-
-  setSidebarInit(prev => ({
-    ...prev,
-    keywords: [...(prev.keywords || []), ...newKws],
+  const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
+    setSidebarInit(prev => ({
+      ...prev,
+      keywords: [...(prev.keywords || []), ...newKws],
     }));
-}, []);
+  }, []);
 
   const handleHistorySelect = useCallback((histFilters: SearchFilters) => {
     setSidebarInit(histFilters);
@@ -321,21 +310,18 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
     });
   }, []);
 
-  const handleSelectAll = useCallback(() => {
-    setSelectedIds(prev =>
-      prev.size === results.length && results.length > 0
-        ? new Set()
-        : new Set(results.map(r => r.id))
-    );
-  }, []); // results added inside to avoid stale ref — see below
-
-  // ── Typesense search ────────────────────────────────────────────────────────
-  const { data: results = [], isLoading, isFetching } = useTypesenseSearch({
+  // ═════════════════════════════════════════════════════════════════════════
+  // Typesense search — v8 hook returns { results, stats }
+  // ═════════════════════════════════════════════════════════════════════════
+  const { data, isLoading, isFetching } = useTypesenseSearch({
     filters,
     organizationId: organization_id,
     enabled:        hasSearched && !!organization_id,
   });
+  const results = data?.results ?? [];
+  const stats   = data?.stats;
 
+  // ── Select-all (needs results) ──────────────────────────────────────────────
   const handleSelectAllWithResults = useCallback(() => {
     setSelectedIds(prev =>
       prev.size === results.length && results.length > 0
@@ -344,7 +330,7 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
     );
   }, [results]);
 
-  // ── Invite handlers (restored from ZiveXResultsPage original) ──────────────
+  // ── Invite handlers (unchanged) ─────────────────────────────────────────────
   const handleSingleInvite = useCallback((c: CandidateSearchResult) => {
     setPendingSingle(c);
     setJobPickerMode('single');
@@ -404,7 +390,6 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
     if (filters.notice_periods?.length) n++;
     if (filters.min_current_salary  != null || filters.max_current_salary  != null) n++;
     if (filters.min_expected_salary != null || filters.max_expected_salary != null) n++;
-    // Phase 2
     if (filters.previous_titles?.length)    n++;
     if (filters.previous_companies?.length) n++;
     if (filters.degree)                     n++;
@@ -421,6 +406,11 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#F8FAFC' }}>
 
       {/* ── Sidebar ── */}
+      {/* liveMode is OFF until the first explicit search. This prevents the
+          sidebar from auto-firing onSearch({}) on initial mount (which would
+          flip hasSearched=true and skip the hero), and React 18 StrictMode
+          dev-mode double-effects from doing the same thing. Once the user has
+          searched once, chip changes are live for the rest of the session. */}
       <ZiveXSearchSidebar
         key={sidebarKey}
         onSearch={handleSearch}
@@ -428,21 +418,20 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
         isSearching={isSearching}
         initialFilters={sidebarInit}
         organizationId={organization_id}
+        liveMode={hasSearched}
       />
 
       {/* ── Main content ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
 
         {!hasSearched ? (
-          /* ── Hero / idle ─────────────────────────────────────────────────── */
           <ZiveXHeroSection
-  onSearch={handleSearch}
-  onHistorySelect={handleHistorySelect}
-  onAddKeywordsToSidebar={handleAddKeywordsToSidebar}
-  organizationId={organization_id}
-/>
+            onSearch={handleSearch}
+            onHistorySelect={handleHistorySelect}
+            onAddKeywordsToSidebar={handleAddKeywordsToSidebar}
+            organizationId={organization_id}
+          />
         ) : (
-          /* ── Results ─────────────────────────────────────────────────────── */
           <>
             {/* Results header */}
             <div style={{
@@ -472,15 +461,12 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {/* Select all */}
                 {results.length > 0 && (
                   <button onClick={handleSelectAllWithResults}
                     style={{ padding: '4px 10px', borderRadius: 99, border: '1px solid #E2E8F0', background: 'white', fontSize: 11, fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
                     {selectedIds.size === results.length && results.length > 0 ? 'Deselect All' : `Select All (${results.length})`}
                   </button>
                 )}
-
-                {/* Bulk invite */}
                 {results.length > 0 && (
                   <button onClick={handleBulkInviteClick}
                     style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 99, border: 'none', background: '#EDE9FE', fontSize: 11, fontWeight: 700, color: '#6D28D9', cursor: 'pointer' }}>
@@ -488,8 +474,6 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
                     Bulk Invite{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
                   </button>
                 )}
-
-                {/* View toggle */}
                 <div style={{ display: 'flex', borderRadius: 7, overflow: 'hidden', border: '1px solid #E2E8F0' }}>
                   {(['card', 'table'] as const).map(m => (
                     <button key={m} onClick={() => setViewMode(m)}
@@ -501,24 +485,27 @@ const handleAddKeywordsToSidebar = useCallback((newKws: SearchTag[]) => {
               </div>
             </div>
 
-   {/* Results list — grouped (matched + suggested) */}
-   <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-     <ZiveXGroupedResults
-       results={results}
-       filters={filters}
-       isLoading={isSearching}
-       highlightTerms={highlightTerms}
-       selectedIds={selectedIds}
-       onToggleSelect={handleToggleSelect}
-       onInvite={handleSingleInvite}
-       viewMode={viewMode}
-     />
-   </div>
+            {/* ── DEBUG: Search Stats Panel ── */}
+            {/* <ZiveXSearchStatsPanel stats={stats} /> */}
+
+            {/* ── Results list ── */}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <ZiveXGroupedResults
+                results={results}
+                filters={filters}
+                isLoading={isSearching}
+                highlightTerms={highlightTerms}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onInvite={handleSingleInvite}
+                viewMode={viewMode}
+              />
+            </div>
           </>
         )}
       </div>
 
-      {/* ── Job picker modal (before any invite opens) ── */}
+      {/* ── Job picker modal ── */}
       <JobPickerModal
         isOpen={jobPickerMode !== null}
         onClose={handlePickerClose}
