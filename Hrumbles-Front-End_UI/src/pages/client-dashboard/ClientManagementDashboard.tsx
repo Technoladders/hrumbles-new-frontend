@@ -207,7 +207,7 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
     }
 
       const { data: candidatesData } = await supabase.from("hr_job_candidates").select(`*, hr_jobs!hr_job_candidates_job_id_fkey(*)`).or(`main_status_id.eq.${statusIds.joinedMainId},main_status_id.eq.${statusIds.offeredMainId}`).in("sub_status_id", [statusIds.joinedSubId, statusIds.offerIssuedSubId]);
-      // const { data: employeesData } = await supabase.from("hr_project_employees").select("*");
+      
       const { data: timeLogs } = await supabase.from("time_logs").select("*").eq("is_approved", true);
       let totalRevenue = 0, totalProfit = 0;
       const metricsByClient: { [k: string]: { revenue: number; profit: number } } = {};
@@ -215,7 +215,10 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
       if (candidatesData) {
         candidatesData.forEach((candidate) => {
           const job = (candidate as any).hr_jobs;
-          const client = clientsData.find((c) => c.client_name === job?.client_owner);
+          const jobClientName = job?.client_details?.clientName;
+const client = jobClientName 
+  ? clientsData.find((c) => c.client_name === jobClientName) 
+  : undefined;
           if (!job || !client) return;
           const candProfit = calculateProfit(candidate, client.currency || "INR", client.commission_type || "", client.commission_value || 0, job);
           const candRevenue = job.job_type_category.toLowerCase() === "internal" ? parseSalary(candidate.accrual_ctc) : candProfit;
@@ -223,6 +226,8 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
           if (metricsByClient[client.client_name]) { metricsByClient[client.client_name].revenue += candRevenue; metricsByClient[client.client_name].profit += candProfit; }
         });
       }
+  console.log("candidatedata", candidatesData);
+
       if (employeesData) {
         employeesData.forEach((employee) => {
           const client = clientsData.find((c) => c.id === employee.client_id);
@@ -239,6 +244,7 @@ const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
       toast({ title: "Error", description: `Failed to load data: ${error.message}`, variant: "destructive" });
     } finally { setLoading(false); }
   }, [organization_id, toast, statusIds]);
+
 
   // Helper function to get employee names from IDs
 const getInternalContactNames = useCallback((client: Client) => {
