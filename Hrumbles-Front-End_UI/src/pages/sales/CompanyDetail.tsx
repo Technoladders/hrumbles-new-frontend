@@ -435,7 +435,7 @@ const handleListAdd = async (fileIds: string | string[]) => {
 
         {/* Breadcrumb */}
         <div className="px-4 py-1.5 border-b border-slate-50 flex items-center gap-2">
-          <button onClick={() => navigate('/companies')} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors">
             <ChevronLeft size={13} /><span>Companies</span>
           </button>
           <span className="text-slate-200 text-xs">/</span>

@@ -253,7 +253,7 @@ export function ContactFiltersSidebar({
           <div className="relative">
             <Search className="absolute left-2.5 top-2 text-white/30 pointer-events-none" size={12} />
             <input
-              placeholder="Name, email, title…"
+              placeholder="Name, email, title, phone…"
               className={cn(DARK_INPUT, 'pl-7 pr-6')}
               style={DARK_INPUT_STYLE}
               value={filters.search}

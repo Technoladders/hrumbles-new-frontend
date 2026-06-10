@@ -109,7 +109,7 @@ export const useSimpleContacts = (options: UseSimpleContactsOptions = {}) => {
       const arr = (a?: any[]) => (a && a.length > 0 ? a : null);
 
       const { data: rpcResult, error: rpcError } = await supabase.rpc(
-        'get_contacts_paginated',
+        'get_contacts_paginated_v1',
         {
           p_org_id:       organization_id,
           p_file_id:      fileId ?? null,

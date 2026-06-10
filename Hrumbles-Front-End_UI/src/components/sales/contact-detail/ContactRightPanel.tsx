@@ -170,6 +170,9 @@ export const ContactRightPanel: React.FC<Props> = ({ contact, onCompanyFieldSave
   const enrichOrg  = contact?.enrichment_people?.[0]?.enrichment_organizations;
   const companyRec = contact?.companies;
   const hasCompany = !!companyRec?.id;
+  const [editingCompanyName, setEditingCompanyName] = useState(false);
+  const [draftCompanyName, setDraftCompanyName] = useState('');
+
 
   // apollo_org_id from multiple sources
   const apolloOrgId = contact.apollo_org_id || rawOrg?.id || enrichOrg?.apollo_org_id || null;
@@ -439,15 +442,79 @@ const handleSaveAndOpen = async (person: any) => {
               }
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <EditText
-                  value={hasCompany ? (companyRec.name || '') : org.name}
-                  onSave={v => onCompanyFieldSave('name', v)}
-                  isSaving={isSaving}
-                  placeholder="Company name"
-                  className="text-sm font-bold text-slate-900 leading-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600"
-                />
-              </div>
+<div className="flex items-center gap-1.5 flex-wrap">
+  {hasCompany && companyRec?.id ? (
+    <>
+      {/* Clickable name → navigates to company detail */}
+      <button
+        onClick={() => navigate(`/companies/${companyRec.id}`)}
+        className="text-sm font-bold text-slate-900 leading-tight bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent hover:underline cursor-pointer"
+      >
+        {companyRec.name || 'Unnamed Company'}
+      </button>
+
+      {/* Edit button opens inline editing */}
+      <button
+        onClick={() => {
+          setDraftCompanyName(companyRec.name || '');
+          setEditingCompanyName(true);
+        }}
+        className="p-0.5 rounded hover:bg-slate-100 text-slate-400"
+        title="Edit company name"
+      >
+        <Pencil size={10} />
+      </button>
+
+      {/* Inline edit mode */}
+      {editingCompanyName && (
+        <div className="flex items-start gap-1.5 w-full">
+          <div className="flex-1 rounded-lg p-[1px] bg-gradient-to-r from-purple-500 to-indigo-500">
+            <input
+              autoFocus
+              value={draftCompanyName}
+              onChange={(e) => setDraftCompanyName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onCompanyFieldSave('name', draftCompanyName.trim());
+                  setEditingCompanyName(false);
+                }
+                if (e.key === 'Escape') {
+                  setEditingCompanyName(false);
+                }
+              }}
+              className="w-full bg-white rounded-[7px] px-2 py-0.5 text-xs focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={() => {
+              onCompanyFieldSave('name', draftCompanyName.trim());
+              setEditingCompanyName(false);
+            }}
+            disabled={isSaving}
+            className="p-0.5 rounded bg-gradient-to-r from-purple-600 to-indigo-600 text-white mt-0.5"
+          >
+            {isSaving ? <Loader2 size={8} className="animate-spin" /> : <Check size={8} />}
+          </button>
+          <button
+            onClick={() => setEditingCompanyName(false)}
+            className="p-0.5 rounded bg-slate-100 text-slate-500 mt-0.5"
+          >
+            <X size={8} />
+          </button>
+        </div>
+      )}
+    </>
+  ) : (
+    // Fallback: no CRM company linked – keep editable text
+    <EditText
+      value={org.name}
+      onSave={(v) => onCompanyFieldSave('name', v)}
+      isSaving={isSaving}
+      placeholder="Company name"
+      className="text-sm font-bold text-slate-900 leading-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600"
+    />
+  )}
+</div>
               {/* Industry + location + founded */}
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <EditText
