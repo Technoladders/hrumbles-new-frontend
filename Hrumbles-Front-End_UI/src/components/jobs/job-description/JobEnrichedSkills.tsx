@@ -166,3 +166,4 @@ const JobEnrichedSkills: React.FC<JobEnrichedSkillsProps> = ({ skills }) => {
 };
 
 export default JobEnrichedSkills;
+// 

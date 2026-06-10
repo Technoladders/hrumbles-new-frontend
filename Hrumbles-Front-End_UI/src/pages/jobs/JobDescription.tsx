@@ -1,8 +1,10 @@
 // Hrumbles-Front-End_UI\src\pages\jobs\JobDescription.tsx
-// Redesign: Option C dense record card, max-w-[1400px], violet/indigo theme,
-// Framer Motion animations, internal_poc_ids fetched from hr_employees,
-// client POC from clientDetails.pointOfContact, full vendor gating.
-// Role overview always fully expanded (no collapse). All commented blocks preserved.
+// UI REFRESH v2: 
+//  • Client name in title bar (highlighted)
+//  • SPOC column → 3 compact inline-label cards (Client POC / Internal SPOC / Assigned)
+//  • All cards on violet theme (no teal)
+//  • Compact padding throughout
+//  • All data logic, queries, realtime — unchanged
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -19,10 +21,8 @@ import { useJobEditState } from "@/components/jobs/job-description/hooks/useJobE
 import { Candidate } from "@/lib/types";
 import { formatDisplayValue } from "@/components/jobs/job-description/utils/formatUtils";
 import {
-  ArrowLeft, Edit, Share, Building, Hourglass, UserPlus, Clock, IndianRupee,
-  CircleUser, MapPin, CalendarDays, Users, FileText, UserCheck, Briefcase,
-  CalendarClock, Bookmark, Share2, Building2, Calendar, DollarSign, TrendingUp,
-  Target, Sparkles, Zap, Award, BadgeCheck,
+  ArrowLeft, Building2, MapPin, Calendar, Briefcase, Users,
+  FileText, UserCheck, Target, User,
 } from "lucide-react";
 import { formatBulletPoints } from "@/components/jobs/job-description/utils/formatUtils";
 import JobEnrichedSkills from "@/components/jobs/job-description/JobEnrichedSkills";
@@ -32,376 +32,379 @@ import JobEnrichedSkills from "@/components/jobs/job-description/JobEnrichedSkil
 // ─────────────────────────────────────────────────────────────────────────────
 
 const formatINR = (amount: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
 
-// Stagger children animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
-  },
+  show: { opacity: 1, transition: { staggerChildren: 0.07, delayChildren: 0.04 } },
 };
-
 const rowVariants = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.24, ease: "easeOut" } },
 };
 
-// ── Budget pill chip ─────────────────────────────────────────────────────────
-const SpocRow = ({
-  label,
-  value,
-  variant,
-}: {
-  label: string;
-  value: string;
-  variant: "purple" | "teal";
-}) => {
-  const labelCls = variant === "purple" ? "text-violet-400" : "text-teal-600";
-  const valueCls = variant === "purple" ? "text-violet-900" : "text-teal-900";
-  return (
-    <div className="flex items-center gap-2 py-[3px]">
-      <span className={`text-[9px] font-bold uppercase tracking-widest w-24 flex-shrink-0 ${labelCls}`}>
-        {label}
-      </span>
-      <span className={`text-[11px] font-semibold ${valueCls}`}>{value}</span>
-    </div>
-  );
-};
-
-// ── Budget pill chip ─────────────────────────────────────────────────────────
-const BudgetChip = ({ label, value }: { label: string; value: string }) => (
-  <motion.div
-    variants={rowVariants}
-    className="flex flex-col gap-0.5 px-3 py-2 rounded-lg bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-100/60"
-    whileHover={{ y: -1 }}
-    transition={{ duration: 0.15 }}
-  >
-    <span className="text-[9px] font-semibold uppercase tracking-widest text-violet-400">
-      {label}
-    </span>
-    <span className="text-[12px] font-bold text-violet-800">{value}</span>
-  </motion.div>
+// ── Meta pill ────────────────────────────────────────────────────────────────
+const MetaPill = ({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) => (
+  <span style={{
+    display: "inline-flex", alignItems: "center", gap: 5,
+    fontSize: 11, fontWeight: 500, color: "#475569",
+    background: "white", border: "1px solid #E2E8F0",
+    borderRadius: 99, padding: "3px 10px",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+  }}>
+    <Icon size={11} color="#7C3AED" />
+    {children}
+  </span>
 );
 
 // ── Section label ────────────────────────────────────────────────────────────
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400 mb-2">
+const SectionLabel = ({ icon: Icon, children }: { icon?: React.ElementType; children: React.ReactNode }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+    {Icon && <Icon size={11} color="#7C3AED" />}
+    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "#94A3B8" }}>
+      {children}
+    </span>
+  </div>
+);
+
+// ── Glass card (violet only) ─────────────────────────────────────────────────
+const GlassCard = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+  <div style={{
+    background: "linear-gradient(135deg, #F5F3FF, #EDE9FE)",
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderLeft: "3px solid #7C3AED",
+    borderRadius: 10,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.9)",
+    padding: "12px 14px",
+    backdropFilter: "blur(4px)",
+    ...style,
+  }}>
     {children}
-  </p>
+  </div>
+);
+
+// ── Compact info card — one or more inline label:value rows ──────────────────
+const InfoCard = ({ children }: { children: React.ReactNode }) => (
+  <div style={{
+    background: "white",
+    border: "1px solid #EDE9FE",
+    borderLeft: "3px solid #A78BFA",
+    borderRadius: 8,
+    padding: "8px 10px",
+    boxShadow: "0 1px 4px rgba(109,40,217,0.06)",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 5,
+  }}>
+    {children}
+  </div>
+);
+
+// ── Single inline label:value row inside InfoCard ────────────────────────────
+const InfoRow = ({
+  label,
+  value,
+  emptyText = "—",
+}: {
+  label: string;
+  value?: string | null;
+  emptyText?: string;
+}) => (
+  <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+    <span style={{
+      fontSize: 9, fontWeight: 700, letterSpacing: "0.06em",
+      textTransform: "uppercase" as const, color: "#7C3AED",
+      flexShrink: 0, opacity: 0.75, width: 90,
+    }}>
+      {label}
+    </span>
+    <span style={{
+      fontSize: 11, fontWeight: 600, color: "#1E293B",
+      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+      flex: 1, minWidth: 0,
+    }}>
+      {value?.trim() || emptyText}
+    </span>
+  </div>
+);
+
+// ── Trough ───────────────────────────────────────────────────────────────────
+const Trough = ({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+  <div style={{
+    background: "linear-gradient(135deg, #FAFAFA, #F8F9FF)",
+    borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9",
+    padding: "16px 20px", ...style,
+  }}>
+    {children}
+  </div>
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ModernJobDescription — Option C dense record card, violet/indigo theme
+// ModernJobDescription
 // ─────────────────────────────────────────────────────────────────────────────
-
 const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onToggleSaved }) => {
   const navigate = useNavigate();
-  const userRole = useSelector((state: any) => state.auth.role);
+  const userRole   = useSelector((state: any) => state.auth.role);
   const isEmployee = userRole === "employee";
-  const isVendor = userRole === "vendor";
+  const isVendor   = userRole === "vendor";
 
-  // ── Derived data ────────────────────────────────────────────────────────────
-  const bulletPoints = formatBulletPoints(job.description || "");
-  const experienceText = `${job.experience?.min?.years ?? 0}–${job.experience?.max?.years ?? "N/A"} years`;
-  const hrBudget = job.hr_budget ? `${formatINR(job.hr_budget)} ${job.hr_budget_type ?? ""}` : null;
-  const clientBudget = job.clientDetails?.clientBudget
-    ? formatDisplayValue(job.clientDetails.clientBudget)
-    : null;
-  const vendorBudget =
-    !isEmployee && job.vendor_budget
-      ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type ?? ""}`
-      : null;
-  const locationText = job.location?.join(" · ") || "Remote";
-  const postedDate = job.postedDate;
-  const dueDate = job.dueDate;
+  const bulletPoints    = formatBulletPoints(job.description || "");
+  const experienceText  = `${job.experience?.min?.years ?? 0}–${job.experience?.max?.years ?? "N/A"} years`;
+  const hrBudget        = job.hr_budget ? `${formatINR(job.hr_budget)} ${job.hr_budget_type ?? ""}` : null;
+  const clientBudget    = job.clientDetails?.clientBudget ? formatDisplayValue(job.clientDetails.clientBudget) : null;
+  const vendorBudget    = !isEmployee && job.vendor_budget ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type ?? ""}` : null;
+  const locationText    = job.location?.join(" · ") || "Remote";
+  const clientPoc       = job.clientDetails?.pointOfContact as string | undefined;
+  const clientName      = (job.clientDetails?.clientName || job.clientOwner) as string | undefined;
+  const internalPocIds  = (job.clientDetails?.internal_poc_ids ?? []) as string[];
 
-  // ── SPOC data ──────────────────────────────────────────────────────────────
-  // client_details JSONB:
-  //   pointOfContact   — client-side POC name (string)
-  //   clientName       — client company name
-  //   internal_poc_ids — array of hr_employees UUIDs (internal POCs)
-  const clientPoc: string | undefined = job.clientDetails?.pointOfContact;
-  const clientName: string | undefined = job.clientDetails?.clientName || job.clientOwner;
-  const internalPocIds: string[] = job.clientDetails?.internal_poc_ids ?? [];
+  // Parse assigned recruiter names from comma-separated string
+  const assignedRecruiterNames: string[] = (job.assigned_to?.name ?? "")
+    .split(",").map((n: string) => n.trim()).filter(Boolean);
 
-  // Fetch internal POC employee names from hr_employees
+  // Parse assigned vendor names from array
+const assignedVendorNames: string[] = Array.isArray(job?.assigned_vendor)
+  ? job.assigned_vendor
+      .map((v: any) =>
+        typeof v === "string"
+          ? v.trim()
+          : v?.name?.trim()
+      )
+      .filter(Boolean)
+  : [];
+
+  // Fetch internal POC names
   const { data: internalPocEmployees = [] } = useQuery({
     queryKey: ["internal-poc-employees", internalPocIds],
     queryFn: async () => {
       if (!internalPocIds.length) return [];
       const { data, error } = await supabase
-        .from("hr_employees")
-        .select("id, first_name, last_name, email, phone")
-        .in("id", internalPocIds);
+        .from("hr_employees").select("id, first_name, last_name, email, phone").in("id", internalPocIds);
       if (error) throw error;
       return data ?? [];
     },
     enabled: !isVendor && internalPocIds.length > 0,
   });
 
-  console.log("vendor budget raw:", job.vendor_budget);
-  console.log("vendor budget type:", job.vendor_budget_type);
-  console.log("vendorBudget:", vendorBudget);
-  console.log("clientDetails:", job.clientDetails);
+  const internalPocNameStr = internalPocEmployees
+    .map((e: any) => `${e.first_name} ${e.last_name}`.trim()).join(", ");
+
+  // Job detail rows (left card)
+  const detailRows = [
+    { label: "Experience",    value: experienceText },
+    { label: "Openings",      value: `${job.numberOfCandidates} position${job.numberOfCandidates !== 1 ? "s" : ""}` },
+    job.dueDate         && { label: "Due date",      value: job.dueDate },
+    job.noticePeriod    && { label: "Notice period", value: job.noticePeriod },
+    isVendor            && { label: "Budget",        value: job.vendor_budget ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type ?? ""}` : "—" },
+    !isVendor && hrBudget                             && { label: "HR budget",     value: hrBudget },
+    !isVendor && !isEmployee && clientBudget          && { label: "Client budget", value: clientBudget },
+    !isVendor && !isEmployee && vendorBudget          && { label: "Vendor budget", value: vendorBudget },
+    !isVendor && job.clientDetails?.endClient         && { label: "End client",    value: job.clientDetails.endClient },
+  ].filter(Boolean) as { label: string; value: string }[];
 
   return (
-    <div className="min-h-screen bg-gray-50/80">
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #F8F6FF 0%, #F1F5F9 60%, #F0FDF4 100%)" }}>
 
-      {/* ── Sticky header ───────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-[1400px] mx-auto px-5 py-2.5 flex items-center gap-3">
-          <motion.button
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.95 }}
-            className="p-1.5 hover:bg-violet-50 rounded-lg transition-colors flex-shrink-0"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft className="w-4 h-4 text-gray-500" />
+      {/* ── Sticky header ─────────────────────────────────────────────────── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 40,
+        background: "rgba(255,255,255,0.92)", backdropFilter: "blur(12px)",
+        borderBottom: "1px solid rgba(124,58,237,0.08)",
+        boxShadow: "0 1px 0 rgba(124,58,237,0.06)",
+      }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }} onClick={() => navigate(-1)}
+            style={{ padding: 6, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex" }}>
+            <ArrowLeft size={16} color="#64748B" />
           </motion.button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-sm font-semibold text-gray-900 truncate">{job.title}</h1>
-            <p className="text-[10px] text-gray-400 font-mono">{job.jobId}</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {job.title}
+            </h1>
+            <p style={{ fontSize: 10, color: "#94A3B8", fontFamily: "monospace", margin: 0 }}>{job.jobId}</p>
           </div>
-          {/* <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => onToggleSaved(!isSaved)}
-              className={`p-1.5 rounded-lg transition-all ${isSaved ? "bg-purple-100 text-purple-600" : "hover:bg-gray-100 text-gray-500"}`}
-            >
-              <Bookmark className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
-            </button>
-            <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
-              <Share2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onEditJob}
-              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:shadow-md hover:scale-105 transition-all flex items-center gap-1.5 text-xs font-medium"
-            >
-              <Edit className="w-3.5 h-3.5" />
-              Edit
-            </button>
-          </div> */}
         </div>
       </div>
 
-      {/* ── Page body ───────────────────────────────────────────────────────── */}
-      <div className="max-w-[1400px] mx-auto px-5 py-5">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          className="bg-white rounded-2xl border border-gray-200/70 overflow-hidden"
-          style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(109,40,217,0.04)" }}
-        >
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px" }}>
+        <motion.div variants={containerVariants} initial="hidden" animate="show" style={{
+          background: "white", borderRadius: 16, overflow: "hidden",
+          border: "1px solid rgba(124,58,237,0.1)",
+          boxShadow: [
+            "0 0 0 1px rgba(124,58,237,0.05)", "0 4px 6px -1px rgba(0,0,0,0.04)",
+            "0 12px 32px -4px rgba(109,40,217,0.08)", "0 32px 64px -12px rgba(0,0,0,0.06)",
+          ].join(", "),
+        }}>
 
-          {/* ── Row 1: Title bar ──────────────────────────────────────────── */}
-          <motion.div
-            variants={rowVariants}
-            className="px-5 py-3 bg-gradient-to-r from-violet-600 via-violet-600 to-indigo-600 flex items-center gap-2.5 flex-wrap"
-          >
-            <span className="text-[10px] font-mono font-medium text-violet-200 bg-white/10 border border-white/20 rounded px-1.5 py-0.5 flex-shrink-0">
+          {/* ── Row 1: Title bar with client name ─────────────────────────── */}
+          <motion.div variants={rowVariants} style={{
+            padding: "13px 20px",
+            background: "linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #4F46E5 100%)",
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const,
+            position: "relative", overflow: "hidden",
+          }}>
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%)", pointerEvents: "none" }} />
+
+            {/* Job ID monospace chip */}
+            <span style={{ fontSize: 9, fontFamily: "monospace", fontWeight: 600, color: "rgba(221,214,254,0.9)", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 4, padding: "2px 7px", flexShrink: 0 }}>
               {job.jobId}
             </span>
-            <span className="text-sm font-bold text-white flex-1 min-w-0 truncate">
+
+            {/* Job title */}
+            <span style={{ fontSize: 14, fontWeight: 700, color: "white", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
               {job.title}
             </span>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-green-400/20 text-green-100 border border-green-300/30">
+
+            {/* ★ Client name — highlighted in header */}
+            {!isVendor && clientName && (
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
+                background: "rgba(255,255,255,0.18)", color: "white",
+                border: "1px solid rgba(255,255,255,0.35)",
+                backdropFilter: "blur(4px)",
+                display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+              }}>
+                <Building2 size={11} style={{ opacity: 0.75 }} />
+                {clientName}
+              </span>
+            )}
+
+            {/* Status / type chips */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: "rgba(74,222,128,0.2)", color: "#86EFAC", border: "1px solid rgba(134,239,172,0.3)" }}>
                 {job.status}
               </span>
               {!isVendor && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/15 text-white border border-white/20">
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.2)" }}>
                   {job.jobType}
                 </span>
               )}
               {!isVendor && job.hiringMode && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white/10 text-violet-100 border border-white/15">
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 6, background: "rgba(255,255,255,0.1)", color: "rgba(221,214,254,0.9)", border: "1px solid rgba(255,255,255,0.15)" }}>
                   {job.hiringMode}
                 </span>
               )}
             </div>
           </motion.div>
 
-          {/* ── Row 2: Meta strip ────────────────────────────────────────── */}
-          <motion.div
-            variants={rowVariants}
-            className="px-5 py-2 border-b border-gray-100 flex flex-wrap items-center gap-x-5 gap-y-1 bg-gray-50/40"
-          >
-            {!isVendor && clientName && (
-              <span className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
-                <Building2 className="w-3 h-3 text-violet-400" />
-                {clientName}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <MapPin className="w-3 h-3 text-violet-400" />
-              {locationText}
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <Calendar className="w-3 h-3 text-violet-400" />
-              {postedDate}
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <Briefcase className="w-3 h-3 text-violet-400" />
-              {experienceText}
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-gray-500">
-              <Users className="w-3 h-3 text-violet-400" />
-              {job.numberOfCandidates} opening{job.numberOfCandidates !== 1 ? "s" : ""}
-            </span>
+          {/* ── Row 2: Meta pills ─────────────────────────────────────────── */}
+          <motion.div variants={rowVariants} style={{
+            padding: "9px 20px", borderBottom: "1px solid #F1F5F9",
+            display: "flex", flexWrap: "wrap" as const, gap: 6, alignItems: "center",
+            background: "linear-gradient(180deg, #FDFCFF 0%, #FAFAFA 100%)",
+          }}>
+            <MetaPill icon={MapPin}>{locationText}</MetaPill>
+            <MetaPill icon={Calendar}>{job.postedDate}</MetaPill>
+            <MetaPill icon={Briefcase}>{experienceText}</MetaPill>
+            <MetaPill icon={Users}>{job.numberOfCandidates} opening{job.numberOfCandidates !== 1 ? "s" : ""}</MetaPill>
           </motion.div>
 
-          {/* ── Row 3: Details + SPOC ────────────────────────────────────── */}
-          <motion.div
-            variants={rowVariants}
-            className="grid grid-cols-2 divide-x divide-gray-100 border-b border-gray-100"
-          >
-            {/* Left: job detail table */}
-            <div className="px-5 py-3.5">
-              <SectionLabel>Job details</SectionLabel>
-              <table className="w-full text-[11px] border-collapse">
-                <tbody>
-                  <tr className="group">
-                    <td className="py-[3px] pr-3 text-gray-400 w-28 whitespace-nowrap">Experience</td>
-                    <td className="py-[3px] font-semibold text-gray-800">{experienceText}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Openings</td>
-                    <td className="py-[3px] font-semibold text-gray-800">{job.numberOfCandidates} positions</td>
-                  </tr>
-                  {dueDate && (
-                    <tr>
-                      <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Due date</td>
-                      <td className="py-[3px] font-semibold text-gray-800">{dueDate}</td>
-                    </tr>
-                  )}
-                  {job.noticePeriod && (
-                    <tr>
-                      <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Notice period</td>
-                      <td className="py-[3px] font-semibold text-gray-800">{job.noticePeriod}</td>
-                    </tr>
-                  )}
+          {/* ── Row 3: Details + SPOC cards ───────────────────────────────── */}
+          <Trough>
+            <motion.div variants={rowVariants} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
 
-                  {/* Budget rows — vendor sees only vendor budget */}
-                  {isVendor ? (
-                    <tr>
-                      <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Budget</td>
-                      <td className="py-[3px] font-semibold text-gray-800">
-                        {job.vendor_budget
-                          ? `${formatINR(job.vendor_budget)} ${job.vendor_budget_type ?? ""}`
-                          : "—"}
-                      </td>
-                    </tr>
-                  ) : (
-                    <>
-                      {hrBudget && (
-                        <tr>
-                          <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">HR budget</td>
-                          <td className="py-[3px] font-semibold text-gray-800">{hrBudget}</td>
-                        </tr>
-                      )}
-                      {!isEmployee && clientBudget && (
-                        <tr>
-                          <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Client budget</td>
-                          <td className="py-[3px] font-semibold text-gray-800">{clientBudget}</td>
-                        </tr>
-                      )}
-                      {!isEmployee && vendorBudget && (
-                        <tr>
-                          <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">Vendor budget</td>
-                          <td className="py-[3px] font-semibold text-gray-800">{vendorBudget}</td>
-                        </tr>
-                      )}
-                      {job.clientDetails?.endClient && (
-                        <tr>
-                          <td className="py-[3px] pr-3 text-gray-400 whitespace-nowrap">End client</td>
-                          <td className="py-[3px] font-semibold text-gray-800">
-                            {job.clientDetails.endClient}
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Right: SPOC — fully hidden for vendor */}
-            <div className="px-5 py-3.5">
-              {isVendor ? (
-                <div className="flex items-center h-full">
-                  {/* <p className="text-[11px] text-gray-400 italic">
-                    Client &amp; contact details are not available for this view.
-                  </p> */}
+              {/* Left: Job details glass card */}
+              <GlassCard>
+                <SectionLabel icon={FileText}>Job details</SectionLabel>
+                <div style={{ display: "flex", flexDirection: "column" as const, gap: 2 }}>
+                  {detailRows.map(({ label, value }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "3px 0", borderBottom: "1px solid rgba(109,40,217,0.06)" }}>
+                      <span style={{ fontSize: 10, color: "#7C3AED", fontWeight: 500, width: 100, flexShrink: 0, opacity: 0.75 }}>{label}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#1E293B" }}>{value}</span>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <SectionLabel>SPOC details</SectionLabel>
-                  <div className="flex flex-col">
-                    {clientPoc && (
-                      <SpocRow label="Client POC" value={clientPoc} variant="teal" />
-                    )}
-                    {internalPocEmployees.length > 0 && (
-                      <SpocRow
-                        label="Internal SPOC"
-                        value={internalPocEmployees
-                          .map((e) => `${e.first_name} ${e.last_name}`.trim())
-                          .join(", ")}
-                        variant="purple"
-                      />
-                    )}
-                    {!clientPoc && internalPocEmployees.length === 0 && (
-                      <p className="text-[11px] text-gray-400 italic">No SPOC assigned yet.</p>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </motion.div>
+              </GlassCard>
 
-          {/* ── Row 4: Required skills ────────────────────────────────────── */}
-          <motion.div
-            variants={rowVariants}
-            className="px-5 py-3.5 border-b border-gray-100"
-          >
+              {/* Right: 3 compact InfoCards — hidden entirely for vendor */}
+              {!isVendor && (
+                <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+
+                  {/* Card 1 — Client POC (label + value inline) */}
+                  {clientPoc && (
+                    <InfoCard>
+                      <InfoRow label="Client POC" value={clientPoc} />
+                    </InfoCard>
+                  )}
+
+                  {/* Card 2 — Internal SPOC (comma-separated names) */}
+                  {(internalPocEmployees.length > 0 || internalPocIds.length > 0) && (
+                    <InfoCard>
+                      <InfoRow
+                        label="Internal SPOC"
+                        value={internalPocNameStr || "Loading…"}
+                      />
+                    </InfoCard>
+                  )}
+
+                  {/* Card 3 — Assigned: recruiter + vendor rows, skip empty */}
+{/* Card 3 — Assigned Recruiter */}
+{assignedRecruiterNames.length > 0 && (
+  <InfoCard>
+    <InfoRow
+      label="Recruiter Assigned"
+      value={assignedRecruiterNames.join(", ")}
+    />
+  </InfoCard>
+)}
+
+{/* Card 4 — Assigned Vendor */}
+{assignedVendorNames.length > 0 && (
+  <InfoCard>
+    <InfoRow
+      label="Vendor Assigned"
+      value={assignedVendorNames.join(", ")}
+    />
+  </InfoCard>
+)}
+
+                  {/* Empty state — no SPOC/assigned data at all */}
+                  {!clientPoc && internalPocIds.length === 0 && assignedRecruiterNames.length === 0 && assignedVendorNames.length === 0 && (
+                    <InfoCard>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                        <User size={14} color="#C4B5FD" />
+                        <span style={{ fontSize: 11, color: "#94A3B8", fontStyle: "italic" }}>
+                          No SPOC or assignment data yet
+                        </span>
+                      </div>
+                    </InfoCard>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </Trough>
+
+          {/* ── Row 4: Skills ─────────────────────────────────────────────── */}
+          <motion.div variants={rowVariants} style={{ padding: "16px 20px", borderTop: "1px solid #F1F5F9" }}>
             <JobEnrichedSkills skills={job.skills || []} />
           </motion.div>
 
-          {/* ── Row 5: Role overview — always fully expanded ─────────────── */}
-          <motion.div variants={rowVariants} className="px-5 py-3.5">
-            <div className="flex items-center gap-1.5 mb-2.5">
-              <Target className="w-3 h-3 text-violet-400" />
-              <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-gray-400">
+          {/* ── Row 5: Role overview ──────────────────────────────────────── */}
+          <Trough style={{ borderBottom: "none" }}>
+            <motion.div variants={rowVariants}>
+              <SectionLabel icon={Target}>
                 Role overview
-                <span className="normal-case tracking-normal font-normal ml-1 text-gray-300">
+                <span style={{ fontWeight: 400, textTransform: "none" as const, letterSpacing: "normal", marginLeft: 4, color: "#CBD5E1" }}>
                   ({bulletPoints.length})
                 </span>
-              </p>
-            </div>
+              </SectionLabel>
 
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="show"
-              className="flex flex-col gap-1"
-            >
-              {bulletPoints.map((point, idx) => (
-                <motion.div
-                  key={idx}
-                  variants={rowVariants}
-                  className="flex items-start gap-2 group"
-                >
-                  <span className="mt-[5px] w-1.5 h-1.5 rounded-full bg-violet-300 flex-shrink-0 group-hover:bg-violet-500 transition-colors" />
-                  <p className="text-[11px] text-gray-600 leading-relaxed">{point}</p>
-                </motion.div>
-              ))}
+              <motion.div variants={containerVariants} initial="hidden" animate="show" style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+                gap: "6px 20px",
+              }}>
+                {bulletPoints.map((point, idx) => (
+                  <motion.div key={idx} variants={rowVariants}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 8 }}
+                    whileHover={{ x: 2 }} transition={{ duration: 0.12 }}>
+                    <span style={{ marginTop: 5, width: 5, height: 5, borderRadius: "50%", background: "linear-gradient(135deg, #7C3AED, #4F46E5)", flexShrink: 0 }} />
+                    <p style={{ fontSize: 11, color: "#475569", lineHeight: 1.6, margin: 0 }}>{point}</p>
+                  </motion.div>
+                ))}
+              </motion.div>
             </motion.div>
-          </motion.div>
+          </Trough>
 
         </motion.div>
       </div>
@@ -412,68 +415,38 @@ const ModernJobDescription = ({ job, candidatesLength, onEditJob, isSaved, onTog
 // ─────────────────────────────────────────────────────────────────────────────
 // Main page wrapper — queries + realtime unchanged
 // ─────────────────────────────────────────────────────────────────────────────
-
 const JobDescription = () => {
   const { id } = useParams<{ id: string }>();
   const { isDrawerOpen, openDrawer, closeDrawer, handleJobUpdate } = useJobEditState();
   const [isSaved, setIsSaved] = useState(false);
 
-  const {
-    data: job,
-    isLoading: jobLoading,
-    error: jobError,
-    refetch: refetchJob,
-  } = useQuery({
+  const { data: job, isLoading: jobLoading, error: jobError, refetch: refetchJob } = useQuery({
     queryKey: ["job-details", id],
-    queryFn: () => getJobById(id || ""),
-    enabled: !!id,
+    queryFn:  () => getJobById(id || ""),
+    enabled:  !!id,
   });
 
-  const {
-    data: candidatesData = [],
-    refetch: refetchCandidates,
-  } = useQuery({
+  const { data: candidatesData = [], refetch: refetchCandidates } = useQuery({
     queryKey: ["candidates-count", id],
-    queryFn: () => getCandidatesByJobId(id || ""),
-    enabled: !!id,
+    queryFn:  () => getCandidatesByJobId(id || ""),
+    enabled:  !!id,
   });
 
   const candidates: Candidate[] = candidatesData.map((candidate) => ({
-    id: parseInt(candidate.id) || 0,
-    name: candidate.name,
-    status: candidate.status,
-    experience: candidate.experience,
-    matchScore: candidate.matchScore,
-    appliedDate: candidate.appliedDate,
-    skills: candidate.skills,
+    id: parseInt(candidate.id) || 0, name: candidate.name, status: candidate.status,
+    experience: candidate.experience, matchScore: candidate.matchScore,
+    appliedDate: candidate.appliedDate, skills: candidate.skills,
   }));
 
-  // Real-time listeners
   useEffect(() => {
     if (!id) return;
-
-    const jobChannel = supabase
-      .channel("job-desc-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "hr_jobs", filter: `id=eq.${id}` },
-        () => refetchJob()
-      )
+    const jobChannel = supabase.channel("job-desc-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "hr_jobs", filter: `id=eq.${id}` }, () => refetchJob())
       .subscribe();
-
-    const candidatesChannel = supabase
-      .channel("candidates-desc-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "hr_job_candidates", filter: `job_id=eq.${id}` },
-        () => refetchCandidates()
-      )
+    const candidatesChannel = supabase.channel("candidates-desc-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "hr_job_candidates", filter: `job_id=eq.${id}` }, () => refetchCandidates())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(jobChannel);
-      supabase.removeChannel(candidatesChannel);
-    };
+    return () => { supabase.removeChannel(jobChannel); supabase.removeChannel(candidatesChannel); };
   }, [id, refetchJob, refetchCandidates]);
 
   if (jobLoading) return <LoadingState />;
@@ -481,19 +454,9 @@ const JobDescription = () => {
 
   return (
     <>
-      <ModernJobDescription
-        job={job}
-        candidatesLength={candidates.length}
-        onEditJob={openDrawer}
-        isSaved={isSaved}
-        onToggleSaved={setIsSaved}
-      />
-      <JobEditDrawer
-        job={job}
-        open={isDrawerOpen}
-        onClose={closeDrawer}
-        onUpdate={handleJobUpdate}
-      />
+      <ModernJobDescription job={job} candidatesLength={candidates.length}
+        onEditJob={openDrawer} isSaved={isSaved} onToggleSaved={setIsSaved} />
+      <JobEditDrawer job={job} open={isDrawerOpen} onClose={closeDrawer} onUpdate={handleJobUpdate} />
     </>
   );
 };
