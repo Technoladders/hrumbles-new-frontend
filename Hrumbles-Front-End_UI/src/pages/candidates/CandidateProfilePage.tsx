@@ -152,7 +152,7 @@ const highlightQuery = useMemo(() => {
   const { data: candidate, isLoading } = useQuery({
     queryKey: ["talentPoolCandidate", candidateId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("hr_talent_pool").select("*").eq("id", candidateId).single();
+      const { data, error } = await supabase.from("hr_talent_pool").select("*").eq("id", candidateId).maybeSingle();
       if (error) throw new Error(error.message);
       return data;
     },
@@ -622,11 +622,21 @@ const highlightQuery = useMemo(() => {
                       <div key={key} className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
                         <h4 className="text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">{key}</h4>
                         <ul className="space-y-1">
-                          {value.map((item: string, i: number) => (
-                            <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-600">
-                              <ChevronRight size={12} className="text-slate-300 flex-shrink-0 mt-0.5" />{item}
-                            </li>
-                          ))}
+{value.map((item: any, i: number) => (
+  <li
+    key={i}
+    className="flex items-start gap-1.5 text-[11px] text-slate-600"
+  >
+    <ChevronRight
+      size={12}
+      className="text-slate-300 flex-shrink-0 mt-0.5"
+    />
+
+    {typeof item === "object"
+      ? JSON.stringify(item)
+      : String(item)}
+  </li>
+))}
                         </ul>
                       </div>
                     )
