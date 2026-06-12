@@ -818,6 +818,10 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
   const degreeSugg  = useDBSuggestions('get_qualification_suggestions', organizationId, degreeQ,  1);
   const instSugg    = useDBSuggestions('get_institution_suggestions',   organizationId, instQ,    1);
 
+  // ── Dirty tracking — button turns amber when filters change after a search ──
+  const [isDirty,          setIsDirty]          = useState(false);
+  const hasClickedSearchRef = useRef(false);  // only track dirty after first explicit click
+
   // ── Initialise from prop ────────────────────────────────────────────────────
   useEffect(() => {
     const f = initialFilters;
@@ -881,6 +885,8 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
     setDegrees([]); setInstitutions([]);
     setNoticePeriods([]); setMinCCTC(''); setMaxCCTC(''); setMinECTC(''); setMaxECTC('');
     setOpen({ core: true, skills: false, past: false, edu: false, avail: false });
+    setIsDirty(false);                    // ← add
+    hasClickedSearchRef.current = false;  // ← add (re-arm after reset)
     onReset?.();
   };
 
@@ -927,14 +933,23 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
   //    isFirstRun has flipped to false.
   //  • liveMode prop: parent passes false until the user has explicitly
   //    searched at least once.
-  const isFirstRun = useRef(true);
+const isFirstRun = useRef(true);
   useEffect(() => {
     if (isFirstRun.current) { isFirstRun.current = false; return; }
-    if (!liveMode) return;
-    const payload = buildPayload();
-    if (Object.keys(payload).length === 0) return;  // ← never fire empty
-    const t = setTimeout(() => onSearch(payload), 150);
-    return () => clearTimeout(t);
+
+    if (liveMode) {
+      // Live mode (currently disabled via liveMode={false} from parent)
+      const payload = buildPayload();
+      if (Object.keys(payload).length === 0) return;
+      const t = setTimeout(() => onSearch(payload), 150);
+      return () => clearTimeout(t);
+    }
+
+    // Manual mode: mark dirty only after the user has clicked Search at least once.
+    // This prevents the dirty indicator on initial page load with URL params.
+    if (hasClickedSearchRef.current) {
+      setIsDirty(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     JSON.stringify(keywords),
@@ -948,7 +963,11 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
     minCCTC, maxCCTC, minECTC, maxECTC,
   ]);
 
-  const handleSearchButton = () => onSearch(buildPayload());
+  const handleSearchButton = () => {
+    hasClickedSearchRef.current = true;  // arm dirty tracking
+    setIsDirty(false);
+    onSearch(buildPayload());
+  };
 
   return (
     <div
@@ -971,12 +990,31 @@ const ZiveXSearchSidebar: FC<ZiveXSearchSidebarProps> = ({
             </button>
           )}
         </div>
+{/* SEARCH BUTTON — replace the existing button */}
         <button onClick={handleSearchButton} disabled={isSearching}
-          style={{ width: '100%', height: 32, borderRadius: 7, border: 'none', background: isSearching ? '#4C1D95' : '#7C3AED', color: 'white', fontSize: 11, fontWeight: 700, cursor: isSearching ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Search size={12} />{isSearching ? 'Searching…' : 'Search Candidates'}
+          style={{
+            width: '100%', height: 32, borderRadius: 7, border: 'none',
+            background: isSearching
+              ? '#4C1D95'              // dark purple — searching
+              : isDirty
+              ? '#b40967'              // amber — filters changed, needs re-search
+              : '#7C3AED',             // purple — normal
+            color: 'white', fontSize: 11, fontWeight: 700,
+            cursor: isSearching ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            transition: 'background 0.2s',
+          }}>
+          <Search size={12} />
+          {isSearching ? 'Searching…' : isDirty ? 'Apply Filters' : 'Search Candidates'}
         </button>
-        <div style={{ marginTop: 5, fontSize: 8, color: '#A78BFA', textAlign: 'center' }}>
-          {liveMode ? 'Live · auto-search on change' : 'Ctrl+Enter to search'} · ★ required
+
+        {/* HINT TEXT — replace the existing hint div */}
+        <div style={{ marginTop: 5, fontSize: 8, textAlign: 'center',
+          color: isDirty ? '#FCD34D' : '#A78BFA' }}>
+          {isDirty
+            ? 'Filters changed — click to apply'
+            : 'Ctrl+Enter to search · ★ required'
+          }
         </div>
       </div>
 

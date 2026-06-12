@@ -129,7 +129,7 @@ const QB = {
   COMPANY: 'current_company',
   PREV_T:  'previous_titles,previous_designation',
   PREV_C:  'previous_companies,previous_company',
-  DEGREE:  'degree,education_summary',
+  DEGREE:  'degree,highest_education,all_degrees,education_summary',
   INST:    'institution,education_summary',
   LOC:     'current_location',
   // Used only for hydration q=* call
@@ -727,7 +727,9 @@ export function useTypesenseSearch({
   return useQuery<SearchResponse>({
     queryKey:  ['typesenseSearch', organizationId, JSON.stringify(filters)],
     enabled:   enabled && !!organizationId,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount:       false,
     queryFn:   async (): Promise<SearchResponse> => {
 
       const t0 = performance.now();

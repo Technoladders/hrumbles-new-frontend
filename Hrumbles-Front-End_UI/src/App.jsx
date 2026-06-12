@@ -181,6 +181,8 @@ import { EmailTemplatesPage } from "./pages/settings/EmailTemplatesPage.tsx";
 import  TelephonySettings  from './pages/settings/TelephonySettings';
 import  CDRDashboard  from './pages/settings/CDRDashboard';
 import TeleCMIFloat from './components/calling/TeleCMIFloat.tsx'
+import YohrImportSessionsPage   from './components/candidates/talent-pool/YohrImportSessionsPage';
+import YohrImportSessionDetail  from './components/candidates/talent-pool/YohrImportSessionDetailPage';
 
 
 import VendorDashboard from "./pages/VendorDashboard";
@@ -543,6 +545,8 @@ function AppContent() {
               <Route path="/talent-pool/:candidateId" element={<CandidateProfilePage />} />
               <Route path="/talent-pool/batch-jobs" element={<BatchJobsPage />} />
               <Route path="/talent-pool/resume-processing" element={<ResumeProcessingPage />} />
+              <Route path="/talent-pool/import-csv" element={<YohrImportSessionsPage />} />
+              <Route path="/talent-pool/import-csv/:sessionId" element={<YohrImportSessionDetail />} />
               <Route path="/migrated-talent-pool" element={<MigratedTalentPoolPage />} />
               <Route path="/migrated-talent-pool/:candidateId" element={<MigratedCandidateProfilePage />} />
               <Route path="/zive-x" element={<ZiveXPage />} />

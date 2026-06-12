@@ -418,7 +418,7 @@ const ZiveXPage: FC = () => {
         isSearching={isSearching}
         initialFilters={sidebarInit}
         organizationId={organization_id}
-        liveMode={hasSearched}
+        liveMode={false}
       />
 
       {/* ── Main content ── */}

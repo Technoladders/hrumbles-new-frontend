@@ -32,6 +32,7 @@ import V2WhatsAppFloat             from '@/components/MagicLinkView/candidate-pr
 import BatchJobsPanel              from '@/components/candidates/talent-pool/BatchJobsPanel';
 import AnalyticsTab                from '@/components/candidates/talent-pool/AnalyticsTab';
 import CallButton from '@/components/calling/CallButton'
+import YohrCsvUploadButton from '@/components/candidates/talent-pool/YohrCsvUploadButton';
 
 
 
@@ -840,6 +841,7 @@ if (user?.id) {
           <button onClick={() => setAddModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 10, paddingRight: 14, height: 30, borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 700, background: `linear-gradient(135deg,#6D28D9,${ACCENT})`, border: 'none', cursor: 'pointer', boxShadow: `0 2px 8px ${ACCENT}40` }}>
             <UserPlus size={13} />Add Candidate
           </button>
+          <YohrCsvUploadButton />
           
           
         </div>
